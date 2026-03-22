@@ -695,35 +695,16 @@ Bulk requests always return partial results — each domain has its own `error` 
 
 ## Testing Strategy
 
-### Unit Tests
-- Domain validation: 30+ table-driven test cases (valid, invalid, IDN, edge cases)
-- Bootstrap parser: test with real and malformed bootstrap JSON
-- RDAP response parser: fixtures from 8+ registries in `testdata/rdap/`
-- Cache: TTL expiration, LRU eviction, concurrent access
-- Rate limiter: token bucket behavior, per-IP isolation
+See **[testing.md](testing.md)** for the full testing and validation plan, including:
 
-### Integration Tests
-- Full middleware chain via `httptest.NewRecorder`
-- Mock RDAP server via `httptest.NewServer` with recorded fixtures
-- Rate limiting triggers correctly
-- Body size limits enforced
-- Security headers present
-
-### Fuzz Testing
-- Go 1.18+ native fuzzing on `ValidateDomain()` input
-- Properties checked: no panics, valid outputs have dots, labels ≤ 63 chars
-
-### Load Testing
-- `hey` for quick smoke tests during development
-- `vegeta` for precise rate-based characterization
-- Target: p99 < 500ms for cached responses, p99 < 2s for uncached
-
-### Fixture Recording
-```bash
-go test -tags=record  # captures live RDAP responses as testdata fixtures
-```
-
-Fixtures committed to repo. CI runs against fixtures (never hits real registries).
+- 48 domain input validation test cases (22 valid, 22 invalid, 4 edge cases)
+- 17 RDAP response parser tests with fixture inventory from 8+ registries
+- 30 API integration test scenarios (check, bulk, rate limiting, security headers, health)
+- 9 web UI end-to-end test scenarios
+- Fuzz testing targets for `ValidateDomain()` and `ParseRDAPResponse()`
+- Load testing targets and commands (p99 < 10ms cached, < 2s uncached)
+- CI pipeline configuration (Go 1.22+1.23, race detector, fuzz, lint, coverage)
+- Regression process for turning bugs into permanent test cases
 
 ## Project Structure
 
