@@ -1,0 +1,39 @@
+# NEEDLE workspace configuration
+# Workspace: /home/coding/domain-check
+
+agent:
+  default: glm
+  timeout: 600
+
+strands:
+  pluck:
+    enabled: true
+    exclude_labels:
+      - deferred
+      - human
+      - blocked
+
+prompt:
+  context_files:
+    - docs/plan/plan.md
+    - docs/research/08-go-implementation-patterns.md
+  instructions: |
+    You are working on Domain Check, an authoritative domain availability checker powered by RDAP.
+    The project is a Go application — single binary, self-hostable, zero external dependencies at runtime.
+
+    Architecture:
+    - Core engine queries RDAP registry servers directly (not WHOIS)
+    - REST API (net/http) + Web UI (html/template with go:embed) + CLI mode
+    - In-memory LRU cache, per-registry rate limiting, SSRF-safe HTTP client
+    - Deps: golang.org/x/net (publicsuffix, idna), golang.org/x/sync, golang.org/x/time/rate,
+      likexian/whois + whois-parser, peterbourgon/ff/v4, prometheus/client_golang, rs/cors
+
+    Rules:
+    - Read docs/plan/plan.md for the full architecture and API spec before starting any bead
+    - Read docs/research/08-go-implementation-patterns.md for Go patterns and dep choices
+    - All code goes under the Go module — run `go mod init github.com/jedarden/domain-check` if go.mod doesn't exist
+    - Package layout: cmd/domain-check/main.go, internal/{rdap,bootstrap,cache,ratelimit,domain,whois,server,web,cli}/
+    - Use stdlib slog for logging, stdlib net/http for routing (no frameworks)
+    - Write table-driven tests alongside implementation
+    - Run `go build ./...` and `go test ./...` before closing a bead
+    - Follow existing code patterns if any code already exists
