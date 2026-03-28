@@ -3,9 +3,12 @@ package checker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -358,4 +361,187 @@ func TestBootstrapManager_HTTPErrors(t *testing.T) {
 			assert.Equal(t, fallbackServers["com"], url)
 		})
 	}
+}
+
+func TestBootstrapManager_RefreshLoopStopsOnContextCancel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(sampleBootstrap))
+	}))
+	defer srv.Close()
+
+	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	require.NoError(t, err)
+
+	// Verify the manager is running.
+	assert.Greater(t, b.ServerCount(), 0)
+
+	// Stop should terminate the refresh loop.
+	start := time.Now()
+	b.Stop()
+	elapsed := time.Since(start)
+
+	// Stop should complete quickly (not waiting for ticker).
+	assert.Less(t, elapsed, 100*time.Millisecond)
+}
+
+func TestBootstrapManager_RefreshOnErrorKeepsOldData(t *testing.T) {
+	var callCount int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&callCount, 1) == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(sampleBootstrap))
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	require.NoError(t, err)
+	defer b.Stop()
+
+	// Initial data loaded.
+	assert.Equal(t, 8, b.ServerCount())
+
+	// Refresh fails, but data should remain.
+	err = b.Refresh(context.Background())
+	require.Error(t, err)
+	assert.Equal(t, 8, b.ServerCount(), "data should remain after failed refresh")
+
+	// Lookup should still work with old data.
+	url, err := b.Lookup("com")
+	require.NoError(t, err)
+	assert.Equal(t, "https://rdap.verisign.com/com/v1/", url)
+}
+
+func TestParseBootstrap_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    map[string]string
+		wantErr bool
+	}{
+		{
+			name:    "empty_object",
+			input:   `{}`,
+			want:    map[string]string{},
+			wantErr: false,
+		},
+		{
+			name:    "missing_services",
+			input:   `{"version": "1.0"}`,
+			want:    map[string]string{},
+			wantErr: false,
+		},
+		{
+			name: "service_with_non_string_tld",
+			input: `{
+				"version": "1.0",
+				"services": [
+					[[123, "com"], ["https://example.com/"]]
+				]
+			}`,
+			want:    map[string]string{"com": "https://example.com/"},
+			wantErr: false,
+		},
+		{
+			name: "service_with_non_string_url",
+			input: `{
+				"version": "1.0",
+				"services": [
+					[["com"], [123, "https://example.com/"]]
+				]
+			}`,
+			want:    map[string]string{"com": "https://example.com/"},
+			wantErr: false,
+		},
+		{
+			name: "service_with_single_element_array",
+			input: `{
+				"version": "1.0",
+				"services": [
+					[["com"]]
+				]
+			}`,
+			want:    map[string]string{},
+			wantErr: false,
+		},
+		{
+			name:    "invalid_json",
+			input:   `{invalid`,
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "services_not_array",
+			input: `{
+				"version": "1.0",
+				"services": "not an array"
+			}`,
+			want:    nil,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseBootstrap([]byte(tt.input))
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestBootstrapManager_LargeBootstrap(t *testing.T) {
+	// Generate a large bootstrap file to test size limits.
+	var services []string
+	for i := 0; i < 1000; i++ {
+		services = append(services, fmt.Sprintf(`[["tld%d"], ["https://registry%d.example/"]]`, i, i))
+	}
+	largeBootstrap := fmt.Sprintf(`{
+		"version": "1.0",
+		"publication": "2026-03-17T00:00:00Z",
+		"services": [%s]
+	}`, strings.Join(services, ", "))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(largeBootstrap))
+	}))
+	defer srv.Close()
+
+	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	require.NoError(t, err)
+	defer b.Stop()
+
+	assert.Equal(t, 1000, b.ServerCount())
+
+	url, err := b.Lookup("tld500")
+	require.NoError(t, err)
+	assert.Equal(t, "https://registry500.example/", url)
+}
+
+func TestBootstrapManager_ContextTimeoutDuringRefresh(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond) // Slow response
+		w.Write([]byte(sampleBootstrap))
+	}))
+	defer srv.Close()
+
+	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	require.NoError(t, err) // Initial fetch succeeds (30s timeout)
+	defer b.Stop()
+
+	// Now try a refresh with a short timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	err = b.Refresh(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "context deadline exceeded")
 }

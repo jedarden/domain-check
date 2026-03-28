@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -394,4 +395,344 @@ func TestAcquire_IntegrationWithTestServer(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, int32(3), requestCount.Load())
+}
+
+func TestQueueDepth_ActiveEntries(t *testing.T) {
+	rl := NewRateLimiter()
+
+	// Configure a slow registry that will have queued requests.
+	rl.mu.Lock()
+	rl.registry["slow.queue"] = &registryLimiter{
+		limiter: rate.NewLimiter(rate.Limit(1), 1),
+		sem:     semaphore.NewWeighted(1),
+		config: RegistryConfig{
+			Rate:         rate.Limit(1),
+			Burst:        1,
+			Concurrency:  1,
+			BackoffSteps: []float64{1},
+			MaxRetries:   0,
+		},
+	}
+	rl.mu.Unlock()
+
+	// Start a blocking request.
+	block := make(chan struct{})
+	var firstStarted atomic.Bool
+	go func() {
+		rl.Acquire(context.Background(), "slow.queue", func() (*http.Response, error) {
+			firstStarted.Store(true)
+			<-block
+			return &http.Response{StatusCode: http.StatusOK}, nil
+		})
+	}()
+
+	// Wait for first request to start.
+	for !firstStarted.Load() {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Queue additional requests.
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rl.Acquire(context.Background(), "slow.queue", func() (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK}, nil
+			})
+		}()
+	}
+
+	// Give time for requests to queue.
+	time.Sleep(50 * time.Millisecond)
+
+	// Queue depth should be > 0.
+	depth := rl.QueueDepth("slow.queue")
+	assert.Greater(t, depth, 0, "expected queued requests")
+
+	// Release the blocking request.
+	close(block)
+	wg.Wait()
+
+	// After completion, queue depth should be 0.
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, 0, rl.QueueDepth("slow.queue"))
+}
+
+func TestGetOrCreate_ConcurrentCreation(t *testing.T) {
+	rl := NewRateLimiter()
+
+	var wg sync.WaitGroup
+	created := make(chan *registryLimiter, 100)
+
+	// Concurrently get or create the same registry.
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			limiter := rl.getOrCreate("concurrent.test")
+			created <- limiter
+		}()
+	}
+	wg.Wait()
+	close(created)
+
+	// All should return the same pointer.
+	var first *registryLimiter
+	for limiter := range created {
+		if first == nil {
+			first = limiter
+		} else {
+			assert.Same(t, first, limiter, "all concurrent calls should get same limiter")
+		}
+	}
+
+	// Verify only one entry exists.
+	rl.mu.Lock()
+	count := len(rl.registry)
+	rl.mu.Unlock()
+	assert.Equal(t, 1, count)
+}
+
+func TestAcquire_BackoffBeyondSteps(t *testing.T) {
+	rl := NewRateLimiter()
+
+	// Configure with only 1 backoff step but 5 max retries.
+	rl.mu.Lock()
+	rl.registry["backoff.test"] = &registryLimiter{
+		limiter: rate.NewLimiter(rate.Limit(100), 100),
+		sem:     semaphore.NewWeighted(1),
+		config: RegistryConfig{
+			Rate:         rate.Limit(100),
+			Burst:        100,
+			Concurrency:  1,
+			BackoffSteps: []float64{0.01}, // Only 1 step
+			MaxRetries:   5,                // More retries than steps
+		},
+	}
+	rl.mu.Unlock()
+
+	var calls atomic.Int32
+
+	_, err := rl.Acquire(context.Background(), "backoff.test", func() (*http.Response, error) {
+		calls.Add(1)
+		return &http.Response{StatusCode: http.StatusTooManyRequests}, nil
+	})
+
+	require.Error(t, err)
+	// Initial + 5 retries = 6 calls.
+	assert.Equal(t, int32(6), calls.Load())
+}
+
+func TestAcquire_MultipleRegistries_Isolated(t *testing.T) {
+	rl := NewRateLimiter()
+
+	// Create two registries with different configs.
+	rl.mu.Lock()
+	rl.registry["registry-a"] = &registryLimiter{
+		limiter: rate.NewLimiter(rate.Limit(100), 100),
+		sem:     semaphore.NewWeighted(1),
+		config: RegistryConfig{
+			Rate:         rate.Limit(100),
+			Burst:        100,
+			Concurrency:  1,
+			BackoffSteps: []float64{0.01},
+			MaxRetries:   0,
+		},
+	}
+	rl.registry["registry-b"] = &registryLimiter{
+		limiter: rate.NewLimiter(rate.Limit(100), 100),
+		sem:     semaphore.NewWeighted(1),
+		config: RegistryConfig{
+			Rate:         rate.Limit(100),
+			Burst:        100,
+			Concurrency:  1,
+			BackoffSteps: []float64{0.01},
+			MaxRetries:   0,
+		},
+	}
+	rl.mu.Unlock()
+
+	var aCalls, bCalls atomic.Int32
+
+	// Make concurrent requests to different registries.
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 5; i++ {
+			rl.Acquire(context.Background(), "registry-a", func() (*http.Response, error) {
+				aCalls.Add(1)
+				return &http.Response{StatusCode: http.StatusOK}, nil
+			})
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 5; i++ {
+			rl.Acquire(context.Background(), "registry-b", func() (*http.Response, error) {
+				bCalls.Add(1)
+				return &http.Response{StatusCode: http.StatusOK}, nil
+			})
+		}
+	}()
+
+	wg.Wait()
+
+	// Both registries should have processed all their requests.
+	assert.Equal(t, int32(5), aCalls.Load())
+	assert.Equal(t, int32(5), bCalls.Load())
+}
+
+func TestAcquire_ContextCanceledDuringSemaphoreWait(t *testing.T) {
+	rl := NewRateLimiter()
+
+	// Concurrency of 1.
+	rl.mu.Lock()
+	rl.registry["sem.wait"] = &registryLimiter{
+		limiter: rate.NewLimiter(rate.Limit(100), 100),
+		sem:     semaphore.NewWeighted(1),
+		config: RegistryConfig{
+			Rate:         rate.Limit(100),
+			Burst:        100,
+			Concurrency:  1,
+			BackoffSteps: []float64{1},
+			MaxRetries:   0,
+		},
+	}
+	rl.mu.Unlock()
+
+	// Block the semaphore.
+	block := make(chan struct{})
+	var firstStarted atomic.Bool
+	go func() {
+		rl.Acquire(context.Background(), "sem.wait", func() (*http.Response, error) {
+			firstStarted.Store(true)
+			<-block
+			return &http.Response{StatusCode: http.StatusOK}, nil
+		})
+	}()
+
+	for !firstStarted.Load() {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Second request with cancelable context.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel after a short delay.
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	_, err := rl.Acquire(ctx, "sem.wait", func() (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK}, nil
+	})
+
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "concurrency limit")
+	assert.Less(t, elapsed, 100*time.Millisecond, "should return quickly on context cancel")
+
+	close(block)
+}
+
+func TestConfig_AfterGetOrCreate(t *testing.T) {
+	rl := NewRateLimiter()
+
+	// Config for non-existent registry returns default.
+	cfg := rl.Config("nonexistent.registry")
+	assert.Equal(t, defaultConfig.Rate, cfg.Rate)
+
+	// After getOrCreate, Config returns the same default.
+	rl.getOrCreate("nonexistent.registry")
+	cfg = rl.Config("nonexistent.registry")
+	assert.Equal(t, defaultConfig.Rate, cfg.Rate)
+}
+
+func TestAcquire_ConcurrencyLimitMultiple(t *testing.T) {
+	rl := NewRateLimiter()
+
+	// Concurrency of 3.
+	rl.mu.Lock()
+	rl.registry["multi.conc"] = &registryLimiter{
+		limiter: rate.NewLimiter(rate.Limit(100), 100),
+		sem:     semaphore.NewWeighted(3),
+		config: RegistryConfig{
+			Rate:         rate.Limit(100),
+			Burst:        100,
+			Concurrency:  3,
+			BackoffSteps: []float64{0.01},
+			MaxRetries:   0,
+		},
+	}
+	rl.mu.Unlock()
+
+	var concurrent atomic.Int32
+	var maxConcurrent atomic.Int32
+	var wg sync.WaitGroup
+
+	block := make(chan struct{})
+
+	// Start 10 requests, max 3 should run concurrently.
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rl.Acquire(context.Background(), "multi.conc", func() (*http.Response, error) {
+				c := concurrent.Add(1)
+				for {
+					old := maxConcurrent.Load()
+					if c <= old || maxConcurrent.CompareAndSwap(old, c) {
+						break
+					}
+				}
+				<-block
+				concurrent.Add(-1)
+				return &http.Response{StatusCode: http.StatusOK}, nil
+			})
+		}()
+	}
+
+	// Wait for requests to queue up.
+	time.Sleep(50 * time.Millisecond)
+
+	// Max concurrent should be exactly 3.
+	assert.Equal(t, int32(3), maxConcurrent.Load())
+
+	close(block)
+	wg.Wait()
+}
+
+func TestAcquire_QueueDepthDecrementsOnError(t *testing.T) {
+	rl := NewRateLimiter()
+
+	rl.mu.Lock()
+	rl.registry["error.queue"] = &registryLimiter{
+		limiter: rate.NewLimiter(rate.Limit(100), 100),
+		sem:     semaphore.NewWeighted(1),
+		config: RegistryConfig{
+			Rate:         rate.Limit(100),
+			Burst:        100,
+			Concurrency:  1,
+			BackoffSteps: []float64{0.01},
+			MaxRetries:   0,
+		},
+	}
+	rl.mu.Unlock()
+
+	// Make a request that errors.
+	_, err := rl.Acquire(context.Background(), "error.queue", func() (*http.Response, error) {
+		return nil, assert.AnError
+	})
+
+	require.Error(t, err)
+
+	// Queue depth should be 0 after error.
+	assert.Equal(t, 0, rl.QueueDepth("error.queue"))
 }
