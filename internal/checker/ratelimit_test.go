@@ -266,6 +266,7 @@ func TestAcquire_ConcurrencyLimit(t *testing.T) {
 	// Block the semaphore with one long-running request.
 	block := make(chan struct{})
 	var firstDone atomic.Bool
+	var secondDone atomic.Bool
 
 	go func() {
 		rl.Acquire(context.Background(), "conc.registry", func() (*http.Response, error) {
@@ -283,30 +284,41 @@ func TestAcquire_ConcurrencyLimit(t *testing.T) {
 		firstDone.Store(true)
 	}()
 
-	// Wait for the first request to start.
-	time.Sleep(10 * time.Millisecond)
+	// Wait for the first request to start and acquire the semaphore.
+	time.Sleep(20 * time.Millisecond)
 
-	// Second request should also succeed but after first releases.
-	_, err := rl.Acquire(context.Background(), "conc.registry", func() (*http.Response, error) {
-		c := concurrent.Add(1)
-		for {
-			old := maxConcurrent.Load()
-			if c <= old || maxConcurrent.CompareAndSwap(old, c) {
-				break
+	// Second request should block until first releases (concurrency limit = 1).
+	// Run in goroutine to avoid deadlock.
+	go func() {
+		rl.Acquire(context.Background(), "conc.registry", func() (*http.Response, error) {
+			c := concurrent.Add(1)
+			for {
+				old := maxConcurrent.Load()
+				if c <= old || maxConcurrent.CompareAndSwap(old, c) {
+					break
+				}
 			}
-		}
-		concurrent.Add(-1)
-		return &http.Response{StatusCode: http.StatusOK}, nil
-	})
+			concurrent.Add(-1)
+			return &http.Response{StatusCode: http.StatusOK}, nil
+		})
+		secondDone.Store(true)
+	}()
 
-	require.NoError(t, err)
+	// Give second request time to queue up (but it can't proceed yet).
+	time.Sleep(20 * time.Millisecond)
+
+	// At this point, maxConcurrent should still be 1 (second request is blocked).
+	assert.Equal(t, int32(1), maxConcurrent.Load())
+
+	// Release the first request.
 	close(block)
 
-	// Wait for first goroutine to finish.
-	for !firstDone.Load() {
+	// Wait for both requests to complete.
+	for !firstDone.Load() || !secondDone.Load() {
 		time.Sleep(time.Millisecond)
 	}
 
+	// Max concurrent should never have exceeded 1.
 	assert.LessOrEqual(t, maxConcurrent.Load(), int32(1))
 }
 
