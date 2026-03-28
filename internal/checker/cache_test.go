@@ -1,6 +1,8 @@
 package checker
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -201,4 +203,148 @@ func TestCachedFlag_OnlySetOnGet(t *testing.T) {
 	got := c.Get("example.com")
 	require.NotNil(t, got)
 	assert.True(t, got.Cached) // Get sets this
+}
+
+func TestConcurrentReads(t *testing.T) {
+	c := NewResultCache(DefaultTTLs(), 100)
+
+	// Pre-populate cache.
+	for i := 0; i < 50; i++ {
+		c.Set(string(rune('a'+i))+".com", makeResult(string(rune('a'+i))+".com", true))
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			key := string(rune('a'+(idx%50))) + ".com"
+			got := c.Get(key)
+			if got == nil {
+				t.Errorf("unexpected nil for %s", key)
+				return
+			}
+			if got.Domain != key {
+				t.Errorf("wrong domain: got %s, want %s", got.Domain, key)
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+func TestConcurrentWrites(t *testing.T) {
+	c := NewResultCache(DefaultTTLs(), 100)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			key := fmt.Sprintf("domain%d.com", idx%20) // Contention on 20 keys
+			c.Set(key, makeResult(key, idx%2 == 0))
+		}(i)
+	}
+	wg.Wait()
+
+	// All 20 keys should exist.
+	assert.Equal(t, 20, c.Len())
+}
+
+func TestConcurrentReadWrite(t *testing.T) {
+	c := NewResultCache(DefaultTTLs(), 100)
+
+	// Pre-populate.
+	for i := 0; i < 30; i++ {
+		c.Set(fmt.Sprintf("domain%d.com", i), makeResult(fmt.Sprintf("domain%d.com", i), true))
+	}
+
+	var wg sync.WaitGroup
+
+	// Writers.
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			key := fmt.Sprintf("domain%d.com", idx%40)
+			c.Set(key, makeResult(key, true))
+		}(i)
+	}
+
+	// Readers.
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			key := fmt.Sprintf("domain%d.com", idx%40)
+			_ = c.Get(key) // May be nil, that's OK
+		}(i)
+	}
+
+	// Deleter.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10; i++ {
+			c.Delete(fmt.Sprintf("domain%d.com", i))
+		}
+	}()
+
+	wg.Wait()
+}
+
+func TestConcurrentWithEviction(t *testing.T) {
+	// Small cache to trigger evictions under concurrency.
+	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 10)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			key := fmt.Sprintf("domain%d.com", idx)
+			c.Set(key, makeResult(key, true))
+		}(i)
+	}
+	wg.Wait()
+
+	// Cache should be at max capacity.
+	assert.LessOrEqual(t, c.Len(), 10)
+}
+
+func TestConcurrentPurgeExpired(t *testing.T) {
+	ttls := CacheTTLs{Available: 30 * time.Millisecond, Registered: time.Hour, Error: time.Hour}
+	c := NewResultCache(ttls, 100)
+
+	// Pre-populate with mix of short and long TTL.
+	for i := 0; i < 50; i++ {
+		if i%2 == 0 {
+			c.Set(fmt.Sprintf("short%d.com", i), makeResult(fmt.Sprintf("short%d.com", i), true)) // available, short TTL
+		} else {
+			c.Set(fmt.Sprintf("long%d.com", i), makeResult(fmt.Sprintf("long%d.com", i), false)) // registered, long TTL
+		}
+	}
+
+	time.Sleep(40 * time.Millisecond)
+
+	var wg sync.WaitGroup
+
+	// Concurrent purge calls.
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.PurgeExpired()
+		}()
+	}
+
+	// Concurrent reads during purge.
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_ = c.Get(fmt.Sprintf("long%d.com", idx%25*2+1))
+		}(i)
+	}
+
+	wg.Wait()
 }
