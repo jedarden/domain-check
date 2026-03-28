@@ -2,6 +2,8 @@ package checker
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -310,6 +312,189 @@ func TestWHOISRegistryConfigs(t *testing.T) {
 			}
 			if cfg.MinInterval < tt.minInterval {
 				t.Errorf("expected min interval >= %v for %s, got %v", tt.minInterval, tt.server, cfg.MinInterval)
+			}
+		})
+	}
+}
+
+// TestWHOISFixtureParsing tests parsing of WHOIS fixtures from testdata/whois/.
+// Covers 4 fixtures: .de + .jp registered/available.
+func TestWHOISFixtureParsing(t *testing.T) {
+	tests := []struct {
+		fixture       string
+		tld           string
+		wantAvailable bool
+	}{
+		// Test 1: Parse DENIC registered - "Status: connect" means registered
+		{
+			fixture:       "de-registered.txt",
+			tld:           "de",
+			wantAvailable: false,
+		},
+		// Test 2: Parse DENIC available - "Status: free" means available
+		{
+			fixture:       "de-available.txt",
+			tld:           "de",
+			wantAvailable: true,
+		},
+		// Test 3: Parse JPRS registered - has domain info
+		{
+			fixture:       "jp-registered.txt",
+			tld:           "jp",
+			wantAvailable: false,
+		},
+		// Test 4: Parse JPRS available - "[ No Matching Data ]"
+		{
+			fixture:       "jp-available.txt",
+			tld:           "jp",
+			wantAvailable: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fixture, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("testdata", "whois", tt.fixture))
+			if err != nil {
+				t.Fatalf("failed to read fixture: %v", err)
+			}
+
+			raw := string(data)
+			gotAvailable := isAvailableFromRaw(raw, tt.tld)
+
+			if gotAvailable != tt.wantAvailable {
+				t.Errorf("isAvailableFromRaw() = %v, want %v", gotAvailable, tt.wantAvailable)
+			}
+		})
+	}
+}
+
+// TestWHOISFixtureParsingWithClient tests parsing WHOIS fixtures using the WHOISClient.
+func TestWHOISFixtureParsingWithClient(t *testing.T) {
+	tests := []struct {
+		name          string
+		fixture       string
+		tld           string
+		wantAvailable bool
+	}{
+		{
+			name:          "DENIC registered",
+			fixture:       "de-registered.txt",
+			tld:           "de",
+			wantAvailable: false,
+		},
+		{
+			name:          "DENIC available",
+			fixture:       "de-available.txt",
+			tld:           "de",
+			wantAvailable: true,
+		},
+		{
+			name:          "JPRS registered",
+			fixture:       "jp-registered.txt",
+			tld:           "jp",
+			wantAvailable: false,
+		},
+		{
+			name:          "JPRS available",
+			fixture:       "jp-available.txt",
+			tld:           "jp",
+			wantAvailable: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("testdata", "whois", tt.fixture))
+			if err != nil {
+				t.Fatalf("failed to read fixture: %v", err)
+			}
+
+			client := NewWHOISClient(WHOISClientConfig{})
+			raw := string(data)
+
+			// Test the raw parsing function
+			gotAvailable := isAvailableFromRaw(raw, tt.tld)
+			if gotAvailable != tt.wantAvailable {
+				t.Errorf("isAvailableFromRaw() = %v, want %v", gotAvailable, tt.wantAvailable)
+			}
+
+			// Test the parseResponse method
+			result := client.parseResponse(raw, "example."+tt.tld, tt.tld, time.Now(), "whois.example.com")
+			if result.Available != tt.wantAvailable {
+				t.Errorf("parseResponse().Available = %v, want %v", result.Available, tt.wantAvailable)
+			}
+
+			// For registered domains, verify we extract registration info
+			if !tt.wantAvailable && result.Registration == nil {
+				t.Error("expected Registration for registered domain")
+			}
+		})
+	}
+}
+
+// TestWHOISDENICPatterns tests specific DENIC response patterns.
+func TestWHOISDENICPatterns(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      string
+		expected bool
+	}{
+		{
+			name:     "status connect means registered",
+			raw:      "Domain: example.de\nStatus: connect",
+			expected: false,
+		},
+		{
+			name:     "status free means available",
+			raw:      "Domain: example.de\nStatus: free",
+			expected: true,
+		},
+		{
+			name:     "DENIC with nameservers means registered",
+			raw:      "Domain: example.de\nNserver: ns1.example.de\nStatus: connect",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isAvailableFromRaw(tt.raw, "de")
+			if result != tt.expected {
+				t.Errorf("isAvailableFromRaw() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestWHOISJPRSPatterns tests specific JPRS response patterns.
+func TestWHOISJPRSPatterns(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      string
+		expected bool
+	}{
+		{
+			name:     "no matching data means available",
+			raw:      "[ No Matching Data ]",
+			expected: true,
+		},
+		{
+			name:     "domain info means registered",
+			raw:      "[Domain Name]                   EXAMPLE.JP\n[Registrant] Example Corp",
+			expected: false,
+		},
+		{
+			name:     "Japanese style no matching",
+			raw:      "[ 該当データなし ]\n[ No Matching Data ]",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isAvailableFromRaw(tt.raw, "jp")
+			if result != tt.expected {
+				t.Errorf("isAvailableFromRaw() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

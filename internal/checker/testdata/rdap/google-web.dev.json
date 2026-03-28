@@ -1,0 +1,57 @@
+{
+  "rdapConformance": [
+    "rdap_level_0"
+  ],
+  "objectClassName": "domain",
+  "handle": "C0832B29D-DONUTS",
+  "ldhName": "WEB.DEV",
+  "status": [
+    "client transfer prohibited"
+  ],
+  "entities": [
+    {
+      "handle": "1068",
+      "ldhName": "Google Domains LLC",
+      "roles": ["registrar"],
+      "publicIds": [
+        {
+          "type": "IANA Registrar ID",
+          "identifier": "1068"
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "eventAction": "reregistration",
+      "eventDate": "2018-12-10T00:00:00Z"
+    },
+    {
+      "eventAction": "expiration",
+      "eventDate": "2025-12-10T00:00:00Z"
+    },
+    {
+      "eventAction": "last changed",
+      "eventDate": "2024-01-15T08:30:00Z"
+    }
+  ],
+  "nameservers": [
+    {
+      "ldhName": "NS1.GOOGLE.COM"
+    },
+    {
+      "ldhName": "NS2.GOOGLE.COM"
+    },
+    {
+      "ldhName": "NS3.GOOGLE.COM"
+    },
+    {
+      "ldhName": "NS4.GOOGLE.COM"
+    }
+  ],
+  "secureDNS": {
+    "zoneSigned": true,
+    "delegationSigned": true
+  },
+  "port43": "whois.nic.google"
+}

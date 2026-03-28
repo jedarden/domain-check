@@ -1,0 +1,32 @@
+{
+  "rdapConformance": [
+    "rdap_level_0",
+    "deNIC_rdap_profile_0"
+  ],
+  "objectClassName": "domain",
+  "ldhName": "EXAMPLE.DE",
+  "handle": "D12345-DENIC",
+  "status": [
+    "ok"
+  ],
+  "entities": [],
+  "events": [
+    {
+      "eventAction": "registration",
+      "eventDate": "1998-03-12T21:44:25+01:00"
+    },
+    {
+      "eventAction": "last changed",
+      "eventDate": "2024-01-15T10:30:00+01:00"
+    }
+  ],
+  "nameservers": [
+    {
+      "ldhName": "NS1.EXAMPLE.DE."
+    },
+    {
+      "ldhName": "NS2.EXAMPLE.DE."
+    }
+  ],
+  "port43": "whois.denic.de"
+}
