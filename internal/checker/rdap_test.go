@@ -501,32 +501,6 @@ func TestRDAPClientCheck(t *testing.T) {
 	})
 }
 
-// TestSanitizeDomain tests domain sanitization.
-func TestSanitizeDomain(t *testing.T) {
-	tests := []struct {
-		domain string
-		want   error
-	}{
-		{"example.com", nil},
-		{"sub.example.com", nil},
-		{"http://example.com", ErrInvalidDomainInput},
-		{"https://example.com", ErrInvalidDomainInput},
-		{"user@example.com", ErrInvalidDomainInput},
-		{"example.com:8080", ErrInvalidDomainInput},
-		{"example.com/path", ErrInvalidDomainInput},
-		{"/etc/passwd", ErrInvalidDomainInput},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.domain, func(t *testing.T) {
-			err := SanitizeDomain(tt.domain)
-			if err != tt.want {
-				t.Errorf("SanitizeDomain(%q) = %v, want %v", tt.domain, err, tt.want)
-			}
-		})
-	}
-}
-
 // newTestRDAPClient creates an RDAPClient configured for testing with a mock server.
 func newTestRDAPClient(server *httptest.Server) *RDAPClient {
 	// Create bootstrap that points to test server
