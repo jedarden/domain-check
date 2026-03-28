@@ -538,6 +538,56 @@ func TestParse_ParseError_Error(t *testing.T) {
 	assert.Equal(t, `domain "bad input": ldh (starts with hyphen)`, err.Error())
 }
 
+// FuzzValidateDomain fuzzes domain validation with random inputs.
+// Properties verified:
+//   - Never panics on any input
+//   - Valid outputs always contain at least one dot (eTLD+1)
+//   - Valid outputs have labels ≤63 characters
+//   - Valid outputs have total length ≤253 characters
+func FuzzValidateDomain(f *testing.F) {
+	// Seed corpus: 9 diverse inputs covering valid and invalid cases
+	seeds := []string{
+		"example.com",           // #1: Simple valid domain
+		"EXAMPLE.COM",           // #2: Uppercase (normalizes)
+		"www.example.co.uk",     // #3: Multi-level TLD with subdomain
+		"münchen.de",            // #4: IDN input (converts to punycode)
+		"",                      // #5: Empty string
+		"example..com",          // #6: Empty label
+		"-example.com",          // #7: Leading hyphen
+		"http://example.com",    // #8: URL scheme
+		strings.Repeat("a", 64) + ".com", // #9: Label too long (64 chars)
+	}
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, input string) {
+		// Property 1: Must never panic (the test framework handles this)
+		result, err := Parse(input)
+
+		// If parsing succeeded, verify invariants
+		if err == nil && result != nil {
+			// Property 2: Valid domains contain at least one dot
+			if !strings.Contains(result.Domain, ".") {
+				t.Errorf("valid domain missing dot: %q", result.Domain)
+			}
+
+			// Property 3: Each label ≤63 characters
+			labels := strings.Split(result.Domain, ".")
+			for i, label := range labels {
+				if len(label) > 63 {
+					t.Errorf("label %d exceeds 63 chars (%d): %q", i+1, len(label), label)
+				}
+			}
+
+			// Property 4: Total domain length ≤253 characters
+			if len(result.Domain) > 253 {
+				t.Errorf("domain exceeds 253 chars (%d): %q", len(result.Domain), result.Domain)
+			}
+		}
+	})
+}
+
 func TestParse_EffectiveTLDPlusOne(t *testing.T) {
 	tests := []struct {
 		name  string

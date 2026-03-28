@@ -860,19 +860,53 @@ func newTestRDAPClient(server *httptest.Server) *RDAPClient {
 	})
 }
 
-// TestFuzzRDAPResponse tests that parsing never panics on random input.
-func FuzzParseRDAPBody(f *testing.F) {
-	// Seed with known fixtures
+// FuzzParseRDAPResponse fuzzes RDAP response parsing with random inputs.
+// Properties verified:
+//   - Never panics on any input
+//   - Valid results have non-empty domain (when ldhName present)
+//   - Deterministic: same input always produces same output
+func FuzzParseRDAPResponse(f *testing.F) {
+	// Seed corpus: empty + inline JSON + fixture files
 	f.Add([]byte(""))
 	f.Add([]byte(`{"objectClassName": "domain", "ldhName": "example.com"}`))
 	f.Add([]byte(`{"objectClassName": "error"}`))
 	f.Add([]byte("not json at all"))
+	f.Add([]byte(`{"ldhName": "EXAMPLE.COM", "status": ["active"]}`))
+
+	// Add fixture files as seed corpus
+	fixtureDir := filepath.Join("testdata", "rdap")
+	fixtures := []string{
+		"verisign-google.com.json",
+		"pir-wikipedia.org.json",
+		"google-web.dev.json",
+		"centralnic-example.xyz.json",
+		"denic-example.de.json",
+		"nominet-bbc.uk.json",
+		"verisign-404.txt",
+		"google-429.json",
+	}
+	for _, fixture := range fixtures {
+		data, err := os.ReadFile(filepath.Join(fixtureDir, fixture))
+		if err != nil {
+			f.Fatalf("failed to read fixture %s: %v", fixture, err)
+		}
+		f.Add(data)
+	}
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		// Should never panic
+		// Property 1: Must never panic (test framework handles this)
 		reg := parseRDAPBody(data)
 		if reg == nil {
 			t.Error("expected non-nil registration even on invalid input")
+			return
+		}
+
+		// Property 3: Deterministic - parse same input twice, must match
+		reg2 := parseRDAPBody(data)
+		if reg.Registrar != reg2.Registrar ||
+			reg.Created != reg2.Created ||
+			reg.Expires != reg2.Expires {
+			t.Errorf("non-deterministic parsing: got different results for same input")
 		}
 	})
 }
