@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Development files
+.beads/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test and coverage
+*_test.go
+coverage.txt
+*.test
+
+# Binary (built in container)
+domain-check
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# CI/CD
+.github/
