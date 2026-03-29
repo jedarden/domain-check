@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: domain-check
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: domain-check
+    app.kubernetes.io/component: application
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/apexalgo/cluster-configuration.git
+    targetRevision: main
+    path: apexalgo-iad/domain-check
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: domain-check
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
