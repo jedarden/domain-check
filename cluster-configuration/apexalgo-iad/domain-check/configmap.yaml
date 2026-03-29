@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: domain-check
+  namespace: domain-check
+  labels:
+    app.kubernetes.io/name: domain-check
+    app.kubernetes.io/component: config
+data:
+  # Cache configuration
+  DOMCHECK_CACHE_SIZE: "10000"
+  DOMCHECK_CACHE_TTL_AVAILABLE: "5m"
+  DOMCHECK_CACHE_TTL_REGISTERED: "1h"
+  # Trust proxy headers (required when behind ingress/load balancer)
+  DOMCHECK_TRUST_PROXY: "true"
+  # Logging configuration
+  DOMCHECK_LOG_FORMAT: "json"
+  DOMCHECK_LOG_LEVEL: "info"
+  # Enable Prometheus metrics
+  DOMCHECK_METRICS: "true"
+  # CORS origins (adjust as needed)
+  DOMCHECK_CORS_ORIGINS: "*"

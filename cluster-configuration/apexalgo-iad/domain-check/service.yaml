@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: domain-check
+  namespace: domain-check
+  labels:
+    app.kubernetes.io/name: domain-check
+    app.kubernetes.io/component: service
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: domain-check
