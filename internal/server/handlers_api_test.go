@@ -228,3 +228,164 @@ func TestCheckHandler_IDNDomain(t *testing.T) {
 		t.Errorf("expected normalized domain %q, got %q", "xn--mnchen-3ya.de", resp.Domain)
 	}
 }
+
+func TestCheckHandler_CachedResponse(t *testing.T) {
+	// Test that cached responses are returned correctly
+	expectedResult := &domain.DomainResult{
+		Domain:     "cached.com",
+		Available:  true,
+		TLD:        "com",
+		Source:     domain.SourceCache,
+		Cached:     true,
+		DurationMs: 0, // Cached responses may have 0 duration
+	}
+
+	mockCh := &mockChecker{
+		result: expectedResult,
+	}
+	handlers := NewAPIHandlers(mockCh, nil)
+
+	req := httptest.NewRequest("GET", "/api/v1/check?d=cached.com", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.CheckHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var resp domain.DomainResult
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Cached != true {
+		t.Errorf("expected cached=true, got %v", resp.Cached)
+	}
+	if resp.Source != domain.SourceCache {
+		t.Errorf("expected source=%s, got %s", domain.SourceCache, resp.Source)
+	}
+}
+
+func TestCheckHandler_CheckFailed(t *testing.T) {
+	// Test internal server error when check fails
+	mockCh := &mockChecker{
+		err: context.DeadlineExceeded,
+	}
+	log := DefaultLogger("text", "error")
+	handlers := NewAPIHandlers(mockCh, log)
+
+	req := httptest.NewRequest("GET", "/api/v1/check?d=timeout.com", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.CheckHandler(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
+	}
+
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "check_failed" {
+		t.Errorf("expected error %q, got %q", "check_failed", resp.Error)
+	}
+}
+
+func TestCheckHandler_FullRegistration(t *testing.T) {
+	// Test that all registration fields are returned for taken domains
+	expectedResult := &domain.DomainResult{
+		Domain:    "google.com",
+		Available: false,
+		TLD:       "com",
+		Source:    domain.SourceRDAP,
+		Cached:    false,
+		DurationMs: 250,
+		Registration: &domain.Registration{
+			Registrar:   "MarkMonitor Inc.",
+			Created:     "1997-09-15T04:00:00Z",
+			Expires:     "2028-09-14T04:00:00Z",
+			Nameservers: []string{"ns1.google.com", "ns2.google.com", "ns3.google.com", "ns4.google.com"},
+			Status:      []string{"client delete prohibited", "client transfer prohibited"},
+		},
+	}
+
+	mockCh := &mockChecker{
+		result: expectedResult,
+	}
+	handlers := NewAPIHandlers(mockCh, nil)
+
+	req := httptest.NewRequest("GET", "/api/v1/check?d=google.com", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.CheckHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var resp domain.DomainResult
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Registration == nil {
+		t.Fatalf("expected registration object, got nil")
+	}
+	if resp.Registration.Registrar != "MarkMonitor Inc." {
+		t.Errorf("expected registrar %q, got %q", "MarkMonitor Inc.", resp.Registration.Registrar)
+	}
+	if resp.Registration.Created != "1997-09-15T04:00:00Z" {
+		t.Errorf("expected created %q, got %q", "1997-09-15T04:00:00Z", resp.Registration.Created)
+	}
+	if len(resp.Registration.Nameservers) != 4 {
+		t.Errorf("expected 4 nameservers, got %d", len(resp.Registration.Nameservers))
+	}
+	if len(resp.Registration.Status) != 2 {
+		t.Errorf("expected 2 status values, got %d", len(resp.Registration.Status))
+	}
+}
+
+func TestCheckHandler_ContentType(t *testing.T) {
+	// Test that response has correct Content-Type
+	mockCh := &mockChecker{
+		result: &domain.DomainResult{Domain: "test.com", Available: true, TLD: "com"},
+	}
+	handlers := NewAPIHandlers(mockCh, nil)
+
+	req := httptest.NewRequest("GET", "/api/v1/check?d=test.com", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.CheckHandler(rec, req)
+
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("expected Content-Type %q, got %q", "application/json", ct)
+	}
+}
+
+func TestCheckHandler_MethodNotAllowed(t *testing.T) {
+	// Test that POST requests are rejected
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil)
+
+	req := httptest.NewRequest("POST", "/api/v1/check?d=test.com", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.CheckHandler(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, rec.Code)
+	}
+
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "method_not_allowed" {
+		t.Errorf("expected error %q, got %q", "method_not_allowed", resp.Error)
+	}
+}

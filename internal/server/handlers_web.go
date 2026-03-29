@@ -76,7 +76,7 @@ func (h *WebHandlers) CheckHandler() http.HandlerFunc {
 			Domain:     result.Domain,
 			Available:  result.Available,
 			TLD:        result.TLD,
-			Source:     result.Source,
+			Source:     string(result.Source),
 			Cached:     result.Cached,
 			DurationMs: result.DurationMs,
 		}
