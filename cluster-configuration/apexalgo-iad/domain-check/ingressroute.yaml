@@ -1,0 +1,72 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: domain-check-ratelimit
+  namespace: domain-check
+  labels:
+    app.kubernetes.io/name: domain-check
+    app.kubernetes.io/component: middleware
+spec:
+  rateLimit:
+    # 100 requests per second average, burst up to 200
+    average: 100
+    burst: 200
+    # Duration of the sliding window
+    period: 1s
+    # Source criterion for rate limiting
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: domain-check-headers
+  namespace: domain-check
+  labels:
+    app.kubernetes.io/name: domain-check
+    app.kubernetes.io/component: middleware
+spec:
+  headers:
+    # Enable trusted proxy headers from Traefik
+    customRequestHeaders:
+      X-Forwarded-Proto: "https"
+    # Security headers
+    sslRedirect: true
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    forceSTSHeader: true
+    frameDeny: true
+    contentTypeNosniff: true
+    browserXssFilter: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: domain-check
+  namespace: domain-check
+  labels:
+    app.kubernetes.io/name: domain-check
+    app.kubernetes.io/component: ingress
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`domaincheck.jedarden.com`)
+      kind: Rule
+      middlewares:
+        - name: domain-check-ratelimit
+          namespace: domain-check
+        - name: domain-check-headers
+          namespace: domain-check
+      services:
+        - name: domain-check
+          port: 8080
+          scheme: http
+  tls:
+    secretName: domain-check-tls
+    domains:
+      - main: domaincheck.jedarden.com

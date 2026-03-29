@@ -8,6 +8,7 @@ resources:
   - configmap.yaml
   - deployment.yaml
   - service.yaml
+  - ingressroute.yaml
 
 commonLabels:
   app.kubernetes.io/managed-by: kustomize
