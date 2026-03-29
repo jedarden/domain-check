@@ -15,6 +15,14 @@ type CacheTTLs struct {
 	Error      time.Duration // TTL for error results
 }
 
+// CacheStats holds cache statistics.
+type CacheStats struct {
+	Hits   int64 // Number of cache hits
+	Misses int64 // Number of cache misses
+	Size   int   // Current number of entries
+	Max    int   // Maximum capacity
+}
+
 // DefaultTTLs returns the standard TTL values.
 func DefaultTTLs() CacheTTLs {
 	return CacheTTLs{
@@ -32,6 +40,8 @@ type ResultCache struct {
 	order   *list.List
 	ttls    CacheTTLs
 	maxSize int
+	hits    int64
+	misses  int64
 }
 
 type cacheEntry struct {
@@ -61,6 +71,9 @@ func (c *ResultCache) Get(key string) *domain.DomainResult {
 	el, ok := c.items[key]
 	c.mu.RUnlock()
 	if !ok {
+		c.mu.Lock()
+		c.misses++
+		c.mu.Unlock()
 		return nil
 	}
 
@@ -71,6 +84,7 @@ func (c *ResultCache) Get(key string) *domain.DomainResult {
 		if el2, ok := c.items[key]; ok && el == el2 {
 			c.removeElement(el)
 		}
+		c.misses++
 		c.mu.Unlock()
 		return nil
 	}
@@ -78,6 +92,7 @@ func (c *ResultCache) Get(key string) *domain.DomainResult {
 	// Move to front (most recently used).
 	c.mu.Lock()
 	c.order.MoveToFront(el)
+	c.hits++
 	c.mu.Unlock()
 
 	result := entry.result
@@ -181,4 +196,16 @@ func (c *ResultCache) removeElement(el *list.Element) {
 	entry := el.Value.(*cacheEntry)
 	delete(c.items, entry.key)
 	c.order.Remove(el)
+}
+
+// Stats returns cache statistics.
+func (c *ResultCache) Stats() CacheStats {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return CacheStats{
+		Hits:   c.hits,
+		Misses: c.misses,
+		Size:   c.order.Len(),
+		Max:    c.maxSize,
+	}
 }

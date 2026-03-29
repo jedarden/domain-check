@@ -348,3 +348,148 @@ func TestConcurrentPurgeExpired(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestStats_InitialState(t *testing.T) {
+	c := NewResultCache(DefaultTTLs(), 100)
+	stats := c.Stats()
+	assert.Equal(t, int64(0), stats.Hits)
+	assert.Equal(t, int64(0), stats.Misses)
+	assert.Equal(t, 0, stats.Size)
+	assert.Equal(t, 100, stats.Max)
+}
+
+func TestStats_Hits(t *testing.T) {
+	c := NewResultCache(DefaultTTLs(), 100)
+	c.Set("example.com", makeResult("example.com", true))
+
+	// Multiple hits
+	for i := 0; i < 5; i++ {
+		c.Get("example.com")
+	}
+
+	stats := c.Stats()
+	assert.Equal(t, int64(5), stats.Hits)
+	assert.Equal(t, int64(0), stats.Misses)
+	assert.Equal(t, 1, stats.Size)
+}
+
+func TestStats_Misses(t *testing.T) {
+	c := NewResultCache(DefaultTTLs(), 100)
+
+	// Multiple misses
+	for i := 0; i < 3; i++ {
+		c.Get("nonexistent.com")
+	}
+
+	stats := c.Stats()
+	assert.Equal(t, int64(0), stats.Hits)
+	assert.Equal(t, int64(3), stats.Misses)
+}
+
+func TestStats_HitMissMix(t *testing.T) {
+	c := NewResultCache(DefaultTTLs(), 100)
+	c.Set("example.com", makeResult("example.com", true))
+	c.Set("test.com", makeResult("test.com", false))
+
+	// Mix of hits and misses
+	c.Get("example.com") // hit
+	c.Get("nonexistent.com") // miss
+	c.Get("test.com") // hit
+	c.Get("another.com") // miss
+	c.Get("example.com") // hit
+
+	stats := c.Stats()
+	assert.Equal(t, int64(3), stats.Hits)
+	assert.Equal(t, int64(2), stats.Misses)
+	assert.Equal(t, 2, stats.Size)
+}
+
+func TestStats_ExpiredEntryCountsAsMiss(t *testing.T) {
+	ttls := CacheTTLs{Available: 30 * time.Millisecond, Registered: time.Hour, Error: time.Hour}
+	c := NewResultCache(ttls, 100)
+
+	c.Set("example.com", makeResult("example.com", true))
+	time.Sleep(40 * time.Millisecond)
+
+	// Getting expired entry should count as miss
+	got := c.Get("example.com")
+	assert.Nil(t, got)
+
+	stats := c.Stats()
+	assert.Equal(t, int64(0), stats.Hits)
+	assert.Equal(t, int64(1), stats.Misses)
+}
+
+func TestStats_ConcurrentAccess(t *testing.T) {
+	c := NewResultCache(DefaultTTLs(), 100)
+	c.Set("example.com", makeResult("example.com", true))
+
+	var wg sync.WaitGroup
+
+	// Concurrent hits
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.Get("example.com")
+		}()
+	}
+
+	// Concurrent misses
+	for i := 0; i < 30; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			c.Get(fmt.Sprintf("nonexistent%d.com", idx))
+		}(i)
+	}
+
+	wg.Wait()
+
+	stats := c.Stats()
+	assert.Equal(t, int64(50), stats.Hits)
+	assert.Equal(t, int64(30), stats.Misses)
+}
+
+func TestStats_AfterEviction(t *testing.T) {
+	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 3)
+
+	c.Set("a.com", makeResult("a.com", true))
+	c.Set("b.com", makeResult("b.com", true))
+	c.Set("c.com", makeResult("c.com", true))
+
+	// Get each once to register hits
+	c.Get("a.com")
+	c.Get("b.com")
+	c.Get("c.com")
+
+	stats := c.Stats()
+	assert.Equal(t, int64(3), stats.Hits)
+	assert.Equal(t, 3, stats.Size)
+
+	// Add new entry to trigger eviction
+	c.Set("d.com", makeResult("d.com", true))
+
+	stats = c.Stats()
+	assert.Equal(t, 3, stats.Size) // Still at max
+	assert.Equal(t, int64(3), stats.Hits) // Hits unchanged
+}
+
+func TestStats_AfterClear(t *testing.T) {
+	c := NewResultCache(DefaultTTLs(), 100)
+	c.Set("a.com", makeResult("a.com", true))
+	c.Set("b.com", makeResult("b.com", true))
+
+	c.Get("a.com")
+	c.Get("b.com")
+
+	stats := c.Stats()
+	assert.Equal(t, int64(2), stats.Hits)
+	assert.Equal(t, 2, stats.Size)
+
+	c.Clear()
+
+	stats = c.Stats()
+	assert.Equal(t, int64(2), stats.Hits) // Hits counter preserved
+	assert.Equal(t, 0, stats.Size) // But size is 0
+}
