@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/coding/domain-check/internal/checker"
+	"github.com/coding/domain-check/internal/config"
 	"github.com/coding/domain-check/internal/domain"
 )
 
@@ -1444,4 +1445,886 @@ func TestBulkHandler_FallbackToSequential(t *testing.T) {
 	if resp.Succeeded != 1 {
 		t.Errorf("expected succeeded %d, got %d", 1, resp.Succeeded)
 	}
+}
+
+// ============================================================================
+// Integration Tests — Full Middleware Chain (30 scenarios)
+// These tests verify behavior through Router() with all middleware applied:
+// RequestID → ClientIP → Logging → SecurityHeaders → CORS → RateLimit → Handler
+// ============================================================================
+
+// setupIntegrationRouter creates a Router with full middleware chain and a mock checker.
+func setupIntegrationRouter(ch DomainChecker) http.Handler {
+	cfg := config.Defaults()
+	log := DefaultLogger("text", "error")
+	rl := NewRateLimiter(log)
+	return Router(&cfg, log, rl, ch)
+}
+
+// --- Scenarios 1-7: Single Check (GET /api/v1/check) ---
+
+func TestIntegration_SingleCheck(t *testing.T) {
+	t.Run("01-available domain", func(t *testing.T) {
+		mockCh := &mockChecker{
+			result: &domain.DomainResult{
+				Domain:     "intavail123.com",
+				Available:  true,
+				TLD:        "com",
+				Source:     domain.SourceRDAP,
+				Cached:     false,
+				DurationMs: 42,
+			},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=intavail123.com", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp domain.DomainResult
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Available != true {
+			t.Errorf("expected available=true, got %v", resp.Available)
+		}
+		if resp.Source != domain.SourceRDAP {
+			t.Errorf("expected source rdap, got %s", resp.Source)
+		}
+		if resp.Cached != false {
+			t.Errorf("expected cached=false, got %v", resp.Cached)
+		}
+	})
+
+	t.Run("02-taken domain with registration data", func(t *testing.T) {
+		mockCh := &mockChecker{
+			result: &domain.DomainResult{
+				Domain:     "inttaken.com",
+				Available:  false,
+				TLD:        "com",
+				Source:     domain.SourceRDAP,
+				Cached:     false,
+				DurationMs: 150,
+				Registration: &domain.Registration{
+					Registrar:   "MarkMonitor Inc.",
+					Created:     "1997-09-15T04:00:00Z",
+					Expires:     "2028-09-14T04:00:00Z",
+					Nameservers: []string{"ns1.google.com", "ns2.google.com"},
+					Status:      []string{"client delete prohibited", "client transfer prohibited"},
+				},
+			},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=inttaken.com", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp domain.DomainResult
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Available != false {
+			t.Errorf("expected available=false, got %v", resp.Available)
+		}
+		if resp.Registration == nil {
+			t.Fatal("expected registration data for taken domain")
+		}
+		if resp.Registration.Registrar == "" {
+			t.Error("expected non-empty registrar")
+		}
+		if resp.Registration.Created == "" {
+			t.Error("expected non-empty created date")
+		}
+		if resp.Registration.Expires == "" {
+			t.Error("expected non-empty expires date")
+		}
+		if len(resp.Registration.Nameservers) == 0 {
+			t.Error("expected at least one nameserver")
+		}
+		if len(resp.Registration.Status) == 0 {
+			t.Error("expected at least one status value")
+		}
+	})
+
+	t.Run("03-empty domain parameter", func(t *testing.T) {
+		mockCh := &mockChecker{}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+
+		var resp ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Error != "missing_parameter" {
+			t.Errorf("expected missing_parameter, got %s", resp.Error)
+		}
+	})
+
+	t.Run("04-invalid domain", func(t *testing.T) {
+		mockCh := &mockChecker{}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=not+a+domain", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+
+		var resp ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Error != "invalid_domain" {
+			t.Errorf("expected invalid_domain, got %s", resp.Error)
+		}
+	})
+
+	t.Run("05-unsupported TLD", func(t *testing.T) {
+		mockCh := &mockChecker{
+			err: checker.ErrTLDNotFound,
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=intunsup.xyz", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Error != "unsupported_tld" {
+			t.Errorf("expected unsupported_tld, got %s", resp.Error)
+		}
+	})
+
+	t.Run("06-missing domain parameter", func(t *testing.T) {
+		mockCh := &mockChecker{}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+
+		var resp ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Error != "missing_parameter" {
+			t.Errorf("expected missing_parameter, got %s", resp.Error)
+		}
+	})
+
+	t.Run("07-cached response", func(t *testing.T) {
+		mockCh := &mockChecker{
+			result: &domain.DomainResult{
+				Domain:     "intcached.com",
+				Available:  true,
+				TLD:        "com",
+				Source:     domain.SourceCache,
+				Cached:     true,
+				DurationMs: 0,
+			},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=intcached.com", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+
+		var resp domain.DomainResult
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Cached != true {
+			t.Errorf("expected cached=true, got %v", resp.Cached)
+		}
+		if resp.Source != domain.SourceCache {
+			t.Errorf("expected source cache, got %s", resp.Source)
+		}
+	})
+}
+
+// --- Scenarios 8-10: Multi-TLD (GET /api/v1/check?tlds=) ---
+
+func TestIntegration_MultiTLD(t *testing.T) {
+	t.Run("08-valid pair com,org", func(t *testing.T) {
+		mockCh := &mockBulkChecker{
+			results: map[string]*domain.DomainResult{
+				"intmulti1.com": {Domain: "intmulti1.com", Available: false, TLD: "com", Source: domain.SourceRDAP},
+				"intmulti1.org": {Domain: "intmulti1.org", Available: true, TLD: "org", Source: domain.SourceRDAP},
+			},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=intmulti1&tlds=com,org", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp MultiTLDResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Total != 2 {
+			t.Errorf("expected total 2, got %d", resp.Total)
+		}
+		if resp.Succeeded != 2 {
+			t.Errorf("expected succeeded 2, got %d", resp.Succeeded)
+		}
+		if resp.Failed != 0 {
+			t.Errorf("expected failed 0, got %d", resp.Failed)
+		}
+		if len(resp.Results) != 2 {
+			t.Errorf("expected 2 results, got %d", len(resp.Results))
+		}
+	})
+
+	t.Run("09-partial failure", func(t *testing.T) {
+		mockCh := &mockBulkChecker{
+			results: map[string]*domain.DomainResult{
+				"intmulti2.com": {Domain: "intmulti2.com", Available: false, TLD: "com", Source: domain.SourceRDAP},
+			},
+			errors: map[string]string{
+				"intmulti2.invalidtld": "unsupported tld",
+			},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=intmulti2&tlds=com,invalidtld", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp MultiTLDResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Succeeded != 1 {
+			t.Errorf("expected succeeded 1, got %d", resp.Succeeded)
+		}
+		if resp.Failed != 1 {
+			t.Errorf("expected failed 1, got %d", resp.Failed)
+		}
+
+		// Verify the failed result has an error message
+		var foundError bool
+		for _, r := range resp.Results {
+			if r.Error != "" {
+				foundError = true
+				break
+			}
+		}
+		if !foundError {
+			t.Error("expected at least one result with error field set")
+		}
+	})
+
+	t.Run("10-no tlds falls through to single check", func(t *testing.T) {
+		mockCh := &mockChecker{}
+		router := setupIntegrationRouter(mockCh)
+
+		// Without tlds parameter, handler does a single domain check.
+		// "example" is a single label → domain.Parse rejects it.
+		req := httptest.NewRequest("GET", "/api/v1/check?d=example", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+
+		var resp ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		// Should be invalid_domain from single-check path, not a multi-TLD error
+		if resp.Error != "invalid_domain" {
+			t.Errorf("expected invalid_domain (single-check path), got %s", resp.Error)
+		}
+	})
+}
+
+// --- Scenarios 11-17: Bulk (POST /api/v1/bulk) ---
+
+func TestIntegration_Bulk(t *testing.T) {
+	t.Run("11-valid bulk request", func(t *testing.T) {
+		mockCh := &mockBulkChecker{
+			results: map[string]*domain.DomainResult{
+				"intbulk1.com": {Domain: "intbulk1.com", Available: true, TLD: "com", Source: domain.SourceRDAP},
+				"intbulk2.com": {Domain: "intbulk2.com", Available: false, TLD: "com", Source: domain.SourceRDAP},
+				"intbulk3.com": {Domain: "intbulk3.com", Available: true, TLD: "com", Source: domain.SourceRDAP},
+			},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		body := `{"domains": ["intbulk1.com", "intbulk2.com", "intbulk3.com"]}`
+		req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp BulkCheckResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Total != 3 {
+			t.Errorf("expected total 3, got %d", resp.Total)
+		}
+		if resp.Succeeded != 3 {
+			t.Errorf("expected succeeded 3, got %d", resp.Succeeded)
+		}
+		if len(resp.Results) != 3 {
+			t.Errorf("expected 3 results, got %d", len(resp.Results))
+		}
+	})
+
+	t.Run("12-max 50 domains", func(t *testing.T) {
+		mockCh := &mockBulkChecker{results: make(map[string]*domain.DomainResult)}
+		for i := 0; i < 50; i++ {
+			d := fmt.Sprintf("intmax50-%d.com", i)
+			mockCh.results[d] = &domain.DomainResult{Domain: d, Available: true, TLD: "com", Source: domain.SourceRDAP}
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		domains := make([]string, 50)
+		for i := 0; i < 50; i++ {
+			domains[i] = fmt.Sprintf("intmax50-%d.com", i)
+		}
+		body, _ := json.Marshal(BulkRequest{Domains: domains})
+		req := httptest.NewRequest("POST", "/api/v1/bulk", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp BulkCheckResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Total != 50 {
+			t.Errorf("expected total 50, got %d", resp.Total)
+		}
+		if resp.Succeeded != 50 {
+			t.Errorf("expected succeeded 50, got %d", resp.Succeeded)
+		}
+	})
+
+	t.Run("13-over limit 51 domains", func(t *testing.T) {
+		mockCh := &mockBulkChecker{}
+		router := setupIntegrationRouter(mockCh)
+
+		domains := make([]string, 51)
+		for i := 0; i < 51; i++ {
+			domains[i] = fmt.Sprintf("intover51-%d.com", i)
+		}
+		body, _ := json.Marshal(BulkRequest{Domains: domains})
+		req := httptest.NewRequest("POST", "/api/v1/bulk", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+
+		var resp ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Error != "too_many_domains" {
+			t.Errorf("expected too_many_domains, got %s", resp.Error)
+		}
+	})
+
+	t.Run("14-empty array", func(t *testing.T) {
+		mockCh := &mockBulkChecker{}
+		router := setupIntegrationRouter(mockCh)
+
+		body := `{"domains": []}`
+		req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+
+		var resp ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Error != "empty_array" {
+			t.Errorf("expected empty_array, got %s", resp.Error)
+		}
+	})
+
+	t.Run("15-oversized body", func(t *testing.T) {
+		mockCh := &mockBulkChecker{}
+		router := setupIntegrationRouter(mockCh)
+
+		// Build a body > 64KB with 50 domains (max count allowed)
+		largeLabel := strings.Repeat("a", 1400)
+		domains := make([]string, 50)
+		for i := 0; i < 50; i++ {
+			domains[i] = largeLabel + ".com"
+		}
+		body, _ := json.Marshal(BulkRequest{Domains: domains})
+		if len(body) <= MaxBulkBodySize {
+			t.Fatalf("test body too small (%d bytes), need > %d", len(body), MaxBulkBodySize)
+		}
+		req := httptest.NewRequest("POST", "/api/v1/bulk", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("expected 413, got %d", rec.Code)
+		}
+
+		var resp ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Error != "body_too_large" {
+			t.Errorf("expected body_too_large, got %s", resp.Error)
+		}
+	})
+
+	t.Run("16-invalid JSON", func(t *testing.T) {
+		mockCh := &mockBulkChecker{}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader("this is not json"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+
+		var resp ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Error != "invalid_json" {
+			t.Errorf("expected invalid_json, got %s", resp.Error)
+		}
+	})
+
+	t.Run("17-mixed success and failure", func(t *testing.T) {
+		mockCh := &mockBulkChecker{
+			results: map[string]*domain.DomainResult{
+				"intmix1.com": {Domain: "intmix1.com", Available: true, TLD: "com", Source: domain.SourceRDAP},
+				"intmix3.com": {Domain: "intmix3.com", Available: false, TLD: "com", Source: domain.SourceRDAP},
+			},
+			errors: map[string]string{
+				"intmix2.com": "timeout checking registry",
+			},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		// Include an invalid domain that fails validation before reaching the checker
+		body := `{"domains": ["intmix1.com", "intmix2.com", "intmix3.com", "invalid!"]}`
+		req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp BulkCheckResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Total != 4 {
+			t.Errorf("expected total 4, got %d", resp.Total)
+		}
+		if resp.Succeeded != 2 {
+			t.Errorf("expected succeeded 2, got %d", resp.Succeeded)
+		}
+		if resp.Failed != 2 {
+			t.Errorf("expected failed 2, got %d", resp.Failed)
+		}
+
+		// Each result must have either a result or an error
+		for _, r := range resp.Results {
+			if r.Result == nil && r.Error == "" {
+				t.Errorf("domain %s: expected either result or error", r.Domain)
+			}
+		}
+	})
+}
+
+// --- Scenarios 18-21: Rate Limiting ---
+
+func TestIntegration_RateLimit(t *testing.T) {
+	t.Run("18-web limit 11th request blocked", func(t *testing.T) {
+		mockCh := &mockChecker{
+			result: &domain.DomainResult{Domain: "rlweb.com", Available: true, TLD: "com"},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		// Web endpoint is GET / — burst is 10
+		for i := 0; i < 10; i++ {
+			req := httptest.NewRequest("GET", "/", nil)
+			req.RemoteAddr = "10.99.1.1:12345"
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("web request %d: expected 200, got %d", i, rec.Code)
+			}
+		}
+
+		// 11th should be rate limited
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "10.99.1.1:12345"
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusTooManyRequests {
+			t.Errorf("11th web request: expected 429, got %d", rec.Code)
+		}
+	})
+
+	t.Run("19-API limit 61st request blocked", func(t *testing.T) {
+		mockCh := &mockChecker{
+			result: &domain.DomainResult{Domain: "rlapi.com", Available: true, TLD: "com"},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		// API burst is 60
+		for i := 0; i < 60; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/check?d=rlapi.com", nil)
+			req.RemoteAddr = "10.99.2.1:12345"
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("API request %d: expected 200, got %d", i, rec.Code)
+			}
+		}
+
+		// 61st should be rate limited
+		req := httptest.NewRequest("GET", "/api/v1/check?d=rlapi.com", nil)
+		req.RemoteAddr = "10.99.2.1:12345"
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusTooManyRequests {
+			t.Errorf("61st API request: expected 429, got %d", rec.Code)
+		}
+	})
+
+	t.Run("20-different IPs have isolated limits", func(t *testing.T) {
+		mockCh := &mockChecker{
+			result: &domain.DomainResult{Domain: "rlip.com", Available: true, TLD: "com"},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		// Exhaust API limit for IP A (60 requests)
+		for i := 0; i < 60; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/check?d=rlip.com", nil)
+			req.RemoteAddr = "10.99.3.1:12345"
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("IP-A request %d: expected 200, got %d", i, rec.Code)
+			}
+		}
+
+		// IP A should now be blocked
+		req := httptest.NewRequest("GET", "/api/v1/check?d=rlip.com", nil)
+		req.RemoteAddr = "10.99.3.1:12345"
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusTooManyRequests {
+			t.Errorf("IP-A after limit: expected 429, got %d", rec.Code)
+		}
+
+		// IP B should still succeed (isolated limit)
+		req = httptest.NewRequest("GET", "/api/v1/check?d=rlip.com", nil)
+		req.RemoteAddr = "10.99.3.2:12345"
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("IP-B: expected 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("21-retry-after header on 429", func(t *testing.T) {
+		mockCh := &mockChecker{
+			result: &domain.DomainResult{Domain: "rlretry.com", Available: true, TLD: "com"},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		// Exhaust web limit (10 requests)
+		for i := 0; i < 10; i++ {
+			req := httptest.NewRequest("GET", "/", nil)
+			req.RemoteAddr = "10.99.4.1:12345"
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+		}
+
+		// Next request should get 429 with Retry-After
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "10.99.4.1:12345"
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("expected 429, got %d", rec.Code)
+		}
+
+		retryAfter := rec.Header().Get("Retry-After")
+		if retryAfter == "" {
+			t.Error("expected Retry-After header to be set")
+		}
+
+		// Body should contain rate limit error
+		body := rec.Body.String()
+		if !contains(body, "rate limit exceeded") {
+			t.Errorf("expected body to contain 'rate limit exceeded', got %s", body)
+		}
+	})
+}
+
+// --- Scenarios 22-27: Security Headers ---
+
+func TestIntegration_Security(t *testing.T) {
+	t.Run("22-Content-Security-Policy header", func(t *testing.T) {
+		mockCh := &mockChecker{
+			result: &domain.DomainResult{Domain: "sec1.com", Available: true, TLD: "com"},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=sec1.com", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		csp := rec.Header().Get("Content-Security-Policy")
+		if csp == "" {
+			t.Fatal("expected Content-Security-Policy header")
+		}
+
+		requiredDirectives := []string{
+			"default-src 'none'",
+			"script-src 'self'",
+			"frame-ancestors 'none'",
+		}
+		for _, dir := range requiredDirectives {
+			if !contains(csp, dir) {
+				t.Errorf("CSP missing directive: %s", dir)
+			}
+		}
+	})
+
+	t.Run("23-X-Content-Type-Options nosniff", func(t *testing.T) {
+		router := setupIntegrationRouter(&mockChecker{})
+
+		req := httptest.NewRequest("GET", "/health", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("expected nosniff, got %s", got)
+		}
+	})
+
+	t.Run("24-X-Frame-Options DENY", func(t *testing.T) {
+		router := setupIntegrationRouter(&mockChecker{})
+
+		req := httptest.NewRequest("GET", "/health", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("expected DENY, got %s", got)
+		}
+	})
+
+	t.Run("25-X-Request-Id header", func(t *testing.T) {
+		router := setupIntegrationRouter(&mockChecker{})
+
+		req := httptest.NewRequest("GET", "/health", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		rid := rec.Header().Get("X-Request-Id")
+		if rid == "" {
+			t.Fatal("expected X-Request-Id header")
+		}
+		if len(rid) != 16 {
+			t.Errorf("expected 16-char request ID, got %d chars: %s", len(rid), rid)
+		}
+	})
+
+	t.Run("26-CORS preflight", func(t *testing.T) {
+		router := setupIntegrationRouter(&mockChecker{})
+
+		req := httptest.NewRequest("OPTIONS", "/api/v1/check", nil)
+		req.Header.Set("Origin", "https://example.com")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d", rec.Code)
+		}
+
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
+			t.Errorf("expected Access-Control-Allow-Origin https://example.com, got %s", got)
+		}
+		if got := rec.Header().Get("Access-Control-Allow-Methods"); got == "" {
+			t.Error("expected Access-Control-Allow-Methods header")
+		}
+		if got := rec.Header().Get("Access-Control-Allow-Headers"); got == "" {
+			t.Error("expected Access-Control-Allow-Headers header")
+		}
+		if got := rec.Header().Get("Access-Control-Max-Age"); got == "" {
+			t.Error("expected Access-Control-Max-Age header")
+		}
+	})
+
+	t.Run("27-API response Content-Type application/json", func(t *testing.T) {
+		mockCh := &mockChecker{
+			result: &domain.DomainResult{Domain: "ctint.com", Available: true, TLD: "com"},
+		}
+		router := setupIntegrationRouter(mockCh)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=ctint.com", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if got := rec.Header().Get("Content-Type"); got != "application/json" {
+			t.Errorf("expected application/json, got %s", got)
+		}
+	})
+}
+
+// --- Scenarios 28-30: Health Check ---
+
+func TestIntegration_HealthCheck(t *testing.T) {
+	t.Run("28-normal health check returns ok", func(t *testing.T) {
+		router := setupIntegrationRouter(&mockChecker{})
+
+		req := httptest.NewRequest("GET", "/health", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+
+		var health map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&health); err != nil {
+			t.Fatalf("failed to decode health response: %v", err)
+		}
+		if health["status"] != "ok" {
+			t.Errorf("expected status ok, got %v", health["status"])
+		}
+	})
+
+	t.Run("29-health response structure and headers", func(t *testing.T) {
+		router := setupIntegrationRouter(&mockChecker{})
+
+		req := httptest.NewRequest("GET", "/health", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+
+		// Content-Type must be JSON
+		if got := rec.Header().Get("Content-Type"); got != "application/json" {
+			t.Errorf("expected application/json, got %s", got)
+		}
+
+		// Security headers must be present on health endpoint too
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("expected X-Content-Type-Options nosniff, got %s", got)
+		}
+		if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("expected X-Frame-Options DENY, got %s", got)
+		}
+
+		// Request ID must be present
+		if got := rec.Header().Get("X-Request-Id"); got == "" {
+			t.Error("expected X-Request-Id header")
+		}
+
+		// Response must be valid JSON
+		var health map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&health); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if _, ok := health["status"]; !ok {
+			t.Error("expected 'status' field in health response")
+		}
+	})
+
+	t.Run("30-health endpoint not rate limited", func(t *testing.T) {
+		router := setupIntegrationRouter(&mockChecker{})
+
+		// Health has no rate limiting — 50 rapid requests should all succeed
+		for i := 0; i < 50; i++ {
+			req := httptest.NewRequest("GET", "/health", nil)
+			req.RemoteAddr = "10.99.5.1:12345"
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("health request %d: expected 200, got %d", i, rec.Code)
+			}
+		}
+	})
 }
