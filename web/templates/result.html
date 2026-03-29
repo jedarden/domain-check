@@ -1,0 +1,58 @@
+{{define "result"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+<section class="search-section">
+    <form action="/check" method="GET" class="search-form">
+        <div class="input-group">
+            <input type="text" name="d" id="domain-input" value="{{.Domain}}" placeholder="example.com" autocomplete="off" spellcheck="false" required>
+            <button type="submit" aria-label="Check domain">Check</button>
+        </div>
+    </form>
+</section>
+
+{{if .Error}}
+<section class="result-section error">
+    <div class="result-card error">
+        <p class="error-message">{{.Error}}</p>
+        {{if .ErrorDetail}}<p class="error-detail">{{.ErrorDetail}}</p>{{end}}
+    </div>
+</section>
+{{else}}
+<section class="result-section">
+    <div class="result-card {{if .Available}}available{{else}}taken{{end}}">
+        <h2 class="domain-name">{{.Domain}}</h2>
+        <p class="status {{if .Available}}available{{else}}taken{{end}}">
+            {{if .Available}}Available{{else}}Taken{{end}}
+        </p>
+        <p class="meta">Checked via {{.Source}}, {{.DurationMs}}ms{{if .Cached}} (cached){{end}}</p>
+    </div>
+
+    {{if not .Available}}
+    {{with .Registration}}
+    <div class="registration-details">
+        <h3>Registration Details</h3>
+        <dl>
+            {{if .Registrar}}<dt>Registrar</dt><dd>{{.Registrar}}</dd>{{end}}
+            {{if .Created}}<dt>Registered</dt><dd>{{.Created}}</dd>{{end}}
+            {{if .Expires}}<dt>Expires</dt><dd>{{.Expires}}</dd>{{end}}
+            {{if .Nameservers}}
+            <dt>Nameservers</dt>
+            <dd>
+                <ul class="nameservers">
+                    {{range .Nameservers}}<li>{{.}}</li>{{end}}
+                </ul>
+            </dd>
+            {{end}}
+        </dl>
+    </div>
+    {{end}}
+    {{end}}
+
+    <div class="api-link">
+        <a href="/api/v1/check?d={{.Domain}}">View JSON</a>
+    </div>
+</section>
+{{end}}
+{{end}}

@@ -1,0 +1,30 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="description" content="Authoritative domain availability checker powered by RDAP">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
+    <title>{{if .Title}}{{.Title}} | {{end}}Domain Check</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="/">Domain Check</a></h1>
+        <p class="tagline">Authoritative availability lookup</p>
+    </header>
+
+    <main>
+        {{template "content" .}}
+    </main>
+
+    <footer>
+        <p>Powered by <a href="https://about.rdap.org/" rel="noopener">RDAP</a></p>
+        <p><a href="https://github.com/jedarden/domain-check">Open Source</a></p>
+    </footer>
+</body>
+</html>
+{{end}}

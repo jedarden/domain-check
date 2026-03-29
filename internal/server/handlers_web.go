@@ -61,7 +61,15 @@ func (h *WebHandlers) CheckHandler() http.HandlerFunc {
 		}
 
 		// Check availability
-		result := h.checker.Check(r.Context(), domainName)
+		result, err := h.checker.Check(r.Context(), domainName.Domain)
+		if err != nil {
+			h.renderResult(w, &web.TemplateData{
+				Domain:      domainName.Domain,
+				Error:       "Check failed",
+				ErrorDetail: err.Error(),
+			})
+			return
+		}
 
 		// Prepare template data
 		data := &web.TemplateData{
@@ -75,7 +83,6 @@ func (h *WebHandlers) CheckHandler() http.HandlerFunc {
 
 		if result.Error != "" {
 			data.Error = result.Error
-			data.ErrorDetail = result.ErrorDetail
 		} else if !result.Available && result.Registration != nil {
 			data.Registration = &web.Registration{
 				Registrar:   result.Registration.Registrar,

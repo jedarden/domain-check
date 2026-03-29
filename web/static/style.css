@@ -1,0 +1,329 @@
+/* Domain Check - Minimal Mobile-First CSS */
+
+:root {
+    --color-bg: #f8f9fa;
+    --color-surface: #ffffff;
+    --color-text: #212529;
+    --color-text-secondary: #6c757d;
+    --color-available: #198754;
+    --color-available-bg: #d1e7dd;
+    --color-taken: #dc3545;
+    --color-taken-bg: #f8d7da;
+    --color-error: #842029;
+    --color-error-bg: #f8d7da;
+    --color-border: #dee2e6;
+    --color-link: #0d6efd;
+    --color-link-hover: #0a58ca;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "SF Mono", SFMono-Regular, ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-sans);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+header {
+    text-align: center;
+    padding: 2rem 1rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+header h1 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+header h1 a {
+    color: inherit;
+    text-decoration: none;
+}
+
+header .tagline {
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+/* Main content */
+main {
+    flex: 1;
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+    width: 100%;
+}
+
+/* Search form */
+.search-section {
+    margin-bottom: 2rem;
+}
+
+.search-form .input-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.search-form input[type="text"] {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    font-size: 1.125rem;
+    font-family: var(--font-mono);
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    background: var(--color-surface);
+}
+
+.search-form input[type="text"]:focus {
+    outline: none;
+    border-color: var(--color-link);
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+}
+
+.search-form button {
+    padding: 0.75rem 1.25rem;
+    font-size: 1rem;
+    font-weight: 500;
+    background: var(--color-link);
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.search-form button:hover {
+    background: var(--color-link-hover);
+}
+
+/* TLD options */
+.tld-options {
+    margin-top: 1rem;
+    border: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.tld-options legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+.tld-options label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+}
+
+.tld-options input[type="checkbox"]:disabled {
+    opacity: 0.5;
+}
+
+/* Info section */
+.info-section {
+    background: var(--color-surface);
+    padding: 1.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-border);
+}
+
+.info-section h2 {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.info-section p {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.info-section ul {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    padding-left: 1.25rem;
+}
+
+.info-section li {
+    margin-bottom: 0.25rem;
+}
+
+/* Result section */
+.result-section {
+    margin-bottom: 2rem;
+}
+
+.result-card {
+    background: var(--color-surface);
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    border: 2px solid var(--color-border);
+    text-align: center;
+}
+
+.result-card.available {
+    border-color: var(--color-available);
+    background: var(--color-available-bg);
+}
+
+.result-card.taken {
+    border-color: var(--color-taken);
+    background: var(--color-taken-bg);
+}
+
+.result-card.error {
+    border-color: var(--color-error);
+    background: var(--color-error-bg);
+}
+
+.result-card .domain-name {
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    word-break: break-all;
+    margin-bottom: 0.5rem;
+}
+
+.result-card .status {
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.result-card .status.available {
+    color: var(--color-available);
+}
+
+.result-card .status.taken {
+    color: var(--color-taken);
+}
+
+.result-card .meta {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    margin-top: 0.5rem;
+}
+
+.result-card .error-message {
+    font-weight: 500;
+    color: var(--color-error);
+}
+
+.result-card .error-detail {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    margin-top: 0.5rem;
+}
+
+/* Registration details */
+.registration-details {
+    background: var(--color-surface);
+    padding: 1.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-border);
+    margin-top: 1rem;
+}
+
+.registration-details h3 {
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+    color: var(--color-text-secondary);
+}
+
+.registration-details dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 1rem;
+    font-size: 0.875rem;
+}
+
+.registration-details dt {
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+.registration-details dd {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+}
+
+.registration-details .nameservers {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* API link */
+.api-link {
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.api-link a {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+}
+
+footer p {
+    margin-bottom: 0.25rem;
+}
+
+footer a {
+    color: var(--color-link);
+}
+
+/* Links */
+a {
+    color: var(--color-link);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive */
+@media (min-width: 640px) {
+    header {
+        padding: 2.5rem 1rem 1.5rem;
+    }
+
+    header h1 {
+        font-size: 2rem;
+    }
+
+    main {
+        padding: 2rem 1rem;
+    }
+}
