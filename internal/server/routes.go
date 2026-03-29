@@ -51,8 +51,11 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, ra
 	// API routes with rate limiting
 	mux.Handle("GET /api/v1/check", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
 	mux.Handle("GET /api/v1/check/", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
-	// Placeholder handlers for bulk and tlds (Phase 2+)
-	mux.Handle("POST /api/v1/bulk", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
+	// Multi-TLD check endpoint
+	mux.Handle("GET /api/v1/check/multi", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.MultiTLDHandler)))
+	// Bulk check endpoint
+	mux.Handle("POST /api/v1/bulk", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.BulkHandler)))
+	// Placeholder handler for tlds (Phase 2+)
 	mux.Handle("GET /api/v1/tlds", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
 
 	// Metrics endpoint (if enabled).
