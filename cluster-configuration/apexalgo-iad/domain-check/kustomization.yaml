@@ -9,6 +9,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingressroute.yaml
+  - servicemonitor.yaml
 
 commonLabels:
   app.kubernetes.io/managed-by: kustomize
