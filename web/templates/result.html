@@ -50,6 +50,22 @@
     {{end}}
     {{end}}
 
+    {{if .AltTLDs}}
+    <div class="also-check">
+        <h3>Also check</h3>
+        <ul class="alt-tld-list">
+            {{range .AltTLDs}}
+            <li class="{{if .Error}}error{{else if .Available}}available{{else}}taken{{end}}">
+                <a href="/check?d={{.Domain}}">.{{.TLD}}</a>
+                <span class="alt-status">
+                    {{if .Error}}?{{else if .Available}}available{{else}}taken{{end}}
+                </span>
+            </li>
+            {{end}}
+        </ul>
+    </div>
+    {{end}}
+
     <div class="api-link">
         <a href="/api/v1/check?d={{.Domain}}">View JSON</a>
     </div>

@@ -1,13 +1,18 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/coding/domain-check/internal/domain"
 	"github.com/coding/domain-check/web"
 )
+
+// Default alternative TLDs to check for "Also check" section.
+var defaultAltTLDs = []string{"com", "org", "net", "dev", "io", "app"}
 
 // WebHandlers handles web UI requests.
 type WebHandlers struct {
@@ -93,8 +98,64 @@ func (h *WebHandlers) CheckHandler() http.HandlerFunc {
 			}
 		}
 
+		// Fetch alternative TLD results
+		// Extract the name part (domain without TLD)
+		name := strings.TrimSuffix(domainName.Domain, "."+domainName.TLD)
+		data.AltTLDs = h.getAltTLDResults(r.Context(), name, domainName.TLD)
+
 		h.renderResult(w, data)
 	}
+}
+
+// getAltTLDResults fetches availability for the same name across other TLDs.
+func (h *WebHandlers) getAltTLDResults(ctx context.Context, name, currentTLD string) []web.AltTLDResult {
+	// Try to use bulk checker for parallel requests
+	bulkChecker, ok := h.checker.(BulkChecker)
+	if !ok {
+		return nil
+	}
+
+	// Build list of alternative domains to check (excluding current TLD)
+	var domains []string
+	var tlds []string
+	for _, tld := range defaultAltTLDs {
+		if strings.EqualFold(tld, currentTLD) {
+			continue
+		}
+		domains = append(domains, name+"."+tld)
+		tlds = append(tlds, tld)
+	}
+
+	if len(domains) == 0 {
+		return nil
+	}
+
+	// Perform bulk check
+	bulkResult := bulkChecker.CheckBulk(ctx, domains)
+	if bulkResult == nil {
+		return nil
+	}
+
+	// Build results
+	var results []web.AltTLDResult
+	for i, fullDomain := range domains {
+		alt := web.AltTLDResult{
+			TLD:    tlds[i],
+			Domain: fullDomain,
+		}
+
+		if errStr, hasErr := bulkResult.Errors[fullDomain]; hasErr {
+			alt.Error = errStr
+		} else if res := bulkResult.Results[fullDomain]; res != nil {
+			alt.Available = res.Available
+		} else {
+			alt.Error = "no result"
+		}
+
+		results = append(results, alt)
+	}
+
+	return results
 }
 
 // renderResult renders the result page.

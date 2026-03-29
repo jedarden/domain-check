@@ -19,6 +19,15 @@ type TemplateData struct {
 	Error       string
 	ErrorDetail string
 	Registration *Registration
+	AltTLDs     []AltTLDResult
+}
+
+// AltTLDResult holds a result for an alternative TLD check.
+type AltTLDResult struct {
+	TLD       string
+	Domain    string
+	Available bool
+	Error     string
 }
 
 // Registration holds domain registration details.
