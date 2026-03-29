@@ -396,6 +396,33 @@ a:hover {
     text-decoration: underline;
 }
 
+/* Copy button (JS-enhanced) */
+.copy-btn {
+    display: inline-block;
+    margin-top: 0.75rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8rem;
+    font-family: var(--font-sans);
+    background: var(--color-surface);
+    color: var(--color-available);
+    border: 1px solid var(--color-available);
+    border-radius: 0.25rem;
+    cursor: pointer;
+}
+
+.copy-btn:hover {
+    background: var(--color-available);
+    color: white;
+}
+
+.copy-btn.copied {
+    background: var(--color-available);
+    color: white;
+    border-color: var(--color-available);
+}
+
+/* Hide TLD options legend visually for no-JS (already hidden via CSS) */
+
 /* Responsive */
 @media (min-width: 640px) {
     header {
