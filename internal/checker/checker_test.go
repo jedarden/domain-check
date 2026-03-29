@@ -827,12 +827,12 @@ func TestCheckBulk_PerRegistrySemaphore(t *testing.T) {
 
 	// Verify per-registry concurrency limits
 	// Verisign (.com) should be limited to 10 concurrent
-	if max := maxByRegistry["rdap.verisign.com"]; max > VerisignConcurrency {
+	if max := maxByRegistry["rdap.verisign.com"]; int64(max) > VerisignConcurrency {
 		t.Errorf("Verisign concurrency exceeded: max %d, limit %d", max, VerisignConcurrency)
 	}
 
 	// PIR (.org) should be limited to 10 concurrent
-	if max := maxByRegistry["rdap.publicinterestregistry.org"]; max > PIRConcurrency {
+	if max := maxByRegistry["rdap.publicinterestregistry.org"]; int64(max) > PIRConcurrency {
 		t.Errorf("PIR concurrency exceeded: max %d, limit %d", max, PIRConcurrency)
 	}
 }

@@ -73,7 +73,7 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, ra
 </html>`))
 	}))
 
-	mux.Handle("GET /", webHandler)
+	mux.Handle("GET /{$}", webHandler)     // Exact match for / only
 	mux.Handle("GET /check", webHandler)
 }
 
