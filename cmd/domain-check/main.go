@@ -348,8 +348,18 @@ func runServer(args []string) {
 	// Create rate limiter.
 	rateLimiter := server.NewRateLimiter(log)
 
+	// Start periodic cleanup of stale IP entries (every 10 minutes).
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			rateLimiter.Cleanup()
+		}
+	}()
+
 	// Create router with all routes and middleware.
-	handler := server.Router(cfg, log, rateLimiter)
+	// Note: DomainChecker will be passed when full implementation is ready.
+	handler := server.Router(cfg, log, rateLimiter, nil)
 
 	// Create and run the HTTP server.
 	srv := server.New(cfg, handler, log)

@@ -17,11 +17,11 @@ import (
 // 5. Rate Limit - per-IP rate limiting
 // 6. CORS - cross-origin support for API
 // 7. Handler - the actual route handler
-func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter) http.Handler {
+func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker) http.Handler {
 	mux := http.NewServeMux()
 
 	// Register routes.
-	registerRoutes(mux, cfg, log, rateLimiter)
+	registerRoutes(mux, cfg, log, rateLimiter, ch)
 
 	// Build middleware chain (applied in reverse order).
 	// Outer to inner: RequestID -> ClientIP -> Logging -> SecurityHeaders -> RateLimit -> CORS -> Handler
@@ -37,22 +37,23 @@ func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter) http
 }
 
 // registerRoutes adds all routes to the mux.
-func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter) {
+func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker) {
+	// Create handlers
+	apiHandlers := NewAPIHandlers(ch, log)
+	webHandlers := NewWebHandlers(ch, log)
+
 	// Health check - no rate limiting.
 	mux.HandleFunc("GET /health", healthHandler(log))
 
-	// API routes with rate limiting.
-	apiHandler := rateLimiter.APIRateLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Placeholder - will be replaced with actual API handlers in Phase 2.
-		writeJSONResponse(w, http.StatusOK, map[string]string{
-			"message": "API endpoint - coming soon",
-		})
-	}))
+	// Static assets - no rate limiting, cached by browsers.
+	mux.Handle("GET /static/", http.StripPrefix("/static/", StaticHandler()))
 
-	mux.Handle("GET /api/v1/check", apiHandler)
-	mux.Handle("GET /api/v1/check/", apiHandler) // With trailing slash for path params
-	mux.Handle("POST /api/v1/bulk", apiHandler)
-	mux.Handle("GET /api/v1/tlds", apiHandler)
+	// API routes with rate limiting
+	mux.Handle("GET /api/v1/check", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
+	mux.Handle("GET /api/v1/check/", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
+	// Placeholder handlers for bulk and tlds (Phase 2+)
+	mux.Handle("POST /api/v1/bulk", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
+	mux.Handle("GET /api/v1/tlds", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
 
 	// Metrics endpoint (if enabled).
 	if cfg.Metrics {
@@ -60,21 +61,8 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, ra
 	}
 
 	// Web UI routes with web rate limiting.
-	webHandler := rateLimiter.WebRateLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Placeholder - will be replaced with actual web handlers in Phase 3.
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head><title>Domain Check</title></head>
-<body>
-<h1>Domain Check</h1>
-<p>Web UI coming soon...</p>
-</body>
-</html>`))
-	}))
-
-	mux.Handle("GET /{$}", webHandler)     // Exact match for / only
-	mux.Handle("GET /check", webHandler)
+	mux.Handle("GET /{$}", rateLimiter.WebRateLimit(http.HandlerFunc(webHandlers.IndexHandler())))
+	mux.Handle("GET /check", rateLimiter.WebRateLimit(http.HandlerFunc(webHandlers.CheckHandler())))
 }
 
 // healthHandler returns the server health status.
