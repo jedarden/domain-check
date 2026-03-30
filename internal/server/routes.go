@@ -2,10 +2,13 @@ package server
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/coding/domain-check/internal/config"
+	"github.com/coding/domain-check/web"
 )
 
 // Router creates and returns the main HTTP handler with all routes and middleware.
@@ -47,6 +50,9 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, ra
 
 	// Static assets - no rate limiting, cached by browsers.
 	mux.Handle("GET /static/", http.StripPrefix("/static/", StaticHandler()))
+
+	// robots.txt at root (served from embedded static).
+	mux.Handle("GET /robots.txt", robotsTxtHandler())
 
 	// API routes with rate limiting
 	mux.Handle("GET /api/v1/check", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
@@ -90,6 +96,22 @@ func metricsHandler(log *slog.Logger) http.HandlerFunc {
 # TYPE domcheck_up gauge
 domcheck_up 1
 `))
+	}
+}
+
+// robotsTxtHandler serves the embedded robots.txt.
+func robotsTxtHandler() http.HandlerFunc {
+	data, _ := web.StaticFS()
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		f, err := data.Open("robots.txt")
+		if err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		defer f.Close()
+		http.ServeContent(w, r, "robots.txt", time.Time{}, f.(io.ReadSeeker))
 	}
 }
 
