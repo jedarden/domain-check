@@ -9,6 +9,16 @@
             <input type="text" name="d" id="domain-input" value="{{.Domain}}" placeholder="example.com" autocomplete="off" spellcheck="false" required>
             <button type="submit" aria-label="Check domain">Check</button>
         </div>
+
+        <fieldset class="tld-options">
+            <legend>Also check:</legend>
+            <label><input type="checkbox" name="tlds" value="com"> .com</label>
+            <label><input type="checkbox" name="tlds" value="org"> .org</label>
+            <label><input type="checkbox" name="tlds" value="net"> .net</label>
+            <label><input type="checkbox" name="tlds" value="dev"> .dev</label>
+            <label><input type="checkbox" name="tlds" value="io"> .io</label>
+            <label><input type="checkbox" name="tlds" value="app"> .app</label>
+        </fieldset>
     </form>
 </section>
 
@@ -19,7 +29,38 @@
         {{if .ErrorDetail}}<p class="error-detail">{{.ErrorDetail}}</p>{{end}}
     </div>
 </section>
+{{else if .Results}}
+{{/* Multi-TLD results */}}
+<section class="result-section">
+    <h2 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--color-text-secondary);">Results for "{{.Domain}}"</h2>
+    <div class="multi-tld-results">
+        {{range .Results}}
+        <div class="result-card {{if .Error}}error{{else if .Available}}available{{else}}taken{{end}}">
+            <h3 class="domain-name">{{.Domain}}</h3>
+            {{if .Error}}
+            <p class="error-message">{{.Error}}</p>
+            {{else}}
+            <p class="status {{if .Available}}available{{else}}taken{{end}}">
+                {{if .Available}}Available{{else}}Taken{{end}}
+            </p>
+            <p class="meta">Checked via {{.Source}}, {{.DurationMs}}ms{{if .Cached}} (cached){{end}}</p>
+            {{end}}
+
+            {{if and (not .Available) (not .Error) .Registration}}
+            <div class="registration-details" style="margin-top: 1rem;">
+                <dl>
+                    {{if .Registration.Registrar}}<dt>Registrar</dt><dd>{{.Registration.Registrar}}</dd>{{end}}
+                    {{if .Registration.Created}}<dt>Registered</dt><dd>{{.Registration.Created}}</dd>{{end}}
+                    {{if .Registration.Expires}}<dt>Expires</dt><dd>{{.Registration.Expires}}</dd>{{end}}
+                </dl>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+</section>
 {{else}}
+{{/* Single domain result */}}
 <section class="result-section">
     <div class="result-card {{if .Available}}available{{else}}taken{{end}}">
         <h2 class="domain-name">{{.Domain}}</h2>

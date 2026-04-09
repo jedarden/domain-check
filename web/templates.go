@@ -20,6 +20,19 @@ type TemplateData struct {
 	ErrorDetail string
 	Registration *Registration
 	AltTLDs     []AltTLDResult
+	Results     []MultiTLDResult // For multi-TLD results from form submission
+}
+
+// MultiTLDResult holds a result for a single TLD in a multi-TLD check.
+type MultiTLDResult struct {
+	Domain       string
+	TLD          string
+	Available    bool
+	Source       string
+	Cached       bool
+	DurationMs   int64
+	Error        string
+	Registration *Registration
 }
 
 // AltTLDResult holds a result for an alternative TLD check.
