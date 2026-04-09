@@ -387,7 +387,18 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 		return nil, fmt.Errorf("failed to create bootstrap manager: %w", err)
 	}
 
-	// Start background bootstrap refresh.
+	// Create allowlist for RDAP servers (populated from bootstrap).
+	// Get the current bootstrap URLs to seed the allowlist.
+	bootstrapURLs := bootstrap.URLs()
+	allowlist := checker.NewAllowList(bootstrapURLs)
+
+	// Create safe HTTP client with SSRF protection.
+	safeClient := checker.NewSafeClient(checker.ClientConfig{
+		AllowList: allowlist,
+		UserAgent: "domain-check/1.0",
+	})
+
+	// Start background bootstrap refresh and allowlist update.
 	go func() {
 		ticker := time.NewTicker(cfg.BootstrapRefresh)
 		defer ticker.Stop()
@@ -396,18 +407,19 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 			case <-ticker.C:
 				if err := bootstrap.Refresh(ctx); err != nil {
 					log.Warn("bootstrap refresh failed", "error", err)
+					continue
 				}
+				// Update allowlist with new URLs.
+				urls := bootstrap.URLs()
+				for _, u := range urls {
+					allowlist.Allow(u)
+				}
+				log.Debug("bootstrap refresh completed", "urls", len(urls))
 			case <-ctx.Done():
 				return
 			}
 		}
 	}()
-
-	// Create safe HTTP client with SSRF protection.
-	safeClient := checker.NewSafeClient(checker.ClientConfig{})
-
-	// Create allowlist for RDAP servers (populated from bootstrap).
-	allowlist := checker.NewAllowList(nil)
 
 	// Create per-registry rate limiter.
 	registryRateLimit := checker.NewRateLimiter()
