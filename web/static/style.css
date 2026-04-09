@@ -182,6 +182,25 @@ main {
     text-align: center;
 }
 
+/* Multi-TLD results */
+.multi-tld-results {
+    display: grid;
+    gap: 1rem;
+}
+
+.multi-tld-results .result-card {
+    padding: 1rem;
+}
+
+.multi-tld-results .result-card h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.multi-tld-results .result-card .status {
+    font-size: 1rem;
+}
+
 .result-card.available {
     border-color: var(--color-available);
     background: var(--color-available-bg);
@@ -435,5 +454,15 @@ a:hover {
 
     main {
         padding: 2rem 1rem;
+    }
+
+    .multi-tld-results {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 900px) {
+    .multi-tld-results {
+        grid-template-columns: repeat(3, 1fr);
     }
 }
