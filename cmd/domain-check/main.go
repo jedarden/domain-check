@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
 	"os"
 	"time"
 
@@ -384,7 +382,7 @@ func runServer(args []string) {
 // setupDomainChecker creates and initializes a fully configured domain checker.
 func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logger) (*checker.Checker, error) {
 	// Create bootstrap manager for IANA RDAP bootstrap.
-	bootstrap, err := checker.NewBootstrapManager(ctx, checker.DefaultBootstrapURL)
+	bootstrap, err := checker.NewBootstrapManager(ctx, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bootstrap manager: %w", err)
 	}
@@ -406,9 +404,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	}()
 
 	// Create safe HTTP client with SSRF protection.
-	safeClient := checker.NewSafeClient(checker.ClientConfig{
-		Timeout: 30 * time.Second,
-	})
+	safeClient := checker.NewSafeClient(checker.ClientConfig{})
 
 	// Create allowlist for RDAP servers (populated from bootstrap).
 	allowlist := checker.NewAllowList(nil)
@@ -435,7 +431,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 
 	// Create result cache with configured TTLs.
 	cache := checker.NewResultCache(checker.CacheTTLs{
-		Available:  cfg.CacheTTLLAvailable,
+		Available:  cfg.CacheTTLAvailable,
 		Registered: cfg.CacheTTLRegistered,
 		Error:      30 * time.Second,
 	}, cfg.CacheSize)
