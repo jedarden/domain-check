@@ -126,6 +126,24 @@ func (b *BootstrapManager) ServerCount() int {
 	return len(b.servers)
 }
 
+// URLs returns all RDAP server base URLs currently mapped.
+// The returned slice is a copy and is safe for the caller to modify.
+func (b *BootstrapManager) URLs() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	// Use a map to deduplicate URLs (multiple TLDs may share the same server).
+	seen := make(map[string]bool, len(b.servers))
+	urls := make([]string, 0, len(b.servers))
+	for _, url := range b.servers {
+		if !seen[url] {
+			seen[url] = true
+			urls = append(urls, url)
+		}
+	}
+	return urls
+}
+
 // Stop terminates the background refresh goroutine.
 func (b *BootstrapManager) Stop() {
 	close(b.stopCh)
