@@ -171,7 +171,6 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 	// Start periodic cleanup (same as production, every 10 minutes).
 	cleanupDone := make(chan struct{})
 	go func() {
-		defer close(cleanupDone)
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
 		for {
@@ -203,7 +202,6 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 	)
 
 	srv := httptest.NewServer(handler)
-	defer srv.Close()
 
 	// Take baseline snapshot.
 	baseline := takeSnapshot(t, rateLimiter, cache)
@@ -234,20 +232,27 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 	defer snapshotTicker.Stop()
 
 	// Run snapshot collector.
+	snapshotDone := make(chan struct{})
 	go func() {
-		for range snapshotTicker.C {
-			snap := takeSnapshot(t, rateLimiter, cache)
-			snapshots = append(snapshots, snap)
-			heapGrowth := int64(snap.HeapAlloc) - int64(baseline.HeapAlloc)
-			deltaMB := float64(heapGrowth) / (1024 * 1024)
-			if deltaMB < 0 {
-				deltaMB = 0
+		defer close(snapshotDone)
+		for {
+			select {
+			case <-snapshotTicker.C:
+				snap := takeSnapshot(t, rateLimiter, cache)
+				snapshots = append(snapshots, snap)
+				heapGrowth := int64(snap.HeapAlloc) - int64(baseline.HeapAlloc)
+				deltaMB := float64(heapGrowth) / (1024 * 1024)
+				if deltaMB < 0 {
+					deltaMB = 0
+				}
+				t.Logf("SNAPSHOT [%s] HeapAlloc: %.2f MB (Δ %.2f MB), HeapInuse: %.2f MB, Goroutines: %d, IP limiters: %d, Cache: %d, GC: %d",
+					time.Since(baseline.Timestamp).Round(time.Second),
+					bytesMB(snap.HeapAlloc), deltaMB,
+					bytesMB(snap.HeapInuse), snap.Goroutines,
+					snap.IPLimiterCount, snap.CacheEntries, snap.NumGC)
+			case <-ctx.Done():
+				return
 			}
-			t.Logf("SNAPSHOT [%s] HeapAlloc: %.2f MB (Δ %.2f MB), HeapInuse: %.2f MB, Goroutines: %d, IP limiters: %d, Cache: %d, GC: %d",
-				time.Since(baseline.Timestamp).Round(time.Second),
-				bytesMB(snap.HeapAlloc), deltaMB,
-				bytesMB(snap.HeapInuse), snap.Goroutines,
-				snap.IPLimiterCount, snap.CacheEntries, snap.NumGC)
 		}
 	}()
 
@@ -263,7 +268,9 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 			client := &http.Client{
 				Timeout: 5 * time.Second,
 				Transport: &http.Transport{
-					MaxIdleConnsPerHost: 10,
+					DisableKeepAlives:   true,
+					MaxIdleConns:        0,
+					MaxIdleConnsPerHost: 0,
 				},
 			}
 			for {
@@ -300,6 +307,11 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 
 	// Wait for test duration.
 	<-ctx.Done()
+
+	// Close the test server first to cause HTTP requests to fail and goroutines to exit.
+	srv.Close()
+
+	// Stop tickers and cleanup goroutine.
 	ticker.Stop()
 	snapshotTicker.Stop()
 	close(cleanupDone)
