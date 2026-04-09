@@ -9,6 +9,8 @@ Comprehensive performance benchmarking results and analysis for the Domain Check
 
 ## Quick Summary
 
+> **📊 Full Summary:** See [SUMMARY.md](./SUMMARY.md) for the comprehensive benchmark results analysis.
+
 | Metric | Target | Actual | Status |
 |--------|--------|--------|--------|
 | Cached Response P99 | < 10ms | **5.4ms** | ✓ PASS (46% under) |
@@ -23,6 +25,7 @@ Comprehensive performance benchmarking results and analysis for the Domain Check
 ## Documentation
 
 ### Getting Started
+- **[SUMMARY.md](./SUMMARY.md)** — Comprehensive benchmark results summary with all test data, graphs, and conclusions
 - **[README.md](./README.md)** — Overview, quick reference, and how to run benchmarks
 
 ### Comprehensive Reports
