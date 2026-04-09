@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/coding/domain-check/internal/checker"
 	"github.com/coding/domain-check/internal/cli"
 	"github.com/coding/domain-check/internal/config"
 	"github.com/coding/domain-check/internal/server"
@@ -345,7 +349,7 @@ func runServer(args []string) {
 	// Initialize logger.
 	log := server.DefaultLogger(cfg.LogFormat, cfg.LogLevel)
 
-	// Create rate limiter.
+	// Create rate limiter for server (per-IP rate limiting).
 	rateLimiter := server.NewRateLimiter(log)
 
 	// Start periodic cleanup of stale IP entries (every 10 minutes).
@@ -357,15 +361,95 @@ func runServer(args []string) {
 		}
 	}()
 
+	// Initialize the domain checker with all its dependencies.
+	ctx := context.Background()
+	domainChecker, err := setupDomainChecker(ctx, cfg, log)
+	if err != nil {
+		log.Error("failed to initialize domain checker", "error", err)
+		os.Exit(1)
+	}
+
 	// Create router with all routes and middleware.
-	// Note: DomainChecker will be passed when full implementation is ready.
-	handler := server.Router(cfg, log, rateLimiter, nil)
+	handler := server.Router(cfg, log, rateLimiter, domainChecker)
 
 	// Create and run the HTTP server.
 	srv := server.New(cfg, handler, log)
 
-	if err := srv.Run(context.Background()); err != nil {
+	if err := srv.Run(ctx); err != nil {
 		log.Error("server error", "error", err)
 		os.Exit(1)
 	}
+}
+
+// setupDomainChecker creates and initializes a fully configured domain checker.
+func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logger) (*checker.Checker, error) {
+	// Create bootstrap manager for IANA RDAP bootstrap.
+	bootstrap, err := checker.NewBootstrapManager(ctx, checker.DefaultBootstrapURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bootstrap manager: %w", err)
+	}
+
+	// Start background bootstrap refresh.
+	go func() {
+		ticker := time.NewTicker(cfg.BootstrapRefresh)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := bootstrap.Refresh(ctx); err != nil {
+					log.Warn("bootstrap refresh failed", "error", err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// Create safe HTTP client with SSRF protection.
+	safeClient := checker.NewSafeClient(checker.ClientConfig{
+		Timeout: 30 * time.Second,
+	})
+
+	// Create allowlist for RDAP servers (populated from bootstrap).
+	allowlist := checker.NewAllowList(nil)
+
+	// Create per-registry rate limiter.
+	registryRateLimit := checker.NewRateLimiter()
+
+	// Create RDAP client.
+	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
+		HTTPClient: safeClient,
+		Bootstrap:  bootstrap,
+		RateLimit:  registryRateLimit,
+		AllowList:  allowlist,
+		UserAgent:  "domain-check/1.0",
+	})
+
+	// Create WHOIS client for ccTLD fallback.
+	whoisClient := checker.NewWHOISClient(checker.WHOISClientConfig{
+		UserAgent: "domain-check/1.0",
+	})
+
+	// Create DNS pre-filter (optional optimization).
+	dnsPreFilter := checker.NewDNSPreFilter()
+
+	// Create result cache with configured TTLs.
+	cache := checker.NewResultCache(checker.CacheTTLs{
+		Available:  cfg.CacheTTLLAvailable,
+		Registered: cfg.CacheTTLRegistered,
+		Error:      30 * time.Second,
+	}, cfg.CacheSize)
+
+	// Create the main checker with all components.
+	domainChecker := checker.NewChecker(checker.CheckerConfig{
+		RDAPClient:      rdapClient,
+		WHOISClient:     whoisClient,
+		DNSPreFilter:    dnsPreFilter,
+		Cache:           cache,
+		Bootstrap:       bootstrap,
+		UseDNSPrefilter: false, // Disabled by default - can be enabled via config
+		BulkConfig:      checker.DefaultBulkCheckConfig(),
+	})
+
+	return domainChecker, nil
 }

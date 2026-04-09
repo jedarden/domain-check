@@ -12,6 +12,36 @@ strands:
       - deferred
       - human
       - blocked
+  explore:
+    enabled: true
+    workspaces:
+      - /home/coding/AgentScribe
+      - /home/coding/ai-code-battle
+      - /home/coding/spaxel
+      - /home/coding/mta-my-way
+  weave:
+    enabled: true
+    max_beads_per_run: 3
+    cooldown_hours: 24
+    doc_patterns:
+      - "README*"
+      - "docs/**/*"
+  unravel:
+    enabled: true
+    max_beads_per_run: 3
+    cooldown_hours: 168
+  pulse:
+    enabled: true
+    cooldown_hours: 48
+    severity_threshold: 3
+    scanners:
+      - name: vet
+        command: "go vet ./... 2>&1"
+      - name: test
+        command: "go test ./... 2>&1"
+
+verification:
+  - /home/coding/.needle/hooks/verify-changes.sh
 
 prompt:
   context_files:
@@ -37,3 +67,34 @@ prompt:
     - Write table-driven tests alongside implementation
     - Run `go build ./...` and `go test ./...` before closing a bead
     - Follow existing code patterns if any code already exists
+  templates:
+    pluck: |
+      ## Workflow
+
+      You are a coding agent. Complete the task below, then close the bead.
+
+      Steps:
+      1. Read the task description and context below
+      2. Implement the required changes in {workspace_path}
+      3. Commit your work: `git commit -am "brief description of what was done"`
+      4. Push: `git push`
+      5. Close the bead: `br close {bead_id} --body "brief summary of what was implemented"`
+
+      If you cannot complete the task — do NOT close the bead. It will be retried automatically.
+
+      ---
+
+      ## Task: {bead_title}
+
+      {bead_body}
+
+      ## Rules
+
+      {workspace_instructions}
+
+      ## Context
+
+      {context_file_contents}
+
+      Bead ID: {bead_id}
+

@@ -349,6 +349,12 @@ func (c *Checker) checkWithContext(ctx context.Context, normalizedDomain, regist
 		return nil, err
 	}
 
+	// Check if context was canceled during the check.
+	// This can happen if the context timeout is shorter than the HTTP timeout.
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Set duration if not already set.
 	if result != nil && result.DurationMs == 0 {
 		result.DurationMs = time.Since(start).Milliseconds()

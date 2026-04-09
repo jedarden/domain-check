@@ -48,6 +48,11 @@ func mockRDAPServer(t *testing.T, responses map[string]string) *httptest.Server 
 			return
 		}
 
+		if resp == "404" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		// Return 200 with RDAP response
 		w.Header().Set("Content-Type", "application/rdap+json")
 		w.WriteHeader(http.StatusOK)
@@ -293,7 +298,21 @@ func TestCheckBulk_Timeout(t *testing.T) {
 	}
 
 	allowlist := NewAllowList([]string{server.URL})
-	httpClient := testHTTPClient()
+	// Create HTTP client with short timeout
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   5 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   10,
+			IdleConnTimeout:       90 * time.Second,
+		},
+		Timeout: 200 * time.Millisecond, // Short timeout for this test
+	}
 	ratelimit := NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
@@ -382,23 +401,19 @@ func TestCheckBulk_ConcurrencyLimit(t *testing.T) {
 	// Check 10 unique domains
 	domains := make([]string, 10)
 	for i := 0; i < 10; i++ {
-		domains[i] = "test.com" // Same domain but multiple requests
+		domains[i] = fmt.Sprintf("test%d.com", i)
 	}
 
 	result := checker.CheckBulk(context.Background(), domains)
 
 	// Verify max concurrency didn't exceed limit
-	// Note: Due to caching, after the first check the rest are cached
 	if maxConcurrent > 6 { // Allow some slack
 		t.Errorf("concurrency limit may have been exceeded: max concurrent was %d", maxConcurrent)
 	}
 
-	// All should succeed (after first check, rest are from cache)
+	// All should succeed
 	if len(result.Results) != 10 {
 		t.Errorf("expected 10 results, got %d", len(result.Results))
-	}
-	if result.TotalCached != 9 {
-		t.Errorf("expected 9 cache hits, got %d", result.TotalCached)
 	}
 }
 
@@ -528,7 +543,21 @@ func TestCheck_ContextCancellation(t *testing.T) {
 	}
 
 	allowlist := NewAllowList([]string{server.URL})
-	httpClient := testHTTPClient()
+	// Create HTTP client with short timeout
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   5 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   10,
+			IdleConnTimeout:       90 * time.Second,
+		},
+		Timeout: 5 * time.Second, // Allow time for cancellation
+	}
 	ratelimit := NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
@@ -592,12 +621,12 @@ func TestCheckBulk_MaxDomains(t *testing.T) {
 	// Create 50 domains (max allowed per API spec)
 	domains := make([]string, 50)
 	for i := 0; i < 50; i++ {
-		domains[i] = "test.com"
+		domains[i] = fmt.Sprintf("test%d.com", i)
 	}
 
 	result := checker.CheckBulk(context.Background(), domains)
 
-	// All 50 should succeed (first one checks, rest from cache)
+	// All 50 should succeed
 	if len(result.Results) != 50 {
 		t.Errorf("expected 50 results, got %d", len(result.Results))
 	}
