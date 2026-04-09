@@ -5,8 +5,9 @@ metadata:
   namespace: domain-check
   labels:
     app.kubernetes.io/name: domain-check
-    app.kubernetes.io/component: monitoring
-    release: prometheus
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: ardenone
+    release: kube-prometheus-stack
 spec:
   selector:
     matchLabels:
@@ -16,3 +17,7 @@ spec:
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
+      honorLabels: false
+  namespaceSelector:
+    matchNames:
+      - domain-check
