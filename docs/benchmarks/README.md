@@ -15,6 +15,7 @@ This directory contains performance baselines, load test results, and Go microbe
 
 ## Quick Reference
 
+- **[SUMMARY.md](./SUMMARY.md)** — Comprehensive benchmark results summary with all test data, graphs, and conclusions
 - **[Latest Report](./report-2026-04-09.md)** — Most recent comprehensive test results
 - **[Baseline Summary](./baseline-summary.md)** — Performance baseline established on 2026-04-06
 - **[Go Benchmarks](./go-benchmarks.md)** — Microbenchmark results for core operations
