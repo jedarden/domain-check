@@ -602,3 +602,113 @@ func TestIPLimiter_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 }
+
+// TestRateLimiter_HighRateTriggers429 verifies that sending 200 req/s
+// triggers 429 status codes as expected. This test validates that the
+// rate limiter correctly handles high request rates and returns 429s.
+func TestRateLimiter_HighRateTriggers429(t *testing.T) {
+	log := DefaultLogger("text", "error")
+	rl := NewRateLimiter(log)
+	handler := rl.APIRateLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	}))
+
+	testIP := "10.0.0.100"
+
+	t.Run("200_req/s_from_single_IP_triggers_429", func(t *testing.T) {
+		var successCount, rateLimitedCount int
+		var mu sync.Mutex
+
+		// Create 200 goroutines to fire requests simultaneously
+		var wg sync.WaitGroup
+		numRequests := 200
+
+		for i := 0; i < numRequests; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				req := httptest.NewRequest("GET", "/api/v1/check", nil)
+				ctx := contextWithClientIP(req.Context(), testIP)
+				req = req.WithContext(ctx)
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, req)
+
+				mu.Lock()
+				if rec.Code == http.StatusOK {
+					successCount++
+				} else if rec.Code == http.StatusTooManyRequests {
+					rateLimitedCount++
+				}
+				mu.Unlock()
+			}()
+		}
+
+		wg.Wait()
+
+		t.Logf("Results from %d simultaneous requests: %d succeeded, %d rate limited (429)",
+			numRequests, successCount, rateLimitedCount)
+
+		// API limit is 60/min with burst of 60, so we expect approximately
+		// 60 successful requests and the rest (140) to be rate limited.
+		// The exact number may vary slightly due to goroutine scheduling.
+
+		if rateLimitedCount == 0 {
+			t.Errorf("Expected rate limited requests (429s) when sending %d req/s, got 0", numRequests)
+		}
+
+		// We should see at least 100 rate limited requests (50% of the burst)
+		if rateLimitedCount < 100 {
+			t.Errorf("Expected at least 100 rate limited requests (429s) when sending %d req/s, got %d",
+				numRequests, rateLimitedCount)
+		}
+
+		// Success count should be close to the burst limit (60)
+		if successCount > 70 {
+			t.Errorf("Expected approximately 60 successful requests (burst limit), got %d", successCount)
+		}
+
+		t.Logf("PASS: Rate limiter correctly returned 429s for high request rate")
+	})
+
+	t.Run("verify_429_response_format", func(t *testing.T) {
+		// Make enough requests to exhaust the burst
+		for i := 0; i < 60; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/check", nil)
+			ctx := contextWithClientIP(req.Context(), testIP)
+			req = req.WithContext(ctx)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+		}
+
+		// Next request should get 429
+		req := httptest.NewRequest("GET", "/api/v1/check", nil)
+		ctx := contextWithClientIP(req.Context(), testIP)
+		req = req.WithContext(ctx)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("Expected 429 status code, got %d", rec.Code)
+		}
+
+		// Verify response headers
+		retryAfter := rec.Header().Get("Retry-After")
+		if retryAfter == "" {
+			t.Error("Expected Retry-After header to be set")
+		}
+
+		contentType := rec.Header().Get("Content-Type")
+		if contentType != "application/json" {
+			t.Errorf("Expected Content-Type application/json, got %s", contentType)
+		}
+
+		// Verify response body
+		body := rec.Body.String()
+		if !contains(body, "rate limit exceeded") {
+			t.Errorf("Expected body to contain 'rate limit exceeded', got %s", body)
+		}
+
+		t.Logf("429 response format verified: headers and body are correct")
+	})
+}
