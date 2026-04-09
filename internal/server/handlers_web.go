@@ -249,11 +249,6 @@ func validateName(name string) error {
 	return nil
 }
 
-// isLDH reports whether c is a valid LDH character: a-z, 0-9, or hyphen.
-func isLDH(c rune) bool {
-	return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'
-}
-
 // getAltTLDResultsForName fetches alternative TLD results for a name, excluding the checked TLDs.
 func (h *WebHandlers) getAltTLDResultsForName(ctx context.Context, name string, checkedTLDs []string) []web.AltTLDResult {
 	bulkChecker, ok := h.checker.(BulkChecker)
