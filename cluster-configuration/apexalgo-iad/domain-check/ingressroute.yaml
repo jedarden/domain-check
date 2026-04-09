@@ -28,6 +28,8 @@ metadata:
     app.kubernetes.io/component: middleware
 spec:
   headers:
+    # Pass client IP for trust-proxy support in Go application
+    passClientIP: true
     # Enable trusted proxy headers from Traefik
     customRequestHeaders:
       X-Forwarded-Proto: "https"
