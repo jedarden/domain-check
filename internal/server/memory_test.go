@@ -363,7 +363,7 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 		var lastNSlope float64
 		if lastN > 1 {
 			for i := len(snapshots) - lastN + 1; i < len(snapshots); i++ {
-				delta := float64(snapshots[i].HeapAlloc-snapshots[i-1].HeapAlloc) / (1024 * 1024)
+				delta := float64(int64(snapshots[i].HeapAlloc)-int64(snapshots[i-1].HeapAlloc)) / (1024 * 1024)
 				lastNSlope += delta
 			}
 			lastNSlope /= float64(lastN - 1)
