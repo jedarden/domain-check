@@ -127,10 +127,23 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("X-Xss-Protection", "1; mode=block")
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+			"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; connect-src 'self'")
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// BodyLimit returns a middleware that limits the request body size for
+// write methods (POST, PUT, PATCH). Reads beyond the limit return an error.
+func BodyLimit(maxBytes int64) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // CORS adds CORS headers for cross-origin requests.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,7 +86,16 @@ func TestSecurityHeaders(t *testing.T) {
 	if csp == "" {
 		t.Fatal("expected Content-Security-Policy header")
 	}
-	requiredDirectives := []string{"default-src 'none'", "script-src 'self'", "frame-ancestors 'none'"}
+	requiredDirectives := []string{
+		"default-src 'none'",
+		"script-src 'self'",
+		"style-src 'self'",
+		"img-src 'self'",
+		"form-action 'self'",
+		"base-uri 'self'",
+		"frame-ancestors 'none'",
+		"connect-src 'self'",
+	}
 	for _, dir := range requiredDirectives {
 		if !contains(csp, dir) {
 			t.Errorf("CSP missing directive: %s", dir)
@@ -493,6 +503,150 @@ func TestServerShutdown(t *testing.T) {
 	if err := srv.Shutdown(ctx); err != nil {
 		t.Errorf("shutdown error: %v", err)
 	}
+}
+
+func TestCORS(t *testing.T) {
+	t.Run("wildcard origin allows any origin", func(t *testing.T) {
+		cfg := &config.Config{CorsOrigins: "*"}
+		handler := CORS(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/v1/check", nil)
+		req.Header.Set("Origin", "https://example.com")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
+			t.Errorf("expected origin echo, got %q", got)
+		}
+	})
+
+	t.Run("specific origin allows matching origin", func(t *testing.T) {
+		cfg := &config.Config{CorsOrigins: "https://app.example.com,https://other.example.com"}
+		handler := CORS(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/v1/check", nil)
+		req.Header.Set("Origin", "https://app.example.com")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
+			t.Errorf("expected matching origin, got %q", got)
+		}
+	})
+
+	t.Run("non-matching origin gets no CORS headers", func(t *testing.T) {
+		cfg := &config.Config{CorsOrigins: "https://app.example.com"}
+		handler := CORS(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/v1/check", nil)
+		req.Header.Set("Origin", "https://evil.example.com")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Errorf("expected no CORS header for non-matching origin, got %q", got)
+		}
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("preflight OPTIONS returns 204 with headers", func(t *testing.T) {
+		cfg := &config.Config{CorsOrigins: "*"}
+		handler := CORS(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("next handler should not be called for OPTIONS")
+		}))
+
+		req := httptest.NewRequest("OPTIONS", "/api/v1/check", nil)
+		req.Header.Set("Origin", "https://example.com")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("expected 204, got %d", rec.Code)
+		}
+		if got := rec.Header().Get("Access-Control-Allow-Methods"); got != "GET, POST, OPTIONS" {
+			t.Errorf("expected Allow-Methods header, got %q", got)
+		}
+		if got := rec.Header().Get("Access-Control-Allow-Headers"); got == "" {
+			t.Error("expected Allow-Headers header")
+		}
+		if got := rec.Header().Get("Access-Control-Max-Age"); got != "86400" {
+			t.Errorf("expected Max-Age 86400, got %q", got)
+		}
+	})
+
+	t.Run("no Origin header passes through", func(t *testing.T) {
+		cfg := &config.Config{CorsOrigins: "*"}
+		called := false
+		handler := CORS(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/v1/check", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if !called {
+			t.Error("expected next handler to be called")
+		}
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rec.Code)
+		}
+	})
+}
+
+func TestBodyLimit(t *testing.T) {
+	t.Run("POST body under limit succeeds", func(t *testing.T) {
+		handler := BodyLimit(1024)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(`{"domains":["a.com"]}`))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("GET requests are not limited", func(t *testing.T) {
+		handler := BodyLimit(1)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=example.com", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected 200 for GET, got %d", rec.Code)
+		}
+	})
+
+	t.Run("POST body over limit returns error", func(t *testing.T) {
+		handler := BodyLimit(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Try to read the body — MaxBytesReader should reject it
+			buf := make([]byte, 100)
+			_, err := r.Body.Read(buf)
+			if err == nil {
+				t.Error("expected error reading oversized body")
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader("this is way more than 10 bytes"))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+	})
 }
 
 func contains(s, substr string) bool {

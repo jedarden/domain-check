@@ -33,6 +33,7 @@ func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch D
 		ClientIP(cfg.TrustProxy),
 		Logging(log),
 		SecurityHeaders,
+		BodyLimit(64 * 1024), // 64 KB max body for POST endpoints
 		CORS(cfg),
 	)
 
