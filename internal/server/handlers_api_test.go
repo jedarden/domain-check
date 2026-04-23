@@ -56,7 +56,7 @@ func (m *mockBulkChecker) CheckBulk(ctx context.Context, domains []string) *chec
 func TestCheckHandler_MissingParameter(t *testing.T) {
 	// Create mock checker
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	// Create request without domain parameter
 	req := httptest.NewRequest("GET", "/api/v1/check", nil)
@@ -80,7 +80,7 @@ func TestCheckHandler_MissingParameter(t *testing.T) {
 
 func TestCheckHandler_InvalidDomain(t *testing.T) {
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	tests := []struct {
 		name        string
@@ -121,7 +121,7 @@ func TestCheckHandler_UnsupportedTLD(t *testing.T) {
 	mockCh := &mockChecker{
 		err: checker.ErrTLDNotFound,
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example.xyz", nil)
 	rec := httptest.NewRecorder()
@@ -160,7 +160,7 @@ func TestCheckHandler_Success(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example.com", nil)
 	rec := httptest.NewRecorder()
@@ -200,7 +200,7 @@ func TestCheckHandler_AvailableDomain(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=available123.com", nil)
 	rec := httptest.NewRecorder()
@@ -238,7 +238,7 @@ func TestCheckHandler_IDNDomain(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	// Unicode input should be normalized to ASCII punycode
 	req := httptest.NewRequest("GET", "/api/v1/check?d=m%C3%BCnchen.de", nil)
@@ -275,7 +275,7 @@ func TestCheckHandler_CachedResponse(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=cached.com", nil)
 	rec := httptest.NewRecorder()
@@ -347,7 +347,7 @@ func TestCheckHandler_FullRegistration(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=google.com", nil)
 	rec := httptest.NewRecorder()
@@ -385,7 +385,7 @@ func TestCheckHandler_ContentType(t *testing.T) {
 	mockCh := &mockChecker{
 		result: &domain.DomainResult{Domain: "test.com", Available: true, TLD: "com"},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=test.com", nil)
 	rec := httptest.NewRecorder()
@@ -401,7 +401,7 @@ func TestCheckHandler_ContentType(t *testing.T) {
 func TestCheckHandler_MethodNotAllowed(t *testing.T) {
 	// Test that POST requests are rejected
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/check?d=test.com", nil)
 	rec := httptest.NewRecorder()
@@ -447,7 +447,7 @@ func TestCheckHandler_MultiTLDViaCheckEndpoint(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example&tlds=com,org,dev", nil)
 	rec := httptest.NewRecorder()
@@ -495,7 +495,7 @@ func TestCheckHandler_MultiTLDPartialSuccess(t *testing.T) {
 			"example.io":  "unsupported tld",
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example&tlds=com,net,io", nil)
 	rec := httptest.NewRecorder()
@@ -524,7 +524,7 @@ func TestCheckHandler_MultiTLDPartialSuccess(t *testing.T) {
 
 func TestCheckHandler_MultiTLDWithEmptyTLDs(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example&tlds=,,,", nil)
 	rec := httptest.NewRecorder()
@@ -547,7 +547,7 @@ func TestCheckHandler_MultiTLDWithEmptyTLDs(t *testing.T) {
 
 func TestCheckHandler_MultiTLDInvalidName(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=-bad&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -574,7 +574,7 @@ func TestCheckHandler_MultiTLDContentType(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -591,7 +591,7 @@ func TestCheckHandler_MultiTLDContentType(t *testing.T) {
 
 func TestMultiTLDHandler_MissingNameParameter(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?tlds=com,net", nil)
 	rec := httptest.NewRecorder()
@@ -614,7 +614,7 @@ func TestMultiTLDHandler_MissingNameParameter(t *testing.T) {
 
 func TestMultiTLDHandler_MissingTLDsParameter(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example", nil)
 	rec := httptest.NewRecorder()
@@ -637,7 +637,7 @@ func TestMultiTLDHandler_MissingTLDsParameter(t *testing.T) {
 
 func TestMultiTLDHandler_EmptyTLDsList(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=,,,", nil)
 	rec := httptest.NewRecorder()
@@ -660,7 +660,7 @@ func TestMultiTLDHandler_EmptyTLDsList(t *testing.T) {
 
 func TestMultiTLDHandler_InvalidDomainName(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	tests := []struct {
 		name        string
@@ -700,7 +700,7 @@ func TestMultiTLDHandler_InvalidDomainName(t *testing.T) {
 
 func TestMultiTLDHandler_TooLongDomainName(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	// Create a domain name that's exactly 64 characters (exceeds 63 char limit)
 	longDomain := ""
@@ -750,7 +750,7 @@ func TestMultiTLDHandler_Success(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com,net,org", nil)
 	rec := httptest.NewRecorder()
@@ -804,7 +804,7 @@ func TestMultiTLDHandler_PartialSuccess(t *testing.T) {
 			"example.dev":  "rate limit exceeded",
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com,net,org,dev", nil)
 	rec := httptest.NewRecorder()
@@ -855,7 +855,7 @@ func TestMultiTLDHandler_TLDNormalization(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	// Test TLDs with dots and mixed case
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=Example&tlds=.COM,Net", nil)
@@ -894,7 +894,7 @@ func TestMultiTLDHandler_TLDNormalization(t *testing.T) {
 
 func TestMultiTLDHandler_MethodNotAllowed(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/check/multi?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -921,7 +921,7 @@ func TestMultiTLDHandler_ContentType(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -940,7 +940,7 @@ func TestMultiTLDHandler_Duration(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -971,7 +971,7 @@ func TestMultiTLDHandler_FallbackToSequential(t *testing.T) {
 			Source:    domain.SourceRDAP,
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -1057,7 +1057,7 @@ func TestValidateDomainName(t *testing.T) {
 
 func TestBulkHandler_EmptyArray(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	body := `{"domains": []}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1082,7 +1082,7 @@ func TestBulkHandler_EmptyArray(t *testing.T) {
 
 func TestBulkHandler_TooManyDomains(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	// Create 51 domains (exceeds limit of 50)
 	domains := make([]string, 51)
@@ -1113,7 +1113,7 @@ func TestBulkHandler_TooManyDomains(t *testing.T) {
 
 func TestBulkHandler_InvalidJSON(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader("not json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -1137,7 +1137,7 @@ func TestBulkHandler_InvalidJSON(t *testing.T) {
 
 func TestBulkHandler_BodyTooLarge(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	// Create a body larger than 64 KB with 50 domains (max allowed count)
 	// Each domain needs to be >1304 chars to exceed 64KB with 50 domains + JSON overhead
@@ -1185,7 +1185,7 @@ func TestBulkHandler_Success(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	body := `{"domains": ["example.com", "example.org"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1232,7 +1232,7 @@ func TestBulkHandler_PartialSuccess(t *testing.T) {
 			"example.org": "rate limit exceeded",
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	body := `{"domains": ["example.com", "example.net", "example.org"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1272,7 +1272,7 @@ func TestBulkHandler_InvalidDomain(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	// Include an invalid domain in the request
 	body := `{"domains": ["example.com", "invalid!", "example.org"]}`
@@ -1310,7 +1310,7 @@ func TestBulkHandler_MaxDomains(t *testing.T) {
 			Source:    domain.SourceRDAP,
 		}
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	// Create exactly 50 domains
 	domains := make([]string, 50)
@@ -1344,7 +1344,7 @@ func TestBulkHandler_MaxDomains(t *testing.T) {
 
 func TestBulkHandler_MethodNotAllowed(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/bulk", nil)
 	rec := httptest.NewRecorder()
@@ -1371,7 +1371,7 @@ func TestBulkHandler_ContentType(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	body := `{"domains": ["example.com"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1392,7 +1392,7 @@ func TestBulkHandler_Duration(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	body := `{"domains": ["example.com"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1421,7 +1421,7 @@ func TestBulkHandler_FallbackToSequential(t *testing.T) {
 			Source:    domain.SourceRDAP,
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil)
 
 	body := `{"domains": ["example.com"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -2325,6 +2325,284 @@ func TestIntegration_HealthCheck(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("health request %d: expected 200, got %d", i, rec.Code)
 			}
+		}
+	})
+}
+
+// Mock BootstrapProvider for testing
+type mockBootstrap struct {
+	tlds    []string
+	updated time.Time
+}
+
+func (m *mockBootstrap) ServerCount() int {
+	return len(m.tlds)
+}
+
+func (m *mockBootstrap) Updated() time.Time {
+	if m.updated.IsZero() {
+		return time.Now()
+	}
+	return m.updated
+}
+
+func (m *mockBootstrap) TLDs() []string {
+	return m.tlds
+}
+
+// TLDs Endpoint Tests
+
+func TestTLDsHandler_Success(t *testing.T) {
+	tlds := []string{"com", "org", "net", "dev", "io", "app", "xyz"}
+	mockBS := &mockBootstrap{
+		tlds:    tlds,
+		updated: time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC),
+	}
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+
+	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.TLDsHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var resp TLDsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Count != len(tlds) {
+		t.Errorf("expected count %d, got %d", len(tlds), resp.Count)
+	}
+
+	if len(resp.TLDs) != len(tlds) {
+		t.Errorf("expected %d TLDs, got %d", len(tlds), len(resp.TLDs))
+	}
+
+	if resp.BootstrapUpdated != "2026-04-20T12:00:00Z" {
+		t.Errorf("expected bootstrap_updated 2026-04-20T12:00:00Z, got %s", resp.BootstrapUpdated)
+	}
+
+	// Verify TLDs are sorted
+	for i := 1; i < len(resp.TLDs); i++ {
+		if resp.TLDs[i-1] > resp.TLDs[i] {
+			t.Errorf("TLDs not sorted: %s comes before %s", resp.TLDs[i-1], resp.TLDs[i])
+		}
+	}
+}
+
+func TestTLDsHandler_EmptyTLDs(t *testing.T) {
+	mockBS := &mockBootstrap{
+		tlds:    []string{},
+		updated: time.Now(),
+	}
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+
+	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.TLDsHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var resp TLDsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Count != 0 {
+		t.Errorf("expected count 0, got %d", resp.Count)
+	}
+
+	if len(resp.TLDs) != 0 {
+		t.Errorf("expected 0 TLDs, got %d", len(resp.TLDs))
+	}
+}
+
+func TestTLDsHandler_UnsortedInput(t *testing.T) {
+	mockBS := &mockBootstrap{
+		tlds:    []string{"xyz", "com", "net", "aaa", "org"},
+		updated: time.Now(),
+	}
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+
+	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.TLDsHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var resp TLDsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Verify TLDs are sorted alphabetically
+	expected := []string{"aaa", "com", "net", "org", "xyz"}
+	for i, tld := range resp.TLDs {
+		if tld != expected[i] {
+			t.Errorf("at index %d: expected %s, got %s", i, expected[i], tld)
+		}
+	}
+}
+
+func TestTLDsHandler_NilBootstrap(t *testing.T) {
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil, nil)
+
+	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.TLDsHandler(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected status %d, got %d", http.StatusServiceUnavailable, rec.Code)
+	}
+
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "bootstrap_unavailable" {
+		t.Errorf("expected error %q, got %q", "bootstrap_unavailable", resp.Error)
+	}
+}
+
+func TestTLDsHandler_MethodNotAllowed(t *testing.T) {
+	mockBS := &mockBootstrap{
+		tlds:    []string{"com", "org"},
+		updated: time.Now(),
+	}
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+
+	req := httptest.NewRequest("POST", "/api/v1/tlds", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.TLDsHandler(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, rec.Code)
+	}
+
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "method_not_allowed" {
+		t.Errorf("expected error %q, got %q", "method_not_allowed", resp.Error)
+	}
+}
+
+func TestTLDsHandler_ContentType(t *testing.T) {
+	mockBS := &mockBootstrap{
+		tlds:    []string{"com", "org"},
+		updated: time.Now(),
+	}
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+
+	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.TLDsHandler(rec, req)
+
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("expected Content-Type %q, got %q", "application/json", ct)
+	}
+}
+
+func TestTLDsHandler_LargeList(t *testing.T) {
+	// Create a large list of TLDs
+	tlds := make([]string, 500)
+	for i := 0; i < 500; i++ {
+		tlds[i] = fmt.Sprintf("tld%d", i)
+	}
+
+	mockBS := &mockBootstrap{
+		tlds:    tlds,
+		updated: time.Now(),
+	}
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+
+	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.TLDsHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var resp TLDsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Count != 500 {
+		t.Errorf("expected count 500, got %d", resp.Count)
+	}
+
+	if len(resp.TLDs) != 500 {
+		t.Errorf("expected 500 TLDs, got %d", len(resp.TLDs))
+	}
+}
+
+func TestIntegration_TLDsEndpoint(t *testing.T) {
+	t.Run("tlds-endpoint-returns-sorted-list", func(t *testing.T) {
+		mockBS := &mockBootstrap{
+			tlds:    []string{"com", "org", "net", "dev", "io"},
+			updated: time.Now(),
+		}
+		mockCh := &mockChecker{}
+		cfg := config.Defaults()
+		log := DefaultLogger("text", "error")
+		rl := NewRateLimiter(log)
+
+		// Create a custom router with our mock bootstrap
+		mux := http.NewServeMux()
+		apiHandlers := NewAPIHandlers(mockCh, log, mockBS)
+		mux.HandleFunc("GET /api/v1/tlds", apiHandlers.TLDsHandler)
+		handler := Chain(mux, RequestID, ClientIP(false), Logging(log), SecurityHeaders, CORS(&cfg))
+
+		req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp TLDsResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Count != 5 {
+			t.Errorf("expected count 5, got %d", resp.Count)
+		}
+
+		// Verify security headers
+		if got := rec.Header().Get("Content-Security-Policy"); got == "" {
+			t.Error("expected CSP header")
+		}
+		if got := rec.Header().Get("X-Request-Id"); got == "" {
+			t.Error("expected X-Request-Id header")
 		}
 	})
 }

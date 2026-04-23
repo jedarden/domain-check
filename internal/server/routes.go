@@ -20,11 +20,11 @@ import (
 // 5. Rate Limit - per-IP rate limiting
 // 6. CORS - cross-origin support for API
 // 7. Handler - the actual route handler
-func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker) http.Handler {
+func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker, bootstrap BootstrapProvider, monitor *ServiceMonitor, metrics *Metrics) http.Handler {
 	mux := http.NewServeMux()
 
 	// Register routes.
-	registerRoutes(mux, cfg, log, rateLimiter, ch)
+	registerRoutes(mux, cfg, log, rateLimiter, ch, bootstrap, monitor, metrics)
 
 	// Build middleware chain (applied in reverse order).
 	// Outer to inner: RequestID -> ClientIP -> Logging -> SecurityHeaders -> RateLimit -> CORS -> Handler
@@ -41,13 +41,13 @@ func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch D
 }
 
 // registerRoutes adds all routes to the mux.
-func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker) {
+func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker, bootstrap BootstrapProvider, monitor *ServiceMonitor, metrics *Metrics) {
 	// Create handlers
-	apiHandlers := NewAPIHandlers(ch, log)
+	apiHandlers := NewAPIHandlers(ch, log, bootstrap)
 	webHandlers := NewWebHandlers(ch, log)
 
 	// Health check - no rate limiting.
-	mux.HandleFunc("GET /health", healthHandler(log))
+	mux.HandleFunc("GET /health", healthHandler(log, bootstrap, monitor, metrics))
 
 	// Static assets - no rate limiting, cached by browsers.
 	mux.Handle("GET /static/", http.StripPrefix("/static/", StaticHandler()))
@@ -62,12 +62,12 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, ra
 	mux.Handle("GET /api/v1/check/multi", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.MultiTLDHandler)))
 	// Bulk check endpoint
 	mux.Handle("POST /api/v1/bulk", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.BulkHandler)))
-	// Placeholder handler for tlds (Phase 2+)
-	mux.Handle("GET /api/v1/tlds", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.CheckHandler)))
+	// TLD list endpoint
+	mux.Handle("GET /api/v1/tlds", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.TLDsHandler)))
 
 	// Metrics endpoint (if enabled).
-	if cfg.Metrics {
-		mux.HandleFunc("GET /metrics", metricsHandler(log))
+	if cfg.Metrics && metrics != nil {
+		mux.Handle("GET /metrics", metrics.Handler())
 	}
 
 	// Web UI routes with web rate limiting.
@@ -75,29 +75,64 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, ra
 	mux.Handle("GET /check", rateLimiter.WebRateLimit(http.HandlerFunc(webHandlers.CheckHandler())))
 }
 
-// healthHandler returns the server health status.
-func healthHandler(log *slog.Logger) http.HandlerFunc {
+const (
+	healthyThreshold   = 48 * time.Hour // Bootstrap age for "degraded" status
+	unhealthyThreshold = 7 * 24 * time.Hour // Bootstrap age for "unhealthy" status (7 days)
+)
+
+// healthHandler returns the server health status with bootstrap age and uptime.
+func healthHandler(log *slog.Logger, bootstrap BootstrapProvider, monitor *ServiceMonitor, metrics *Metrics) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		health := map[string]interface{}{
-			"status":    "ok",
-			"timestamp": r.Context().Value(RequestIDKey),
+		status := "ok"
+		statusCode := http.StatusOK
+
+		// Determine health status based on bootstrap age
+		if bootstrap != nil {
+			bootstrapAge := time.Since(bootstrap.Updated())
+
+			// Update metrics with bootstrap age
+			if metrics != nil {
+				metrics.SetBootstrapAge(bootstrapAge.Seconds())
+			}
+
+			if bootstrapAge > unhealthyThreshold {
+				status = "unhealthy"
+				statusCode = http.StatusServiceUnavailable
+			} else if bootstrapAge > healthyThreshold {
+				status = "degraded"
+			}
 		}
-		writeJSONResponse(w, http.StatusOK, health)
+
+		uptime := time.Duration(0)
+		checksServed := int64(0)
+		if monitor != nil {
+			uptime = monitor.Uptime()
+			checksServed = monitor.ChecksServed()
+		}
+
+		health := map[string]interface{}{
+			"status":         status,
+			"bootstrap_age":  formatDuration(time.Since(bootstrap.Updated())),
+			"uptime":         formatDuration(uptime),
+			"checks_served":  checksServed,
+		}
+
+		writeJSONResponse(w, statusCode, health)
 	}
 }
 
-// metricsHandler returns Prometheus metrics.
-// Placeholder for Phase 2 - returns a simple response for now.
-func metricsHandler(log *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		// Placeholder metrics output.
-		// Will be replaced with actual Prometheus metrics in Phase 2.
-		w.Write([]byte(`# HELP domcheck_up Server health status
-# TYPE domcheck_up gauge
-domcheck_up 1
-`))
+// formatDuration formats a duration in a human-readable way.
+func formatDuration(d time.Duration) string {
+	if d < time.Second {
+		return "0s"
 	}
+	if d < time.Minute {
+		return d.Round(time.Second).String()
+	}
+	if d < time.Hour {
+		return d.Round(time.Minute).String()
+	}
+	return d.Round(time.Hour).String()
 }
 
 // robotsTxtHandler serves the embedded robots.txt.
