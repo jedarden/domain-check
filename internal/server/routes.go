@@ -85,10 +85,11 @@ func healthHandler(log *slog.Logger, bootstrap BootstrapProvider, monitor *Servi
 	return func(w http.ResponseWriter, r *http.Request) {
 		status := "ok"
 		statusCode := http.StatusOK
+		bootstrapAge := time.Duration(0)
 
 		// Determine health status based on bootstrap age
 		if bootstrap != nil {
-			bootstrapAge := time.Since(bootstrap.Updated())
+			bootstrapAge = time.Since(bootstrap.Updated())
 
 			// Update metrics with bootstrap age
 			if metrics != nil {
@@ -112,7 +113,7 @@ func healthHandler(log *slog.Logger, bootstrap BootstrapProvider, monitor *Servi
 
 		health := map[string]interface{}{
 			"status":         status,
-			"bootstrap_age":  formatDuration(time.Since(bootstrap.Updated())),
+			"bootstrap_age":  formatDuration(bootstrapAge),
 			"uptime":         formatDuration(uptime),
 			"checks_served":  checksServed,
 		}
