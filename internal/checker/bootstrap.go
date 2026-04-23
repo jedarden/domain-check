@@ -144,6 +144,19 @@ func (b *BootstrapManager) URLs() []string {
 	return urls
 }
 
+// TLDs returns all TLDs currently mapped.
+// The returned slice is a copy and is safe for the caller to modify.
+func (b *BootstrapManager) TLDs() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	tlds := make([]string, 0, len(b.servers))
+	for tld := range b.servers {
+		tlds = append(tlds, tld)
+	}
+	return tlds
+}
+
 // Stop terminates the background refresh goroutine.
 func (b *BootstrapManager) Stop() {
 	close(b.stopCh)

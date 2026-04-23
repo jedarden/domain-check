@@ -361,14 +361,37 @@ func runServer(args []string) {
 
 	// Initialize the domain checker with all its dependencies.
 	ctx := context.Background()
-	domainChecker, err := setupDomainChecker(ctx, cfg, log)
+	domainChecker, bootstrap, err := setupDomainChecker(ctx, cfg, log)
 	if err != nil {
 		log.Error("failed to initialize domain checker", "error", err)
 		os.Exit(1)
 	}
 
+	// Create service monitor for uptime and check counting.
+	monitor := server.NewServiceMonitor()
+
+	// Initialize Prometheus metrics.
+	metrics := server.GetMetrics()
+
 	// Create router with all routes and middleware.
-	handler := server.Router(cfg, log, rateLimiter, domainChecker)
+	handler := server.Router(cfg, log, rateLimiter, domainChecker, bootstrap, monitor, metrics)
+
+	// Start periodic metrics update (bootstrap age every minute).
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if bootstrap != nil {
+					age := time.Since(bootstrap.Updated())
+					metrics.SetBootstrapAge(age.Seconds())
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	// Create and run the HTTP server.
 	srv := server.New(cfg, handler, log)
@@ -380,7 +403,8 @@ func runServer(args []string) {
 }
 
 // setupDomainChecker creates and initializes a fully configured domain checker.
-func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logger) (*checker.Checker, error) {
+// It returns the checker, bootstrap manager, and any error.
+func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logger) (*checker.Checker, *checker.BootstrapManager, error) {
 	// Create bootstrap manager for IANA RDAP bootstrap.
 	bootstrap, err := checker.NewBootstrapManager(ctx, "")
 	if err != nil {
@@ -459,5 +483,5 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 		BulkConfig:      checker.DefaultBulkCheckConfig(),
 	})
 
-	return domainChecker, nil
+	return domainChecker, bootstrap, nil
 }
