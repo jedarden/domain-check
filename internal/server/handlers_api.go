@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,17 +32,31 @@ type CombinedChecker interface {
 	BulkChecker
 }
 
+// BootstrapProvider is the interface for accessing bootstrap data.
+// It provides the TLD list and bootstrap update timestamp.
+type BootstrapProvider interface {
+	// ServerCount returns the number of TLDs currently mapped.
+	ServerCount() int
+	// Updated returns the time of the last successful bootstrap refresh.
+	Updated() time.Time
+	// TLDs returns all TLDs currently mapped.
+	TLDs() []string
+}
+
 // APIHandlers provides HTTP handlers for the API endpoints.
 type APIHandlers struct {
-	checker DomainChecker
-	log     *slog.Logger
+	checker   DomainChecker
+	log       *slog.Logger
+	bootstrap BootstrapProvider
 }
 
 // NewAPIHandlers creates a new APIHandlers instance.
-func NewAPIHandlers(ch DomainChecker, log *slog.Logger) *APIHandlers {
+// The bootstrap parameter is optional; pass nil if bootstrap data is not available.
+func NewAPIHandlers(ch DomainChecker, log *slog.Logger, bootstrap BootstrapProvider) *APIHandlers {
 	return &APIHandlers{
-		checker: ch,
-		log:     log,
+		checker:   ch,
+		log:       log,
+		bootstrap: bootstrap,
 	}
 }
 
@@ -481,5 +496,40 @@ func writeAPIError(w http.ResponseWriter, status int, errorCode, message string)
 		Message: message,
 	}
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// TLDsResponse represents the response for the TLD list endpoint.
+type TLDsResponse struct {
+	Count            int      `json:"count"`
+	TLDs             []string `json:"tlds"`
+	BootstrapUpdated string   `json:"bootstrap_updated"`
+}
+
+// TLDsHandler handles GET /api/v1/tlds
+// It returns the list of supported TLDs with count and bootstrap update timestamp.
+func (h *APIHandlers) TLDsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only GET method is supported")
+		return
+	}
+
+	if h.bootstrap == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "bootstrap_unavailable", "Bootstrap data is not available")
+		return
+	}
+
+	count := h.bootstrap.ServerCount()
+	updated := h.bootstrap.Updated()
+	tlds := h.bootstrap.TLDs()
+
+	sort.Strings(tlds)
+
+	response := TLDsResponse{
+		Count:            count,
+		TLDs:             tlds,
+		BootstrapUpdated: updated.UTC().Format(time.RFC3339),
+	}
+
+	writeJSONResponse(w, http.StatusOK, response)
 }
 
