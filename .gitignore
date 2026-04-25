@@ -46,3 +46,4 @@ Thumbs.db
 *.tmp
 *.bak
 *.log
+memory-test-results/
