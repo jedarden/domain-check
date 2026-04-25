@@ -1,5 +1,11 @@
 # Domain Check Performance Baseline
 
+**Latest:** [baseline-2026-04-25.md](./baseline-2026-04-25.md) — Comprehensive baseline with all targets validated
+
+**Historical:**
+
+## Baseline 2026-04-06 (Initial)
+
 **Date:** 2026-04-06
 **Commit:** 20f84a2
 **Environment:** Hetzner EX44, Linux 6.12.63+deb13-amd64
