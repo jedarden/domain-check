@@ -305,7 +305,7 @@ func TestCheckHandler_CheckFailed(t *testing.T) {
 		err: context.DeadlineExceeded,
 	}
 	log := DefaultLogger("text", "error")
-	handlers := NewAPIHandlers(mockCh, log)
+	handlers := NewAPIHandlers(mockCh, log, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=timeout.com", nil)
 	rec := httptest.NewRecorder()
@@ -1458,7 +1458,7 @@ func setupIntegrationRouter(ch DomainChecker) http.Handler {
 	cfg := config.Defaults()
 	log := DefaultLogger("text", "error")
 	rl := NewRateLimiter(log)
-	return Router(&cfg, log, rl, ch)
+	return Router(&cfg, log, rl, ch, nil, nil, nil)
 }
 
 // --- Scenarios 1-7: Single Check (GET /api/v1/check) ---
@@ -2572,7 +2572,6 @@ func TestIntegration_TLDsEndpoint(t *testing.T) {
 		mockCh := &mockChecker{}
 		cfg := config.Defaults()
 		log := DefaultLogger("text", "error")
-		rl := NewRateLimiter(log)
 
 		// Create a custom router with our mock bootstrap
 		mux := http.NewServeMux()

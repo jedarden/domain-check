@@ -440,7 +440,7 @@ func TestRouter(t *testing.T) {
 	cfg := config.Defaults()
 	log := DefaultLogger("text", "error")
 	rl := NewRateLimiter(log)
-	handler := Router(&cfg, log, rl, nil)
+	handler := Router(&cfg, log, rl, nil, nil, nil, nil)
 
 	t.Run("health endpoint returns 200", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/health", nil)

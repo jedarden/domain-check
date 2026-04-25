@@ -157,6 +157,13 @@ func (b *BootstrapManager) TLDs() []string {
 	return tlds
 }
 
+// InjectServers replaces the server map; intended for testing only.
+func (b *BootstrapManager) InjectServers(servers map[string]string) {
+	b.mu.Lock()
+	b.servers = servers
+	b.mu.Unlock()
+}
+
 // Stop terminates the background refresh goroutine.
 func (b *BootstrapManager) Stop() {
 	close(b.stopCh)

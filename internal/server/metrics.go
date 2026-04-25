@@ -149,7 +149,7 @@ func (m *Metrics) DecrementActiveChecks() {
 
 // RecordBulkCheck records a bulk check request size.
 func (m *Metrics) RecordBulkCheck(size int) {
-	m.bulkCheckSize.Observe(float64(size))
+	m.bulkCheckSize.WithLabelValues().Observe(float64(size))
 }
 
 // IncrementChecksServed increments the total checks served counter.

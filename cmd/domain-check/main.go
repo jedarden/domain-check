@@ -408,7 +408,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	// Create bootstrap manager for IANA RDAP bootstrap.
 	bootstrap, err := checker.NewBootstrapManager(ctx, "")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create bootstrap manager: %w", err)
+		return nil, nil, fmt.Errorf("failed to create bootstrap manager: %w", err)
 	}
 
 	// Create allowlist for RDAP servers (populated from bootstrap).
