@@ -139,10 +139,18 @@ func (mc *memoryTestChecker) CheckBulk(_ context.Context, domains []string) *che
 	return result
 }
 
-// TestMemoryGrowthUnderLoad runs 50 req/s for 2 minutes and verifies memory growth
-// plateaus. The 2-minute duration is used for CI; the full 10-minute test is run
-// via TestMemoryGrowthUnderLoadFull.
+// TestMemoryGrowthUnderLoad runs 50 req/s for 30 seconds and verifies memory growth
+// plateaus. For longer runs use TestMemoryGrowthUnderLoadExtended or Full variants.
 func TestMemoryGrowthUnderLoad(t *testing.T) {
+	runMemoryGrowthTest(t, 30*time.Second)
+}
+
+// TestMemoryGrowthUnderLoadExtended runs 50 req/s for 2 minutes.
+// Run with: go test -v -run TestMemoryGrowthUnderLoadExtended -timeout 5m ./internal/server/
+func TestMemoryGrowthUnderLoadExtended(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping 2-minute memory growth test in short mode")
+	}
 	runMemoryGrowthTest(t, 2*time.Minute)
 }
 
@@ -187,7 +195,7 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 
 	// Create a real server with full middleware chain.
 	mux := http.NewServeMux()
-	apiHandlers := NewAPIHandlers(mc, testLogger(t))
+	apiHandlers := NewAPIHandlers(mc, testLogger(t), nil)
 	mux.HandleFunc("GET /api/v1/check", apiHandlers.CheckHandler)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

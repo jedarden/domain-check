@@ -336,11 +336,9 @@ func TestBulk_WithMockRDAP(t *testing.T) {
 	defer bootstrap.Stop()
 
 	// Manually inject our mock server into the bootstrap.
-	bootstrap.mu.Lock()
-	bootstrap.servers = map[string]string{
+	bootstrap.InjectServers(map[string]string{
 		"com": server.URL,
-	}
-	bootstrap.mu.Unlock()
+	})
 
 	// Create checker with our bootstrap.
 	httpClient := &http.Client{Timeout: 5 * time.Second}
