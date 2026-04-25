@@ -1,0 +1,27 @@
+================================
+Domain Check Load Tests
+================================
+Server: localhost:8080
+Results: load-test-results/load-test-report-20260425-141721.md
+
+[0;34m[14:17:21][0m Checking server...
+[0;32mServer is ready![0m
+
+[0;34m[14:17:21][0m Test 1: Cached endpoint (1000 req, 50 concurrent, target: p99 < 10ms)
+[0;34m[14:17:21][0m Warming cache...
+[0;34m[14:17:23][0m Running vegeta attack (1000 requests, 50 concurrent)...
+
+Results:
+2026/04/25 14:17:44 gob: duplicate type received
+
+  Status: [0;32m✓ PASS[0m - 0.0ms < 10ms
+
+[0;34m[14:17:44][0m Test 2: vegeta 100/s for 60s (target: p99 < 50ms, error rate < 0.1%)
+[0;34m[14:17:44][0m Warming cache with varied IPs...
+[0;34m[14:17:46][0m Running vegeta attack (100 req/s for 60s with varied IPs)...
+  Progress: 10/60 batches completed...
+./scripts/load-tests.sh: line 171: 3267022 Done                    ( for i in {1..100};
+do
+    echo "GET http://$SERVER_ADDR/api/v1/check?d=$DOMAIN";
+done )
+     3267023 Killed                  | vegeta attack -rate=100 -duration=1s -header="X-Forwarded-For: $IP" -header="X-Real-IP: $IP" -max-workers=100 >> "$VEGETA_100_BIN" 2> /dev/null

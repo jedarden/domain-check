@@ -1,0 +1,13 @@
+================================
+Domain Check Load Tests
+================================
+Server: localhost:8082
+Results: load-test-results/load-test-report-20260425-132039.md
+
+[0;34m[13:20:39][0m Checking server...
+[0;32mServer is ready![0m
+
+[0;34m[13:20:39][0m Test 1: Cached endpoint (1000 req, varied IPs, target: p99 < 10ms)
+[0;34m[13:20:39][0m Warming cache...
+[0;34m[13:20:43][0m Running cached test (1000 requests with varied IPs)...
+awk: line 1: syntax error at or near *

@@ -1,0 +1,66 @@
+================================
+Domain Check Load Tests
+================================
+Server: localhost:8082
+Results: load-test-results/load-test-report-20260425-133913.md
+
+[0;34m[13:39:13][0m Checking server...
+[0;32mServer is ready![0m
+
+[0;34m[13:39:13][0m Test 1: Cached endpoint (1000 req, varied IPs, target: p99 < 10ms)
+[0;34m[13:39:13][0m Warming cache...
+[0;34m[13:39:15][0m Running cached test (1000 requests with varied IPs)...
+
+Results:
+Requests      [total, rate, throughput]         1000, 200.18, 0.80
+Duration      [total, attack, wait]             4.996s, 4.995s, 375.45µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  224.205µs, 367.854µs, 362.141µs, 436.818µs, 466.269µs, 531.81µs, 1.154ms
+Bytes In      [total, mean]                     48488, 48.49
+Bytes Out     [total, mean]                     0, 0.00
+Success       [ratio]                           0.40%
+Status Codes  [code:count]                      200:4  429:996  
+Error Set:
+429 Too Many Requests
+
+  Status: [0;32m✓ PASS[0m - 0.0ms < 10ms
+
+[0;34m[13:39:20][0m Test 2: vegeta 100/s for 60s (target: p99 < 50ms, error rate < 0.1%)
+[0;34m[13:39:20][0m Warming cache with varied IPs...
+[0;34m[13:39:23][0m Running vegeta attack (100 req/s for 60s)...
+
+Results:
+2026/04/25 13:40:23 open --type=text: no such file or directory
+
+  P99 Status: [0;32m✓ PASS[0m - 0.0ms < 50ms
+  Error Rate Status: [0;32m✓ PASS[0m - Error rate 0% < 0.1%
+
+[0;34m[13:40:23][0m Test 3: vegeta 200/s for 10s (verify rate limiter returns 429s)
+[0;34m[13:40:23][0m Running vegeta attack (200 req/s for 10s, single IP to trigger rate limiting)...
+
+Results:
+2026/04/25 13:40:33 open --type=text: no such file or directory
+
+  Rate Limiter Status: [0;31m✗ FAIL[0m - No 429 responses detected (rate limiter may not be working)
+
+[0;34m[13:40:33][0m Test 4: Memory growth test (50 req/s for 10 min, memory should plateau)
+[0;34m[13:40:33][0m Getting initial memory baseline...
+Initial heap: 5.103616e+06 bytes (4.87 MB)
+[0;34m[13:40:33][0m Starting vegeta attack (50 req/s for 10 min)...
+[0s] Heap: 4.97 MB, Objects: 18340, Goroutines: 14
+[30s] Heap: 5.45 MB, Objects: 26940, Goroutines: 15
+[60s] Heap: 4.57 MB, Objects: 14157, Goroutines: 16
+[90s] Heap: 5.14 MB, Objects: 22537, Goroutines: 16
+[120s] Heap: 4.70 MB, Objects: 14225, Goroutines: 17
+[150s] Heap: 5.59 MB, Objects: 28608, Goroutines: 17
+[180s] Heap: 5.07 MB, Objects: 21292, Goroutines: 16
+[210s] Heap: 6.02 MB, Objects: 34605, Goroutines: 16
+[240s] Heap: 4.51 MB, Objects: 15081, Goroutines: 14
+[270s] Heap: 5.88 MB, Objects: 35295, Goroutines: 14
+[300s] Heap: 5.12 MB, Objects: 24965, Goroutines: 14
+[330s] Heap: 4.70 MB, Objects: 18280, Goroutines: 14
+[360s] Heap: 5.79 MB, Objects: 34370, Goroutines: 14
+[390s] Heap: 5.11 MB, Objects: 25090, Goroutines: 14
+[420s] Heap: 4.59 MB, Objects: 16193, Goroutines: 14
+[450s] Heap: 5.60 MB, Objects: 31642, Goroutines: 15
+[480s] Heap: 4.97 MB, Objects: 23307, Goroutines: 15
+[510s] Heap: 4.50 MB, Objects: 13993, Goroutines: 15

@@ -1,0 +1,9 @@
+Requests      [total, rate, throughput]         2000, 200.10, 0.00
+Duration      [total, attack, wait]             9.995s, 9.995s, 224.168µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  69.874µs, 157.664µs, 152.976µs, 204.382µs, 220.5µs, 251.166µs, 637.453µs
+Bytes In      [total, mean]                     0, 0.00
+Bytes Out     [total, mean]                     0, 0.00
+Success       [ratio]                           0.00%
+Status Codes  [code:count]                      0:2000  
+Error Set:
+Get "http://localhost:8080/api/v1/check?d=example.com": dial tcp 0.0.0.0:0->127.0.0.1:8080: connect: connection refused
