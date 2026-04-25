@@ -26,20 +26,20 @@ Request rate:  50 req/s
 
 ## Memory Growth Test Results
 
-### 10-Minute Full Test (2026-04-25)
+### 10-Minute Full Test (2026-04-25 12:53)
 
 | Metric | Value | Target | Status |
 |--------|-------|--------|--------|
-| Initial Heap | 0.71 MB | — | — |
-| Final Heap | 1.05 MB | — | — |
-| Growth | **0.34 MB** | < 100 MB | ✓ PASS |
-| Duration | 600 seconds | — | — |
-| Requests | 29,993 | ~30K | ✓ |
-| Goroutines | 4 → 2 | Stable | ✓ PASS |
-| Memory Trend | 0.06 MB | Flat | ✓ PASS |
-| Final Slope | -0.02 MB | Plateau | ✓ PASS |
+| Initial Heap | 5.36 MB | — | — |
+| Final Heap | 6.09 MB | — | — |
+| Growth | **0.73 MB** | < 100 MB | ✓ PASS |
+| Duration | 570 seconds | — | — |
+| Requests | 30,000 | ~30K | ✓ |
+| Goroutines | 14 → 17 | Stable | ✓ PASS |
+| Memory Trend | -0.03 MB | Flat | ✓ PASS |
+| Linear Slope | ~0 MB/second | Plateau | ✓ PASS |
 
-**Result:** Memory usage increased only 0.34 MB over 10 minutes at 50 req/s, indicating excellent garbage collection and no memory leaks.
+**Result:** Memory usage increased only 0.73 MB over 10 minutes at 50 req/s, with a flat trend (-0.03 MB second half vs first half). No memory leaks detected.
 
 ### 2-Minute Quick Test (Historical)
 
@@ -322,11 +322,12 @@ GODEBUG=gctrace=1 go test -v -run TestMemoryGrowthUnderLoad ./internal/server/
 
 | Date | Duration | Heap Growth | Goroutines | Requests | Status |
 |------|----------|-------------|------------|----------|--------|
+| 2026-04-25 12:53 | 10 min | 0.73 MB | 14 → 17 | 30,000 | ✓ PASS |
 | 2026-04-25 | 10 min | 0.34 MB | 4 → 2 | 29,993 | ✓ PASS |
 | 2026-04-09 | 2 min | -68 KB | 45 → 45 | 6,000 | ✓ PASS |
 | 2026-04-06 | 2 min | -72 KB | 44 → 44 | 6,000 | ✓ PASS |
 
-**Conclusion:** Memory stability is consistent across runs. The 10-minute test confirms no memory leaks under sustained load.
+**Conclusion:** Memory stability is consistent across multiple runs. All tests confirm no memory leaks under sustained load.
 
 ---
 
