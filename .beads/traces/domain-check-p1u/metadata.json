@@ -1,0 +1,16 @@
+{
+  "bead_id": "domain-check-p1u",
+  "agent": "claude-code-glm-5-1",
+  "provider": "zai",
+  "model": "glm-5.1",
+  "exit_code": 0,
+  "outcome": "success",
+  "duration_ms": 13285,
+  "input_tokens": null,
+  "output_tokens": null,
+  "cost_usd": null,
+  "captured_at": "2026-04-21T11:27:43.983541262Z",
+  "trace_format": "claude_json",
+  "pruned": false,
+  "template_version": null
+}
