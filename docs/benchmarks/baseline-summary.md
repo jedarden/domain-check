@@ -1,6 +1,14 @@
-# Domain Check Performance Baseline
+# Domain Check Performance Baseline Summary
 
 **Latest:** [baseline-2026-04-25.md](./baseline-2026-04-25.md) — Comprehensive baseline with all targets validated
+
+**Quick Summary:**
+| Test | Target | Result | Status |
+|------|--------|--------|--------|
+| Cached P99 | < 10ms | **0.96ms** | ✅ PASS |
+| Rate Limiter 200req/s | 429s expected | **96.55% 429** | ✅ PASS |
+| Memory Growth 10min | < 100MB | **-0.65 MB** | ✅ PASS |
+| Bulk 50 domains | < 5000ms | **~3500ms** | ✅ PASS |
 
 **Historical:**
 
