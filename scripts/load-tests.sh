@@ -39,22 +39,12 @@ pass_fail() {
     local unit=$3
     local name=$4
 
-    if [ "$unit" = "ms" ]; then
-        if [ "$actual" -lt "$target" ]; then
-            echo -e "${GREEN}✓ PASS${NC} - ${actual}ms < ${target}ms"
-            return 0
-        else
-            echo -e "${RED}✗ FAIL${NC} - ${actual}ms >= ${target}ms"
-            return 1
-        fi
+    if (( $(echo "$actual < $target" | bc -l) )); then
+        echo -e "${GREEN}✓ PASS${NC} - ${actual}${unit} < ${target}${unit}"
+        return 0
     else
-        if (( $(echo "$actual < $target" | bc -l) )); then
-            echo -e "${GREEN}✓ PASS${NC} - ${actual}${unit} < ${target}${unit}"
-            return 0
-        else
-            echo -e "${RED}✗ FAIL${NC} - ${actual}${unit} >= ${target}${unit}"
-            return 1
-        fi
+        echo -e "${RED}✗ FAIL${NC} - ${actual}${unit} >= ${target}${unit}"
+        return 1
     fi
 }
 
@@ -84,9 +74,9 @@ echo -e "${GREEN}Server is ready!${NC}"
 echo ""
 
 # ============================================================================
-# TEST 1: Cached endpoint with varied IPs → p99 < 10ms
+# TEST 1: Cached endpoint with vegeta → p99 < 10ms
 # ============================================================================
-log "Test 1: Cached endpoint (1000 req, varied IPs, target: p99 < 10ms)"
+log "Test 1: Cached endpoint (1000 req, 50 concurrent, target: p99 < 10ms)"
 
 # Warm cache with varied IPs
 log "Warming cache..."
@@ -100,21 +90,46 @@ sleep 2
 VEGETA_CACHED_BIN="$RESULTS_DIR/vegeta-cached-$DATE.bin"
 VEGETA_CACHED_TXT="$RESULTS_DIR/vegeta-cached-$DATE.txt"
 
-# Create targets with varied IPs - use heredoc to avoid file issues
-log "Running cached test (1000 requests with varied IPs)..."
-(
-    for i in {1..1000}; do
-        echo "GET http://$SERVER_ADDR/api/v1/check?d=$DOMAIN"
-    done
-) | vegeta attack -rate=200 -duration=5s \
+# Run vegeta test with varied IP headers to avoid rate limiting
+log "Running vegeta attack (1000 requests, 50 concurrent)..."
+# Create targets with varied IPs to avoid per-IP rate limiting
+for i in $(seq 1 1000); do
+    IP=$(random_ip)
+    echo "GET http://$SERVER_ADDR/api/v1/check?d=$DOMAIN"
+done > "$RESULTS_DIR/targets-cached-$DATE.txt"
+
+vegeta attack -rate=100 -duration=10s \
     -max-workers=50 \
-    -name=cached-test > "$VEGETA_CACHED_BIN" 2>&1
+    -targets="$RESULTS_DIR/targets-cached-$DATE.txt" \
+    -header="X-Forwarded-For: 10.1.1.1" \
+    -name=cached-test > "$VEGETA_CACHED_BIN" 2>/dev/null
 
-# Generate text report
-vegeta report "$VEGETA_CACHED_BIN" --type=text > "$VEGETA_CACHED_TXT" 2>&1 || true
+# Now run with varied IPs - need to use a different approach
+# Since vegeta can't vary headers per request, we'll generate multiple small attacks
+rm -f "$VEGETA_CACHED_BIN"
+for batch in {1..20}; do
+    IP=$(random_ip)
+    (for i in {1..50}; do
+        echo "GET http://$SERVER_ADDR/api/v1/check?d=$DOMAIN"
+    done) | vegeta attack -rate=100 -duration=0.5s \
+        -header="X-Forwarded-For: $IP" \
+        -header="X-Real-IP: $IP" \
+        -max-workers=50 >> "$VEGETA_CACHED_BIN" 2>/dev/null
+done
 
-CACHED_P99=$(awk '/P99/ {print $2}' "$VEGETA_CACHED_TXT" 2>/dev/null || echo "0")
-CACHED_P99_MS=$(awk "BEGIN {printf \"%.1f\", $CACHED_P99 * 1000}")
+vegeta report -type=text "$VEGETA_CACHED_BIN" > "$VEGETA_CACHED_TXT" 2>&1 || true
+
+# Parse p99 from vegeta output - p99 is the 6th value on the latency line
+# Format: "Latencies     [min, mean, 50, 90, 95, 99, max]  val1, val2, val3, val4, val5, p99, max"
+CACHED_P99_RAW=$(awk '/^Latencies/ {getline; print $6}' "$VEGETA_CACHED_TXT" 2>/dev/null || echo "0")
+# Convert to ms (handle s, ms, us units)
+CACHED_P99_MS=$(echo "$CACHED_P99_RAW" | sed 's/s$//' | sed 's/ms$//' | awk '{
+    val = $1
+    if ($0 ~ /ms/) unit = "ms"
+    else if ($0 ~ /s/) { val *= 1000; unit = "ms" }
+    else if ($0 ~ /µs/) { val /= 1000; unit = "ms" }
+    printf "%.1f", val
+}')
 
 echo ""
 echo "Results:"
@@ -145,19 +160,33 @@ sleep 2
 VEGETA_100_BIN="$RESULTS_DIR/vegeta-100-$DATE.bin"
 VEGETA_100_TXT="$RESULTS_DIR/vegeta-100-$DATE.txt"
 
-log "Running vegeta attack (100 req/s for 60s)..."
-(
-    for i in {1..100}; do
+log "Running vegeta attack (100 req/s for 60s with varied IPs)..."
+# Run multiple small attacks with different IPs to avoid per-IP rate limiting
+# 60 attacks x 1 second each = 60 seconds, each with a different IP
+rm -f "$VEGETA_100_BIN"
+for batch in {1..60}; do
+    IP=$(random_ip)
+    (for i in {1..100}; do
         echo "GET http://$SERVER_ADDR/api/v1/check?d=$DOMAIN"
-    done
-) | vegeta attack -rate=100 -duration=60s \
-    -max-workers=100 \
-    -name=load-100 > "$VEGETA_100_BIN" 2>&1
+    done) | vegeta attack -rate=100 -duration=1s \
+        -header="X-Forwarded-For: $IP" \
+        -header="X-Real-IP: $IP" \
+        -max-workers=100 >> "$VEGETA_100_BIN" 2>/dev/null
+    if [ $((batch % 10)) -eq 0 ]; then
+        echo "  Progress: $batch/60 batches completed..."
+    fi
+done
 
-vegeta report "$VEGETA_100_BIN" --type=text > "$VEGETA_100_TXT" 2>&1 || true
+vegeta report -type=text "$VEGETA_100_BIN" > "$VEGETA_100_TXT" 2>&1 || true
 
-VEGETA_100_P99=$(awk '/P99/ {print $2}' "$VEGETA_100_TXT" 2>/dev/null || echo "0")
-VEGETA_100_P99_MS=$(awk "BEGIN {printf \"%.1f\", $VEGETA_100_P99 * 1000}")
+VEGETA_100_P99_RAW=$(awk '/^Latencies/ {getline; print $6}' "$VEGETA_100_TXT" 2>/dev/null || echo "0")
+VEGETA_100_P99_MS=$(echo "$VEGETA_100_P99_RAW" | sed 's/s$//' | sed 's/ms$//' | awk '{
+    val = $1
+    if ($0 ~ /ms/) unit = "ms"
+    else if ($0 ~ /s/) { val *= 1000; unit = "ms" }
+    else if ($0 ~ /µs/) { val /= 1000; unit = "ms" }
+    printf "%.1f", val
+}')
 VEGETA_100_SUCCESS=$(awk '/Success/ {print $2}' "$VEGETA_100_TXT" 2>/dev/null | tr -d '%[]' || echo "100")
 
 echo ""
@@ -203,9 +232,9 @@ echo "GET http://$SERVER_ADDR/api/v1/check?d=$DOMAIN" | \
     -header="X-Forwarded-For: 10.200.1.1" \
     -header="X-Real-IP: 10.200.1.1" \
     -max-workers=50 \
-    -name=rate-limit-test > "$VEGETA_200_BIN" 2>&1
+    -name=rate-limit-test > "$VEGETA_200_BIN" 2>/dev/null
 
-vegeta report "$VEGETA_200_BIN" --type=text > "$VEGETA_200_TXT" 2>&1 || true
+vegeta report -type=text "$VEGETA_200_BIN" > "$VEGETA_200_TXT" 2>&1 || true
 
 echo ""
 echo "Results:"
@@ -247,7 +276,7 @@ VEGETA_MEM_BIN="$RESULTS_DIR/vegeta-memory-$DATE.bin"
     done
 ) | vegeta attack -rate=50 -duration=600s \
     -max-workers=50 \
-    -name=memory-test > "$VEGETA_MEM_BIN" 2>&1 &
+    -name=memory-test > "$VEGETA_MEM_BIN" 2>/dev/null &
 VEGETA_PID=$!
 
 # Monitor memory every 30 seconds
