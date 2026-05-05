@@ -41,7 +41,7 @@ Open `http://localhost:8080` in your browser.
 ### Docker
 
 ```bash
-docker run -p 8080:8080 ghcr.io/jedarden/domain-check
+docker run -p 8080:8080 ronaldraygun/domain-check
 ```
 
 ### From Source
