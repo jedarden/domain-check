@@ -23,7 +23,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: domain-check
-          image: domain-check:latest  # Replace with actual image registry
+          image: ronaldraygun/domain-check:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
