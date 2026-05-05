@@ -1,0 +1,3 @@
+# Fuzz corpus directory for FuzzParseRDAPResponse
+# Seed corpus is embedded in the test via f.Add() calls and testdata/rdap/ fixtures
+# Run with: go test -fuzz=FuzzParseRDAPResponse -fuzztime=30s ./internal/checker/
