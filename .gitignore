@@ -47,3 +47,6 @@ Thumbs.db
 *.bak
 *.log
 memory-test-results/
+
+# Fuzz test crasher files (auto-generated when bugs are found)
+testdata/fuzz/*/crash-*
