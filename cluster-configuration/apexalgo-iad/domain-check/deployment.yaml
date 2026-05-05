@@ -24,7 +24,7 @@ spec:
       containers:
         - name: domain-check
           image: ronaldraygun/domain-check:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080
