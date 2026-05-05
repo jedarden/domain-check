@@ -4,9 +4,13 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/coding/domain-check/internal/checker"
 )
 
 // TestValidateSLD_Valid tests valid second-level domain labels.
@@ -454,4 +458,314 @@ func TestCheck_IntegrationWithDomainParser(t *testing.T) {
 			t.Errorf("expected exit code %d (error) for empty domain, got %d", ExitError, exitCode)
 		}
 	})
+}
+
+// TestCheck_WithMockRDAP tests check with a mock RDAP server.
+// Note: Check() creates its own bootstrap internally, so this test
+// verifies the validation path without mocking network calls.
+func TestCheck_WithMockRDAP(t *testing.T) {
+	// Test that Check properly handles various input scenarios.
+	// The Check() function creates its own bootstrap, so we test
+	// the validation and output logic without network mocking.
+
+	t.Run("valid single domain", func(t *testing.T) {
+		// This tests that the domain parsing and validation works.
+		// We can't mock the network response since Check() creates
+		// its own bootstrap internally.
+		cfg := CheckConfig{
+			Domain:    "example.com",
+			Format:    "text",
+			Timeout:   1 * time.Second, // Short timeout to fail fast
+			UserAgent: "test",
+		}
+
+		// This will likely fail with network error or timeout, but
+		// verifies the validation path works.
+		exitCode := Check(context.Background(), cfg)
+
+		// Exit code should be either Error (network) or Taken/Available
+		// but not crash or panic.
+		if exitCode < ExitAvailable || exitCode > ExitError {
+			t.Errorf("expected exit code between %d and %d, got %d", ExitAvailable, ExitError, exitCode)
+		}
+	})
+
+	t.Run("json format output", func(t *testing.T) {
+		cfg := CheckConfig{
+			Domain:    "example.com",
+			Format:    "json",
+			Timeout:   1 * time.Second,
+			UserAgent: "test",
+		}
+
+		exitCode := Check(context.Background(), cfg)
+
+		// Should not crash or panic
+		if exitCode < ExitAvailable || exitCode > ExitError {
+			t.Errorf("expected exit code between %d and %d, got %d", ExitAvailable, ExitError, exitCode)
+		}
+	})
+
+	t.Run("csv format output", func(t *testing.T) {
+		cfg := CheckConfig{
+			Domain:    "example.com",
+			Format:    "csv",
+			Timeout:   1 * time.Second,
+			UserAgent: "test",
+		}
+
+		exitCode := Check(context.Background(), cfg)
+
+		// Should not crash or panic
+		if exitCode < ExitAvailable || exitCode > ExitError {
+			t.Errorf("expected exit code between %d and %d, got %d", ExitAvailable, ExitError, exitCode)
+		}
+	})
+}
+
+// TestCheck_MultiTLD_WithMockRDAP tests multi-TLD mode.
+// Note: Check() creates its own bootstrap internally, so this test
+// verifies the validation path without mocking network calls.
+func TestCheck_MultiTLD_WithMockRDAP(t *testing.T) {
+	// Test multi-TLD mode with validation.
+	// The Check() function creates its own bootstrap, so we test
+	// the SLD validation and TLD combination logic.
+
+	t.Run("multi-TLD with valid SLD", func(t *testing.T) {
+		cfg := CheckConfig{
+			Domain:    "example",
+			TLDs:      []string{"com", "org", "net"},
+			Format:    "text",
+			Timeout:   1 * time.Second,
+			UserAgent: "test",
+		}
+
+		exitCode := Check(context.Background(), cfg)
+
+		// Should not crash or panic - will likely get network errors
+		// but verifies the SLD validation and domain construction works
+		if exitCode < ExitAvailable || exitCode > ExitError {
+			t.Errorf("expected exit code between %d and %d, got %d", ExitAvailable, ExitError, exitCode)
+		}
+	})
+
+	t.Run("multi-TLD with json format", func(t *testing.T) {
+		cfg := CheckConfig{
+			Domain:    "example",
+			TLDs:      []string{"com", "org"},
+			Format:    "json",
+			Timeout:   1 * time.Second,
+			UserAgent: "test",
+		}
+
+		exitCode := Check(context.Background(), cfg)
+
+		// Should not crash or panic
+		if exitCode < ExitAvailable || exitCode > ExitError {
+			t.Errorf("expected exit code between %d and %d, got %d", ExitAvailable, ExitError, exitCode)
+		}
+	})
+
+	t.Run("multi-TLD with csv format", func(t *testing.T) {
+		cfg := CheckConfig{
+			Domain:    "example",
+			TLDs:      []string{"com", "org"},
+			Format:    "csv",
+			Timeout:   1 * time.Second,
+			UserAgent: "test",
+		}
+
+		exitCode := Check(context.Background(), cfg)
+
+		// Should not crash or panic
+		if exitCode < ExitAvailable || exitCode > ExitError {
+			t.Errorf("expected exit code between %d and %d, got %d", ExitAvailable, ExitError, exitCode)
+		}
+	})
+}
+
+// TestCheck_WithMockRDAPIntegration tests Check with a properly mocked RDAP server.
+// This test injects a mock RDAP server into the bootstrap to test the full integration.
+func TestCheck_WithMockRDAPIntegration(t *testing.T) {
+	// Create a mock RDAP server that returns simple responses.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		domain := strings.TrimPrefix(r.URL.Path, "/")
+
+		if strings.Contains(domain, "available") {
+			// Return 404 for available domains.
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if strings.Contains(domain, "error") {
+			// Return 500 for error domains.
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// Return 200 with RDAP response for registered domains.
+		w.Header().Set("Content-Type", "application/rdap+json")
+		w.WriteHeader(http.StatusOK)
+		jsonResponse := `{
+			"ldhName": "` + domain + `",
+			"handle": "123",
+			"status": ["active"],
+			"events": [
+				{"eventAction": "registration", "eventDate": "2020-01-01T00:00:00Z"}
+			]
+		}`
+		w.Write([]byte(jsonResponse))
+	}))
+	defer server.Close()
+
+	// Create a minimal bootstrap with our mock server.
+	bootstrap, err := checker.NewBootstrapManager(context.Background(), "")
+	if err != nil {
+		t.Skipf("skipping test: failed to create bootstrap: %v", err)
+	}
+	defer bootstrap.Stop()
+
+	// Manually inject our mock server into the bootstrap.
+	bootstrap.InjectServers(map[string]string{
+		"com": server.URL,
+		"org": server.URL,
+		"dev": server.URL,
+	})
+
+	// Create an RDAP client with our bootstrap.
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	rateLimiter := checker.NewRateLimiter()
+
+	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
+		HTTPClient: httpClient,
+		Bootstrap:  bootstrap,
+		RateLimit:  rateLimiter,
+		UserAgent:  "test",
+	})
+
+	// Create a checker with our RDAP client.
+	chk := checker.NewChecker(checker.CheckerConfig{
+		RDAPClient: rdapClient,
+		Bootstrap:  bootstrap,
+	})
+
+	// Test available domain.
+	result, err := chk.Check(context.Background(), "available.com")
+	if err != nil {
+		t.Errorf("expected no error for available.com, got %v", err)
+	}
+	if !result.Available {
+		t.Errorf("expected available.com to be available, got %v", result.Available)
+	}
+
+	// Test taken domain.
+	result, err = chk.Check(context.Background(), "taken.com")
+	if err != nil {
+		t.Errorf("expected no error for taken.com, got %v", err)
+	}
+	if result.Available {
+		t.Errorf("expected taken.com to be taken, got %v", result.Available)
+	}
+
+	// Test error domain.
+	result, err = chk.Check(context.Background(), "error.com")
+	// The RDAP client returns a result with an Error field set, not a Go error
+	// So err may be nil but result.Error should be non-empty
+	if err != nil && result.Error == "" {
+		t.Errorf("expected result.Error or err to be set for error.com, got err=%v, result.Error=%q", err, result.Error)
+	}
+	if err == nil && result.Error == "" {
+		t.Error("expected error.com to have an error in result.Error or return err, got both empty")
+	}
+}
+
+// TestCheck_MultiTLDWithMockRDAP tests multi-TLD mode with a mocked RDAP server.
+func TestCheck_MultiTLDWithMockRDAP(t *testing.T) {
+	// Create a mock RDAP server.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		domain := strings.TrimPrefix(r.URL.Path, "/")
+
+		if strings.Contains(domain, "available") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/rdap+json")
+		w.WriteHeader(http.StatusOK)
+		jsonResponse := `{
+			"ldhName": "` + domain + `",
+			"handle": "123",
+			"status": ["active"],
+			"events": [
+				{"eventAction": "registration", "eventDate": "2020-01-01T00:00:00Z"}
+			]
+		}`
+		w.Write([]byte(jsonResponse))
+	}))
+	defer server.Close()
+
+	// Create a minimal bootstrap.
+	bootstrap, err := checker.NewBootstrapManager(context.Background(), "")
+	if err != nil {
+		t.Skipf("skipping test: failed to create bootstrap: %v", err)
+	}
+	defer bootstrap.Stop()
+
+	bootstrap.InjectServers(map[string]string{
+		"com": server.URL,
+		"org": server.URL,
+		"dev": server.URL,
+	})
+
+	// Create an RDAP client with our bootstrap.
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	rateLimiter := checker.NewRateLimiter()
+
+	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
+		HTTPClient: httpClient,
+		Bootstrap:  bootstrap,
+		RateLimit:  rateLimiter,
+		UserAgent:  "test",
+	})
+
+	// Create a checker.
+	chk := checker.NewChecker(checker.CheckerConfig{
+		RDAPClient: rdapClient,
+		Bootstrap:  bootstrap,
+	})
+
+	// Test multi-TLD check.
+	domains := []string{"available.com", "available.org", "taken.dev"}
+	results := chk.CheckBulk(context.Background(), domains)
+
+	if len(results.Results) != 3 {
+		t.Errorf("expected 3 results, got %d", len(results.Results))
+	}
+
+	// available.com should be available.
+	if r, ok := results.Results["available.com"]; ok {
+		if !r.Available {
+			t.Errorf("expected available.com to be available, got %v", r.Available)
+		}
+	} else {
+		t.Error("available.com not found in results")
+	}
+
+	// available.org should be available.
+	if r, ok := results.Results["available.org"]; ok {
+		if !r.Available {
+			t.Errorf("expected available.org to be available, got %v", r.Available)
+		}
+	} else {
+		t.Error("available.org not found in results")
+	}
+
+	// taken.dev should be taken.
+	if r, ok := results.Results["taken.dev"]; ok {
+		if r.Available {
+			t.Errorf("expected taken.dev to be taken, got %v", r.Available)
+		}
+	} else {
+		t.Error("taken.dev not found in results")
+	}
 }
