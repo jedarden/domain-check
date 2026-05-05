@@ -42,6 +42,10 @@ golangci-lint run
 - `docs/research/08-go-implementation-patterns.md` — Go dep choices and patterns
 - `docs/research/` — RDAP protocol research, rate limits, accuracy testing
 
+## CI/CD
+
+**GitHub Actions is intentionally disabled.** This project uses Argo Workflows for CI/CD on the `iad-ci` cluster. The WorkflowTemplate `domain-check-build` in `jedarden/declarative-config` handles Docker builds → `ronaldraygun/domain-check`. Do not re-enable GitHub Actions workflows.
+
 ## Dependencies
 
 - `golang.org/x/net` (publicsuffix, idna)
