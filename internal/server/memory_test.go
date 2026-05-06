@@ -229,9 +229,8 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 	// At 50 req/s for 10 min = 30K requests, each with a unique IP.
 	ipCounter := atomic.Int64{}
 
-	// Generate request rate using ticker.
-	ticker := time.NewTicker(time.Second / time.Duration(rate))
-	defer ticker.Stop()
+	// Each goroutine will make requests at ~1 req/sec to achieve ~rate requests/sec total.
+	perGoroutineInterval := time.Second
 
 	// Snapshot collector.
 	var snapshots []memSnapshot
@@ -273,6 +272,9 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 		go func() {
 			defer wg.Done()
 			<-started
+			// Each goroutine gets its own ticker to avoid the shared-ticker bug.
+			goroutineTicker := time.NewTicker(perGoroutineInterval)
+			defer goroutineTicker.Stop()
 			client := &http.Client{
 				Timeout: 5 * time.Second,
 				Transport: &http.Transport{
@@ -285,7 +287,7 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 				select {
 				case <-ctx.Done():
 					return
-				case <-ticker.C:
+				case <-goroutineTicker.C:
 					ipIdx := ipCounter.Add(1)
 					octet2 := (ipIdx / 256) % 256
 					octet3 := ipIdx % 256
@@ -320,7 +322,6 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 	srv.Close()
 
 	// Stop tickers and cleanup goroutine.
-	ticker.Stop()
 	snapshotTicker.Stop()
 	close(cleanupDone)
 
