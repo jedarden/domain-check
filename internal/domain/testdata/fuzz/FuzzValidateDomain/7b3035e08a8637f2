@@ -1,0 +1,2 @@
+go test fuzz v1
+string("aaaaaaaaaaaa\xcẻ\"l\xcd\xe5n\x86\xd8\x173RX\xe5 \xa0aaAA")

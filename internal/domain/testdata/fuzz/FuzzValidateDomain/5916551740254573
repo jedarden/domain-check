@@ -1,0 +1,2 @@
+go test fuzz v1
+string("Ε\xc40\xf2\x95")

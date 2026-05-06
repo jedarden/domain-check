@@ -1,0 +1,2 @@
+go test fuzz v1
+string("aa\x80\xff\xff\xff0..00")
