@@ -3,5 +3,6 @@
 # Run with: go test -fuzz=FuzzValidateDomain -fuzztime=30s ./internal/domain/
 #
 # Extended fuzz verification (2026-05-05):
-# - 7 minutes runtime, 47M+ executions, 0 crashes
-# - Found 878 interesting cases total (875 seed + 3 discovered)
+# - 10 minutes runtime, 62M+ executions, 0 crashes
+# - Found 881 interesting cases total (878 seed + 3 discovered)
+# - Corpus size: 881 entries (all coverage paths explored)
