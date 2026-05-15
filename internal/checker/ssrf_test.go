@@ -578,3 +578,121 @@ func TestSafeClient_HTTPS(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
+
+func TestPerRegistryRoundTripper_PoolSizes(t *testing.T) {
+	rt := NewPerRegistryRoundTripper()
+
+	// All known registries must have a dedicated transport.
+	for host := range registryPoolConfigs {
+		_, ok := rt.transports[host]
+		assert.True(t, ok, "expected dedicated transport for registry %s", host)
+	}
+
+	// Pool sizes must match the config values.
+	for host, pool := range registryPoolConfigs {
+		tr, ok := rt.transports[host].(*http.Transport)
+		require.True(t, ok, "transport for %s must be *http.Transport", host)
+		assert.Equal(t, pool.MaxIdleConns, tr.MaxIdleConnsPerHost,
+			"MaxIdleConnsPerHost mismatch for %s", host)
+		assert.Equal(t, pool.MaxConns, tr.MaxConnsPerHost,
+			"MaxConnsPerHost mismatch for %s", host)
+	}
+
+	// Fallback transport exists and uses the default pool config.
+	fallback, ok := rt.fallback.(*http.Transport)
+	require.True(t, ok, "fallback must be *http.Transport")
+	assert.Equal(t, defaultPoolConfig.MaxIdleConns, fallback.MaxIdleConnsPerHost)
+	assert.Equal(t, defaultPoolConfig.MaxConns, fallback.MaxConnsPerHost)
+}
+
+func TestPerRegistryRoundTripper_Routing(t *testing.T) {
+	// Use an httptest server at 127.0.0.1. We bypass SafeDialer here by
+	// constructing the RoundTripper directly with a plain dialer so the
+	// test server is reachable.
+	var lastTransport string
+	makeTransport := func(name string) http.RoundTripper {
+		return roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			lastTransport = name
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       http.NoBody,
+				Header:     make(http.Header),
+			}, nil
+		})
+	}
+
+	rt := &PerRegistryRoundTripper{
+		transports: map[string]http.RoundTripper{
+			"rdap.verisign.com":               makeTransport("verisign"),
+			"rdap.publicinterestregistry.org":  makeTransport("pir"),
+			"pubapi.registry.google":           makeTransport("google"),
+		},
+		fallback: makeTransport("fallback"),
+	}
+
+	tests := []struct {
+		url  string
+		want string
+	}{
+		{"https://rdap.verisign.com/domain/example.com", "verisign"},
+		{"https://rdap.publicinterestregistry.org/domain/example.org", "pir"},
+		{"https://pubapi.registry.google/rdap/domain/example.app", "google"},
+		{"https://rdap.unknown-registry.example/domain/foo.xyz", "fallback"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, tt.url, nil)
+			require.NoError(t, err)
+			resp, err := rt.RoundTrip(req)
+			require.NoError(t, err)
+			resp.Body.Close()
+			assert.Equal(t, tt.want, lastTransport)
+		})
+	}
+}
+
+func TestNewSafeClient_CustomTransport(t *testing.T) {
+	var called bool
+	customTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		called = true
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       http.NoBody,
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	client := NewSafeClient(ClientConfig{
+		Transport: customTransport,
+	})
+
+	req, err := http.NewRequest(http.MethodGet, "https://example.com/", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.True(t, called, "custom transport should be used")
+}
+
+// roundTripperFunc adapts a function to http.RoundTripper.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestRegistryPoolConfigs_AlignWithRateLimits(t *testing.T) {
+	// Pool sizes must be >= concurrency limits from ratelimit.go.
+	// This test documents (and enforces) the alignment between the two configs.
+	for host, pool := range registryPoolConfigs {
+		cfg, ok := defaultConfigs[host]
+		if !ok {
+			continue
+		}
+		assert.GreaterOrEqual(t, pool.MaxConns, int(cfg.Concurrency),
+			"MaxConns for %s must be >= Concurrency limit %d", host, cfg.Concurrency)
+		assert.GreaterOrEqual(t, pool.MaxIdleConns, int(cfg.Concurrency),
+			"MaxIdleConns for %s must be >= Concurrency limit %d", host, cfg.Concurrency)
+	}
+}

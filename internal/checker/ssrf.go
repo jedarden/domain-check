@@ -170,12 +170,89 @@ func extractHost(rawURL string) string {
 	return u.Hostname()
 }
 
+// PoolConfig holds TCP connection pool settings for one registry host.
+type PoolConfig struct {
+	// MaxIdleConns is the maximum number of idle (keep-alive) connections kept
+	// in the pool for this host. Should match the registry's concurrency limit
+	// so idle connections are available without excess.
+	MaxIdleConns int
+	// MaxConns is the hard cap on total open connections to this host (idle +
+	// active). A small buffer above MaxIdleConns accommodates burst connections
+	// being established while older ones finish.
+	MaxConns int
+}
+
+// registryPoolConfigs maps registry hostnames to connection pool settings.
+// Values are aligned with the concurrency limits in ratelimit.go so the pool
+// is never the bottleneck (MaxConns ≥ Concurrency) and idle connections don't
+// pile up (MaxIdleConns ≈ Concurrency).
+var registryPoolConfigs = map[string]PoolConfig{
+	// Verisign (.com/.net): 10 RPS, concurrency 10
+	"rdap.verisign.com": {MaxIdleConns: 10, MaxConns: 12},
+	// PIR (.org): 10 RPS, concurrency 10
+	"rdap.publicinterestregistry.org": {MaxIdleConns: 10, MaxConns: 12},
+	// Google Registry (.app/.dev/etc): 1 RPS, concurrency 2
+	"pubapi.registry.google": {MaxIdleConns: 2, MaxConns: 3},
+}
+
+// defaultPoolConfig is used for unknown registries (2 RPS, concurrency 3).
+var defaultPoolConfig = PoolConfig{MaxIdleConns: 3, MaxConns: 5}
+
+func newTransportForPool(dialer *net.Dialer, pool PoolConfig) *http.Transport {
+	return &http.Transport{
+		DialContext:           dialer.DialContext,
+		TLSHandshakeTimeout:   tlsHandshakeTimeout,
+		ResponseHeaderTimeout: responseHeaderTimeout,
+		MaxIdleConns:          pool.MaxIdleConns,
+		MaxIdleConnsPerHost:   pool.MaxIdleConns,
+		MaxConnsPerHost:       pool.MaxConns,
+		IdleConnTimeout:       90 * time.Second,
+		ForceAttemptHTTP2:     true,
+	}
+}
+
+// PerRegistryRoundTripper dispatches each request to a per-host http.Transport
+// sized to match that registry's rate and concurrency limits. All transports
+// share the same SafeDialer for SSRF protection.
+type PerRegistryRoundTripper struct {
+	transports map[string]http.RoundTripper // keyed by lowercase hostname
+	fallback   http.RoundTripper
+}
+
+// NewPerRegistryRoundTripper creates a PerRegistryRoundTripper whose pools are
+// sized to the known registry concurrency limits defined in ratelimit.go.
+func NewPerRegistryRoundTripper() *PerRegistryRoundTripper {
+	dialer := SafeDialer()
+	rt := &PerRegistryRoundTripper{
+		transports: make(map[string]http.RoundTripper, len(registryPoolConfigs)),
+		fallback:   newTransportForPool(dialer, defaultPoolConfig),
+	}
+	for host, pool := range registryPoolConfigs {
+		rt.transports[host] = newTransportForPool(dialer, pool)
+	}
+	return rt
+}
+
+// RoundTrip implements http.RoundTripper. It selects the transport for the
+// request host, falling back to the default transport for unknown registries.
+func (rt *PerRegistryRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	host := strings.ToLower(req.URL.Hostname())
+	if t, ok := rt.transports[host]; ok {
+		return t.RoundTrip(req)
+	}
+	return rt.fallback.RoundTrip(req)
+}
+
 // ClientConfig holds configuration for the SSRF-safe HTTP client.
 type ClientConfig struct {
 	// AllowList is the set of allowed RDAP server hosts.
 	AllowList *AllowList
 	// UserAgent is the User-Agent header for outgoing requests.
 	UserAgent string
+	// Transport overrides the default single-pool http.Transport. When nil,
+	// NewSafeClient creates a default transport using SafeDialer. Pass
+	// NewPerRegistryRoundTripper() to enable per-registry connection pool tuning.
+	Transport http.RoundTripper
 }
 
 // NewSafeClient creates an *http.Client protected against SSRF attacks.
@@ -185,12 +262,16 @@ type ClientConfig struct {
 //  2. URL allowlist enforcement (only bootstrap-approved RDAP servers)
 //  3. Redirect validation (redirect targets must be in allowlist, max 3 hops)
 //  4. Configured timeouts (5s connect, 5s TLS, 10s header, 15s total)
+//
+// Pass cfg.Transport = NewPerRegistryRoundTripper() to enable per-registry
+// connection pools sized to each registry's rate and concurrency limits.
 func NewSafeClient(cfg ClientConfig) *http.Client {
 	al := cfg.AllowList
 	ua := cfg.UserAgent
 
-	return &http.Client{
-		Transport: &http.Transport{
+	transport := cfg.Transport
+	if transport == nil {
+		transport = &http.Transport{
 			DialContext:           SafeDialer().DialContext,
 			TLSHandshakeTimeout:   tlsHandshakeTimeout,
 			ResponseHeaderTimeout: responseHeaderTimeout,
@@ -199,7 +280,11 @@ func NewSafeClient(cfg ClientConfig) *http.Client {
 			MaxConnsPerHost:       20,
 			IdleConnTimeout:       90 * time.Second,
 			ForceAttemptHTTP2:     true,
-		},
+		}
+	}
+
+	return &http.Client{
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= maxRedirects {
 				return fmt.Errorf("%w: exceeded %d redirects", ErrTooManyRedirects, maxRedirects)

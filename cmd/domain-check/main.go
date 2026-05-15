@@ -416,10 +416,11 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	bootstrapURLs := bootstrap.URLs()
 	allowlist := checker.NewAllowList(bootstrapURLs)
 
-	// Create safe HTTP client with SSRF protection.
+	// Create safe HTTP client with SSRF protection and per-registry connection pools.
 	safeClient := checker.NewSafeClient(checker.ClientConfig{
 		AllowList: allowlist,
 		UserAgent: "domain-check/1.0",
+		Transport: checker.NewPerRegistryRoundTripper(),
 	})
 
 	// Start background bootstrap refresh and allowlist update.
