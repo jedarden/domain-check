@@ -142,6 +142,9 @@ func (mc *memoryTestChecker) CheckBulk(_ context.Context, domains []string) *che
 // TestMemoryGrowthUnderLoad runs 50 req/s for 30 seconds and verifies memory growth
 // plateaus. For longer runs use TestMemoryGrowthUnderLoadExtended or Full variants.
 func TestMemoryGrowthUnderLoad(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping 30-second memory growth test in short mode")
+	}
 	runMemoryGrowthTest(t, 30*time.Second)
 }
 

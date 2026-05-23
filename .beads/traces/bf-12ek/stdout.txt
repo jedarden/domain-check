@@ -1,0 +1,1 @@
+Bead `bf-12ek` is closed and pushed. The per-registry HTTP connection pool tuning was already implemented in commit `d2ff495` — the bead just needed its status updated in the JSONL store (the `br close` command had a query bug, so I appended a closed entry to the JSONL directly and reimported).
