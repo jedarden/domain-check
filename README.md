@@ -321,31 +321,27 @@ Domain Check is a single Go binary with zero runtime dependencies. Templates and
 ```
 cmd/domain-check/main.go          # Entry point
 internal/
+  checker/     # Core check engine — RDAP client, WHOIS fallback, DNS pre-filter,
+               #   IANA bootstrap loader, LRU cache, SSRF guard, per-registry rate limiting
   config/      # Layered config: flags → env → YAML → defaults
-  domain/      # Input validation, IDN, TLD extraction via publicsuffix
-  bootstrap/   # IANA RDAP bootstrap loader with 24h cache refresh
-  rdap/        # RDAP client, response parser, per-registry rate limiting
-  whois/       # WHOIS fallback for ccTLDs without RDAP
-  cache/       # In-memory bounded LRU with per-status TTLs
-  httpclient/  # SSRF-safe HTTP client (private IP blocking)
-  ratelimit/   # Per-IP rate limiter middleware
+  domain/      # Input validation, IDN to punycode, TLD extraction via publicsuffix
   server/      # HTTP server, router, middleware, API handlers
-  web/         # HTML templates, static assets, template handlers
   cli/         # CLI subcommands (check, bulk)
 web/
   templates/   # HTML templates (layout, index, result)
-  static/      # CSS, JS, favicon (embedded)
+  static/      # CSS, JS, favicon (all embedded in the binary)
 ```
 
 ### Request Flow
 
 1. **Validate** — normalize input, convert IDN to punycode, extract TLD via publicsuffix
 2. **Cache check** — return cached result if fresh
-3. **Rate limit** — enforce per-registry limits (Verisign 10/s, Google 1/s)
-4. **RDAP query** — query the authoritative registry server over HTTPS
-5. **Parse** — extract availability, registration details, nameservers
-6. **Cache store** — cache result with per-status TTL (5min available, 1h registered)
-7. **Respond** — return structured JSON
+3. **DNS pre-filter** — fast NS lookup to short-circuit clearly registered domains
+4. **Rate limit** — enforce per-registry limits (Verisign 10/s, Google 1/s)
+5. **RDAP query** — query the authoritative registry server over HTTPS
+6. **Parse** — extract availability, registration details, nameservers
+7. **Cache store** — cache result with per-status TTL (5min available, 1h registered)
+8. **Respond** — return structured JSON
 
 ### Caching
 
