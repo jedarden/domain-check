@@ -64,7 +64,7 @@ Three entries in the `ignore` matrix exclude platforms where Go toolchain suppor
 | `windows` | `arm`  | —     | Windows on 32-bit ARM is effectively dead (Windows RT era); Go toolchain support is minimal |
 | `darwin`  | `arm`  | —     | Apple Silicon Macs are arm64 only; no 32-bit ARM macOS hardware exists |
 
-After exclusions, the **actual build matrix is 13 binaries**:
+After exclusions, the **actual build matrix is 9 binaries**:
 
 |                | amd64 | arm64 | arm (v7) |
 |----------------|-------|-------|----------|
@@ -102,7 +102,7 @@ GoReleaser populates `{{.Version}}`, `{{.Commit}}`, and `{{.Date}}` from the git
 
 ## Summary
 
-- **13 release binaries** across 4 OSes and 3 architectures
+- **9 release binaries** across 4 OSes and 3 architectures
 - **Fully static** (`CGO_ENABLED=0`) — no runtime dependencies
 - **Stripped** (`-s -w`) for minimal binary size
 - **Version-injected** via ldflags — `--version` reports exact git tag, commit SHA, and build date
