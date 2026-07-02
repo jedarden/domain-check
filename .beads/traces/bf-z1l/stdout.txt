@@ -1,0 +1,7 @@
+Bead `bf-z1l` is closed. Here's a summary of what was done:
+
+**The goreleaser artifacts, checksums, changelog, and release sections were already thoroughly documented** across four existing research docs (`09`–`12`). Two gaps were found and fixed:
+
+1. **Added `GITHUB_TOKEN` requirement** to `docs/research/11-goreleaser-release.md` — documents the required secret with minimum scopes (`public_repo` or `repo`), how to pass it, and CI-specific notes (GitHub Actions auto-injects; Argo Workflows needs a K8s Secret).
+
+2. **Fixed incorrect binary count** in `docs/research/12-goreleaser-pipeline-summary.md` — changed "13 binaries" to "9 binaries (3 combos excluded)" to match the actual build matrix after the `ignore` entries.

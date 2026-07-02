@@ -106,7 +106,7 @@ The CI pipeline does **not** run GoReleaser. GoReleaser is a separate release to
 | Concern | CI WorkflowTemplate | GoReleaser |
 |---------|-------------------|------------|
 | Docker image build | Yes | No |
-| Binary releases (tar.gz/zip) | No | Yes (10 platform binaries) |
+| Binary releases (tar.gz/zip) | No | Yes (9 platform binaries) |
 | Checksums file | No | Yes (`checksums.txt`) |
 | Changelog generation | No | Yes (from git commits) |
 | GitHub Release creation | No | Yes |
