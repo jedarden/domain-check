@@ -1,0 +1,6 @@
+Done. The CI WorkflowTemplate documentation was already comprehensive and accurate across two files:
+
+- **`docs/notes/10-ci-workflowtemplate.md`** — operational reference (secrets, steps, artifacts)
+- **`docs/research/13-ci-workflowtemplate.md`** — deeper analysis with gaps
+
+Fixed one inaccuracy: goreleaser produces **9** platform binaries (not 10 as stated in the notes doc). Committed and pushed.
