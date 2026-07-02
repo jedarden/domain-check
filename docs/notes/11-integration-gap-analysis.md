@@ -46,19 +46,14 @@ Cross-references GoReleaser output (`.goreleaser.yml`) against CI expectations (
 - **Impact:** Docker image tag and GitHub release tag can diverge. E.g., Docker Hub has `1.5.3` but GitHub release is `v1.5.2`. No single action produces both artifacts with matching versions.
 - **Fix:** Either (a) have CI create a git tag from the VERSION file and trigger goreleaser from that tag, or (b) replace VERSION file with tag-based versioning and have CI derive the version from `git describe`, or (c) add goreleaser as a CI step so both artifacts are produced in one pipeline.
 
-### M2. No goreleaser step in CI WorkflowTemplate
+### M2. ~~No goreleaser step in CI WorkflowTemplate~~ RESOLVED
 
-- **CI currently:** Only resolves version + builds Docker image
-- **GoReleaser:** Must be run separately (manually, not automated)
-- **Impact:** Two independent pipelines with no coordination. No single trigger produces both Docker image + GitHub release.
-- **Fix:** Add a `goreleaser-release` step to the WorkflowTemplate (conditional on tag push or after Docker build succeeds). Requires M3 and M4.
+- **CI currently:** Resolves version → builds Docker image → **runs goreleaser** (build pipeline). Release pipeline runs quality gate → goreleaser release.
+- **Resolution:** Commit `362233f` in declarative-config added `goreleaser` container step (using `goreleaser/goreleaser:v2`) to the build pipeline and `goreleaser-release` step to the release pipeline. Both use `goreleaser release --clean`.
 
-### M3. GITHUB_TOKEN not configured for goreleaser use in CI
+### M3. ~~GITHUB_TOKEN not configured for goreleaser use in CI~~ RESOLVED
 
-- **GoReleaser needs:** `GITHUB_TOKEN` env var to create GitHub Release
-- **CI has:** `github-webhook-secret` (used as `GH_TOKEN`/`GIT_TOKEN` for clone/push)
-- **Impact:** If goreleaser is added to the CI workflow, the secret must be passed as `GITHUB_TOKEN`. The existing secret likely has sufficient permissions (repo read/write), but the env var name must match goreleaser's expectation.
-- **Fix:** Pass the secret as `GITHUB_TOKEN` in the goreleaser step's env config.
+- **Resolution:** Both the `goreleaser` and `goreleaser-release` templates now set `GITHUB_TOKEN` and `GH_TOKEN` env vars via `secretKeyRef` to `github-webhook-secret` (key: `token`). The secret exists in the `argo-workflows` namespace on iad-ci. Argo Workflows automatically masks `secretKeyRef` values from logs and the UI.
 
 ### M4. GoReleaser before.hooks don't validate code quality
 
@@ -121,8 +116,8 @@ Cross-references GoReleaser output (`.goreleaser.yml`) against CI expectations (
 | **HIGH** | H1 | Add test/lint/fuzz step to CI pipeline | Medium |
 | **HIGH** | H2 | Update plan.md CI section to reflect Argo (not GH Actions) | Small |
 | **MEDIUM** | M1 | Unify version source (VERSION file vs git tag) | Medium |
-| **MEDIUM** | M2 | Add goreleaser step to CI WorkflowTemplate | Medium |
-| **MEDIUM** | M3 | Configure GITHUB_TOKEN for goreleaser in CI | Small |
+| **MEDIUM** | M2 | ~~Add goreleaser step to CI WorkflowTemplate~~ ✅ Resolved | — |
+| **MEDIUM** | M3 | ~~Configure GITHUB_TOKEN for goreleaser in CI~~ ✅ Resolved | — |
 | **MEDIUM** | M4 | Add `go vet`/`go test` to goreleaser before.hooks | Small |
 | **MEDIUM** | M5 | Only push `:latest` for main branch builds | Small |
 | **LOW** | L1 | Pin Kaniko image to specific version | Trivial |

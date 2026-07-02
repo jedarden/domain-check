@@ -50,12 +50,12 @@ The project is **feature-complete and building cleanly** (`go build ./...` passe
 
 | Item | Impact | Tracked By |
 |------|--------|-----------|
-| No goreleaser step in CI WorkflowTemplate | Docker and GitHub releases are independent pipelines with no coordination | bf-5oq |
+| ~~No goreleaser step in CI WorkflowTemplate~~ ✅ Resolved | Docker and GitHub releases are now coordinated in one pipeline | — |
 | VERSION file vs git tag dual source of truth | Docker image tag and GitHub release tag can diverge | bf-5oq |
 | No branch protection for `:latest` Docker tag | Non-main branch builds could overwrite `:latest` with unstable code | Untracked |
 | Kaniko + alpine/git images use `:latest` | Violates infra pinning policy; could break on upstream change | Untracked |
 | GoReleaser `before.hooks` skip tests/vet | Releases can ship with failing tests | bf-3g3 |
-| GITHUB_TOKEN not configured for goreleaser in CI | Can't create GitHub releases from Argo pipeline | bf-5oq |
+| ~~GITHUB_TOKEN not configured for goreleaser in CI~~ ✅ Resolved | Both goreleaser templates wire GITHUB_TOKEN via secretKeyRef | — |
 
 ### Feature Gaps (vs plan.md)
 

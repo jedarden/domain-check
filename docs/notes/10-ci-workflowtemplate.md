@@ -14,12 +14,27 @@ Documents the Argo Workflows WorkflowTemplate that handles Docker image builds f
 
 ## Step Pipeline
 
-The template runs two sequential steps:
+The template has two entrypoints:
+
+### Build pipeline (entrypoint: `build`)
+
+Triggered on push to main. Three sequential steps:
 
 ```
 build (entrypoint)
 ├── Step 1: resolve-version    — Auto-bump or read VERSION file
-└── Step 2: docker-build      — Kaniko Docker build → Docker Hub
+├── Step 2: docker-build      — Kaniko Docker build → Docker Hub
+└── Step 3: goreleaser        — Cross-compile binaries via goreleaser/goreleaser:v2
+```
+
+### Release pipeline (entrypoint: `release`)
+
+Triggered on tag push. Two sequential steps:
+
+```
+release
+├── Step 1: quality-gate       — go vet + go test -race
+└── Step 2: goreleaser-release — Cross-compile + publish GitHub Release
 ```
 
 ### Step 1: resolve-version
@@ -79,39 +94,57 @@ build (entrypoint)
 
 **Volume:** `docker-config` — a volume from the `docker-hub-registry` Secret providing Docker Hub authentication.
 
-## Secrets Required
-
-| Secret Name | Key | Used By | Purpose |
-|-------------|-----|---------|---------|
-| `github-webhook-secret` | `token` | `resolve-version` (as `GH_TOKEN`), `docker-build` (as `GIT_TOKEN`) | GitHub API access for git clone/push and Kaniko git context |
-| `docker-hub-registry` | `.dockerconfigjson` | `docker-build` (volume mount) | Docker Hub push authentication |
-
-Both secrets must exist in the `argo-workflows` namespace on the `iad-ci` cluster.
-
 ## Artifacts CI Produces
 
-The CI pipeline produces exactly **one artifact**: a Docker image pushed to Docker Hub.
+The build pipeline produces **two artifact types**: a Docker image and cross-compiled binaries.
 
 | Tag | Example | Purpose |
 |-----|---------|---------|
 | `<version>` | `ronaldraygun/domain-check:0.1.5` | Immutable, version-pinned deployment target |
 | `latest` | `ronaldraygun/domain-check:latest` | Rolling tag for convenience |
 
-The image is built from the repo's `Dockerfile` (multi-stage: `golang:1.22-alpine` builder → `alpine:3.19` runtime). The `VERSION` build arg is available but the current Dockerfile does not use it — it only uses the `CGO_ENABLED=0` static build with ldflags.
+The release pipeline produces GitHub Releases with binaries and checksums.
 
-## Artifacts CI Does NOT Produce
+## Build Pipeline: GoReleaser Step (Step 3)
 
-The CI pipeline does **not** run GoReleaser. GoReleaser is a separate release tool for GitHub binary distributions. The CI pipeline and GoReleaser have distinct responsibilities:
+**Template name:** `goreleaser`
 
-| Concern | CI WorkflowTemplate | GoReleaser |
-|---------|-------------------|------------|
-| Docker image build | Yes | No |
-| Binary releases (tar.gz/zip) | No | Yes (9 platform binaries) |
-| Checksums file | No | Yes (`checksums.txt`) |
-| Changelog generation | No | Yes (from git commits) |
-| GitHub Release creation | No | Yes |
-| Version bumping | Yes (auto-bump patch) | No (reads tag) |
-| Docker Hub push | Yes (`ronaldraygun`) | No |
+**Image:** `goreleaser/goreleaser:v2`
+
+**Logic:**
+1. Clone the repo (branch from `workflow.parameters.branch`) using `GH_TOKEN` for auth
+2. Run `goreleaser release --clean` to cross-compile binaries
+
+**Secrets:**
+- `GH_TOKEN` from `github-webhook-secret` (key: `token`) — used for git clone
+- `GITHUB_TOKEN` from `github-webhook-secret` (key: `token`) — used by goreleaser for GitHub API calls (release creation, artifact upload)
+
+**Note:** Argo Workflows automatically masks `secretKeyRef` values from pod logs and the Argo UI, so the token is never exposed.
+
+## Release Pipeline: GoReleaser Release Step
+
+**Template name:** `goreleaser-release`
+
+**Image:** `golang:1.26-alpine` (installs goreleaser v2.5.0 via wget)
+
+**Logic:**
+1. Install goreleaser binary
+2. Clone repo with full history (goreleaser needs tag metadata)
+3. Checkout the tag from `workflow.parameters.tag`
+4. Run `goreleaser release --clean`
+
+**Secrets:**
+- `GH_TOKEN` from `github-webhook-secret` (key: `token`) — used for git clone
+- `GITHUB_TOKEN` from `github-webhook-secret` (key: `token`) — used by goreleaser for GitHub Release creation
+
+## Secrets Required
+
+| Secret Name | Key | Used By | Purpose |
+|-------------|-----|---------|---------|
+| `github-webhook-secret` | `token` | `resolve-version` (`GH_TOKEN`), `docker-build` (`GIT_TOKEN`), `goreleaser` (`GH_TOKEN` + `GITHUB_TOKEN`), `quality-gate` (`GH_TOKEN`), `goreleaser-release` (`GH_TOKEN` + `GITHUB_TOKEN`) | GitHub API access for git clone/push, Kaniko git context, and goreleaser release creation |
+| `docker-hub-registry` | `.dockerconfigjson` | `docker-build` (volume mount) | Docker Hub push authentication |
+
+Both secrets must exist in the `argo-workflows` namespace on the `iad-ci` cluster.
 
 ## Gaps Between CI and GoReleaser
 
