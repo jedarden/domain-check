@@ -62,7 +62,23 @@ Controls how GoReleaser handles an **existing** GitHub Release with the same tag
 
 `replace` ensures a clean slate on every release run — stale binaries from a previous attempt are never left behind. This is the safest default for a single-maintainer project where re-running a release is a deliberate action (not a concurrent publish). The trade-off: if a release is replaced while users are actively downloading, in-flight downloads may break. Acceptable here since releases are infrequent and re-runs are manual.
 
+## Required Secrets
+
+### `GITHUB_TOKEN`
+
+GoReleaser requires a GitHub personal access token with **repo** scope (public_repo is sufficient for public repositories) to create and manage GitHub Releases. Set via the `GITHUB_TOKEN` environment variable:
+
+```bash
+export GITHUB_TOKEN="ghp_..."
+goreleaser release
+```
+
+The token is **not** configured in `.goreleaser.yml` — it is passed at runtime. Without it, GoReleaser prints an error and exits. In CI, the token is typically injected automatically (GitHub Actions provides `GITHUB_TOKEN` by default; for Argo Workflows, it must be stored as a Kubernetes `Secret` and mounted into the workflow pod).
+
+**Minimum scopes:** `public_repo` (read/write public repos) or `repo` (all repos). The token must have permission to create releases and upload release assets.
+
 ## Summary
 
 - **Before hooks:** `go mod tidy` + `go generate ./...` enforce clean deps and fresh generated code before every build
 - **Release:** Published immediately (`draft: false`), prerelease inferred from tag (`auto`), existing releases replaced on re-run (`mode: replace`)
+- **Secrets:** `GITHUB_TOKEN` with `repo` or `public_repo` scope required at runtime (not in the YAML config)

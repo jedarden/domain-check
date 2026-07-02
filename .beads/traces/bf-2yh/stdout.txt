@@ -1,0 +1,18 @@
+Bead **bf-2yh** is now closed. Here's a summary of the findings:
+
+### `project_name: domain-check`
+
+Sets the default name used across all GoReleaser output — archive filenames, checksum files, and GitHub release titles — overriding the Go module path with a clean, user-facing identifier.
+
+### `before.hooks`
+
+Two hooks run **once before any build step**, aborting the entire release on failure:
+
+| Hook | Purpose |
+|------|---------|
+| `go mod tidy` | Prunes unused deps and adds missing ones, ensuring `go.mod`/`go.sum` are consistent with the source being built |
+| `go generate ./...` | Executes all `//go:generate` directives across the module (e.g., embedded asset generation, string constants) before compilation |
+
+### When they run
+
+Before hooks execute in the GoReleaser build environment **at the start of the release pipeline**, before any builds, archives, checksums, or changelog generation. Any failure (non-zero exit) aborts the release.

@@ -1,0 +1,17 @@
+The split is complete. Here's the verification:
+
+✓ **Parent bf-2ru** now has `umbrella` label  
+✓ **Dependencies chained**: bf-5oq → bf-poq → bf-2ob → bf-5vp → bf-2ru  
+✓ **All 4 children** have `split-child` label  
+
+```
+SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+```
+
+**Children created:**
+- `bf-poq` — Audit goreleaser configuration and CI pipeline
+- `bf-5oq` — Add goreleaser step to Argo WorkflowTemplate  
+- `bf-2ob` — Configure goreleaser for GitHub release publishing
+- `bf-5vp` — Verify end-to-end goreleaser release pipeline
+
+The parent `bf-2ru` is now an umbrella that depends on the final verification child `bf-5vp`, completing the chain from audit → implementation → configuration → verification.

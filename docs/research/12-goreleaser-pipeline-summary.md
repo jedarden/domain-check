@@ -19,7 +19,7 @@ Tag push (e.g. git tag v1.2.3 && git push --tags)
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  2. Builds                                                                  │
-│     13 binaries across 4 OSes × 3 architectures                             │
+│     9 binaries across 4 OSes × 3 architectures (3 combos excluded)           │
 │     • CGO_ENABLED=0 (fully static, zero runtime deps)                       │
 │     • -s -w (strip symbols, ~25-30% size reduction)                        │
 │     • -X main.version/commit/date (version injection from git tag/SHA)     │

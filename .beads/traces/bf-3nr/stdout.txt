@@ -1,0 +1,11 @@
+Bead `bf-3nr` is closed. Here's a summary of what was done:
+
+**Task:** Document the goreleaser builds section configuration.
+
+**Finding:** The documentation already existed at `docs/research/09-goreleaser-builds.md` with complete coverage of all acceptance criteria:
+- ✅ Complete platform matrix (4 OSes × 3 architectures = 12, minus 3 ignored = 9 binaries)
+- ✅ ldflags explained (`-s -w` stripping + `-X` version/commit/date injection)
+- ✅ Ignored platform combinations documented with rationale
+- ✅ Main package path (`./cmd/domain-check`) documented
+
+**Fix applied:** Corrected an arithmetic error — the summary stated "13 release binaries" but the actual matrix produces **9** (4×3=12, minus 3 ignored). Updated `docs/research/09-goreleaser-builds.md` and pushed.

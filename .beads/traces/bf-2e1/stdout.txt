@@ -1,0 +1,12 @@
+Done. Here's what I implemented:
+
+**`docs/research/11-goreleaser-release.md`** — Documents the release section and before hooks:
+- **Before hooks:** `go mod tidy` + `go generate ./...` as build-time correctness gates
+- **`draft: false`** — publishes immediately, no manual promotion needed
+- **`prerelease: auto`** — infers prerelease flag from tag (hyphenated = prerelease, clean semver = stable)
+- **`mode: replace`** — deletes existing release on re-run for a clean slate
+
+**`docs/research/12-goreleaser-pipeline-summary.md`** — Full pipeline summary tying all 6 stages together:
+1. Before hooks → 2. Builds (13 binaries) → 3. Archives (9 tar.gz/zip) → 4. Checksum (SHA256) → 5. Changelog (filtered) → 6. GitHub Release (immediate publish)
+- Includes artifact inventory table (9 archives + checksums + changelog per tag)
+- Key design decisions table explaining rationale for each choice
