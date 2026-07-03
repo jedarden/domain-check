@@ -1,0 +1,9 @@
+All verified. The dependency chain is:
+
+```
+bf-3mbz → bf-4xep → bf-6coc → bf-5t1u (umbrella)
+```
+
+SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
+
+Children: bf-3mbz, bf-4xep, bf-6coc

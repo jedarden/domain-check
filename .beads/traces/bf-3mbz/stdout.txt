@@ -1,0 +1,21 @@
+=== Debug domain-check-build workflow with podGC override ===
+
+Submitted: domain-check-build-debug-podgc-hqwdk (podGC: OnWorkflowCompletion)
+- Result: Pods deleted on workflow failure (OnWorkflowCompletion cleans up on failure too)
+- Lesson: OnWorkflowCompletion is NOT useful for debug — it still deletes pods when workflow fails
+
+Submitted: domain-check-build-debug-podgc2-5dxln (podGC: OnWorkflowSuccess)
+- Result: Pods PRESERVED on failure — can retrieve logs after workflow completes
+
+Quality-gate step: FAILED
+- Node: build-quality-gate
+- Phase: Failed
+- Exit code: 2
+- Root cause: go: -race requires cgo; enable cgo by setting CGO_ENABLED=1
+  The golang:1.26-alpine image has CGO disabled by default.
+  The quality-gate template runs `go test -race ./...` which requires CGO_ENABLED=1.
+  Fix: add CGO_ENABLED=1 to the container's env or use a non-alpine image.
+
+Pod preservation confirmed: With OnWorkflowSuccess, the pod
+(domain-check-build-debug-podgc2-5dxln-build-quality-gate-1082504947)
+remains in Error state after workflow failure, allowing log retrieval.
