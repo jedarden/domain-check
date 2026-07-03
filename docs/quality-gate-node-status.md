@@ -34,12 +34,42 @@
 | Reason | Deleted by `podGC: OnPodCompletion` — the controller deletes pods the moment they finish. |
 | Logs Available | No — cannot be retrieved after podGC deletion. To capture logs from a failed step, either stream them while running or submit a debug workflow with `podGC: OnWorkflowCompletion` override. |
 
+## Debug Workflow Confirmation
+
+| Field | Value |
+|-------|-------|
+| Debug Workflow | `domain-check-build-debug-podgc2-5dxln` |
+| Phase | Failed (reproduces the original failure) |
+| Quality-Gate Pod | `domain-check-build-debug-podgc2-5dxln-build-quality-gate-1082504947` |
+| podGC Strategy | `OnWorkflowSuccess` (pods retained on failure) |
+| Exit Code | **2** |
+| Duration | ~39s (21:55:34Z → 21:56:13Z) |
+
+### Steps Completed Before Failure
+
+1. `apk --no-cache add git ca-certificates` — OK (20.6 MiB in 29 packages)
+2. `git clone --branch main` — OK
+3. `go version` — OK (go1.26.4 linux/amd64)
+4. `go vet ./...` — OK (no vet errors)
+5. `go test -race ./...` — **FAILED** at 2026-07-03T21:56:13Z
+
+### Key Log Excerpt
+
+```
++ go test -race ./...
+go: -race requires cgo; enable cgo by setting CGO_ENABLED=1
+time=2026-07-03T21:56:13.054Z level=INFO msg="sub-process exited" argo=true error="exit status 2"
+Error: exit status 2
+```
+
 ## Root Cause Analysis
 
-Exit code 2 indicates the quality-gate step itself failed (not a pod-level crash). Per prior analysis (commit `0703367`), this is caused by `go test -race` failing on Alpine due to missing CGO support — Alpine musl libc does not support the race detector which requires CGO.
+**Confirmed:** The `golang:1.26-alpine` base image disables CGO by default. The Go race detector (`-race` flag) requires `CGO_ENABLED=1`. The quality-gate step sets no `CGO_ENABLED` environment variable, so CGO is off (`0`), and `go test -race` fails immediately with exit code 2 before running any tests.
+
+The fix is to add `CGO_ENABLED=1` to the quality-gate container's `env` list in the `domain-check-build` WorkflowTemplate in `declarative-config`. Alpine uses musl libc, so CGO is functional but the resulting binary links against musl rather than glibc.
 
 ## Audit Trail
 
-- Workflow no longer present in cluster (garbage collected)
-- `kubectl get pods -l workflows.argoproj.io/workflow=domain-check-build-94972` → No resources found
-- All pod logs unrecoverable — podGC deletes pods on completion
+- Original workflow `domain-check-build-94972` — no longer present in cluster (garbage collected), all pod logs unrecoverable
+- Debug workflow `domain-check-build-debug-podgc2-5dxln` — full logs captured in `docs/quality-gate-logs.md`
+- Prior debug workflows (`bf-3mbz`, `podgc-hqwdk`) — pods cleaned up before logs captured; led to the `OnWorkflowSuccess` strategy that succeeded on the third attempt
