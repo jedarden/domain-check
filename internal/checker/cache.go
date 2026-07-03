@@ -67,33 +67,25 @@ func NewResultCache(ttls CacheTTLs, maxEntries int) *ResultCache {
 // Get retrieves a cached result for the given normalized domain.
 // Returns nil if not found or expired.
 func (c *ResultCache) Get(key string) *domain.DomainResult {
-	c.mu.RLock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	el, ok := c.items[key]
-	c.mu.RUnlock()
 	if !ok {
-		c.mu.Lock()
 		c.misses++
-		c.mu.Unlock()
 		return nil
 	}
 
 	entry := el.Value.(*cacheEntry)
 	if time.Now().After(entry.expiry) {
-		// Expired — remove lazily on next write lock.
-		c.mu.Lock()
-		if el2, ok := c.items[key]; ok && el == el2 {
-			c.removeElement(el)
-		}
+		c.removeElement(el)
 		c.misses++
-		c.mu.Unlock()
 		return nil
 	}
 
 	// Move to front (most recently used).
-	c.mu.Lock()
 	c.order.MoveToFront(el)
 	c.hits++
-	c.mu.Unlock()
 
 	result := entry.result
 	result.Cached = true
