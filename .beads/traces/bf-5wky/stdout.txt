@@ -1,0 +1,13 @@
+Done. Here's the summary:
+
+**Submitted workflow:** `domain-check-release-test-9gfxc`
+- Entrypoint: `release`
+- Tag: `v0.0.0-test` (confirmed on remote)
+- Used exact YAML from `docs/notes/release-workflow-test-results.md`
+- Committed and pushed
+- Bead `bf-5wky` closed (via direct db update — `br close` has a `claimed_at` schema bug)
+
+The workflow is now running on `iad-ci` and can be monitored with:
+```bash
+kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig get workflow domain-check-release-test-9gfxc -n argo-workflows -o jsonpath='{.status.phase}'
+```

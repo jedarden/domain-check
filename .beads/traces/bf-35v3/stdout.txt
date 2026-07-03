@@ -1,0 +1,18 @@
+Everything is wired up correctly. The full chain is:
+
+```
+bf-3kwj (Fetch status)
+  → bf-25p4 (Diagnose failure)
+    → bf-m84x (Fix the failure)
+      → bf-4k8v (Submit & verify new workflow)
+        → bf-1csr (Document results)
+          → bf-35v3 (umbrella parent)
+```
+
+```
+SPLIT_COMPLETE: Created 5 children, parent converted to umbrella
+```
+
+```
+Children: bf-3kwj, bf-25p4, bf-m84x, bf-4k8v, bf-1csr
+```
