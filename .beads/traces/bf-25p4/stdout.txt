@@ -1,0 +1,12 @@
+```
+SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
+```
+
+**Children:** bf-iaeg, bf-63d8, bf-3tu8
+
+**Chain:**
+1. `bf-iaeg` — Get quality-gate step logs from the failed workflow (no blockers, starts immediately)
+2. `bf-63d8` — Classify the quality-gate failure type (blocked by bf-iaeg)
+3. `bf-3tu8` — Propose and apply the fix for the quality-gate failure (blocked by bf-63d8)
+
+**Parent `bf-25p4`:** converted to umbrella, depends on `bf-3tu8` (last child), labeled `umbrella`

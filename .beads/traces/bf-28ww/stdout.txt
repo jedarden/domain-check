@@ -1,0 +1,3 @@
+Bead closed. Here's the summary:
+
+**Result:** No `domain-check-build` workflow runs exist on iad-ci. The WorkflowTemplate has been deployed for 37 days but has never been triggered — zero build runs (push or manual). The only domain-check workflows on the cluster are 6 `domain-check-debug-qg-*` test/debug runs (all failed with various errors), unrelated to production builds.

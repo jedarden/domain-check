@@ -1,0 +1,17 @@
+Everything is wired correctly.
+
+```
+SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+```
+
+```
+Children: bf-28ww, bf-226u, bf-obls, bf-4uws
+```
+
+**Dependency chain:**
+1. `bf-28ww` — List recent domain-check-build workflows on iad-ci
+2. `bf-226u` → depends on bf-28ww — Get full YAML of the most recent workflow
+3. `bf-obls` → depends on bf-226u — Extract quality-gate node status from workflow JSON
+4. `bf-4uws` → depends on bf-obls — Check if workflow pods still exist or were deleted by podGC
+
+Parent `bf-5tec` has the `umbrella` label and depends on the last child `bf-4uws`, so it will auto-close when all children complete.

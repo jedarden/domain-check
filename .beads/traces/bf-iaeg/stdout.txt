@@ -1,0 +1,15 @@
+The full dependency chain is correct:
+
+1. **bf-5tec** → Check quality-gate node status
+2. **bf-3bmi** → Capture logs (blocked by bf-5tec)
+3. **bf-4ygz** → Submit debug workflow if needed (blocked by bf-3bmi)
+4. **bf-29a0** → Parse logs and extract error details (blocked by bf-4ygz)
+5. **bf-iaeg** → Parent umbrella (blocked by bf-29a0)
+
+```
+SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+```
+
+```
+Children: bf-5tec, bf-3bmi, bf-4ygz, bf-29a0
+```
