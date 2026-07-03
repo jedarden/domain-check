@@ -1,0 +1,58 @@
+Quality-Gate Logs Capture — domain-check-build workflows
+=========================================================
+Captured: 2026-07-03
+Bead: bf-3bmi
+
+NOTE: Pod logs are NOT available. All domain-check-build workflows use podGC: OnPodCompletion
+(delete pods the moment they finish). No log archiving is configured in the quality-gate
+template (no artifacts, no workflow-level log persistence). The only data available is the
+workflow CRD status.
+
+Quality-Gate Template (from WorkflowTemplate domain-check-build):
+---------------------------------------------------------------
+Container: golang:1.26-alpine
+Timeout: 600s (10min)
+Resources: 1-4 CPU, 2-4Gi memory
+Script (set -ex):
+  1. apk --no-cache add git ca-certificates
+  2. git clone --branch $BRANCH https://x-access-token:${GH_TOKEN}@github.com/jedarden/domain-check.git /workspace
+  3. cd /workspace
+  4. go version
+  5. echo "Running quality gate on branch: ${BRANCH}"
+  6. go vet ./...
+  7. go test -race ./...
+
+Failure: exit code 2 (from set -ex shell, first failed command causes exit)
+
+Available Workflow Status Data (7 most recent runs):
+----------------------------------------------------
+
+Workflow                       Started            Finished           ExitCode  Duration  Notes
+domain-check-build-tqkkl       (GC'd — no data)                                                      Workflow CRD garbage-collected
+domain-check-build-x2f2d       2026-07-03T11:04:25 2026-07-03T11:05:15  2         ~50s
+domain-check-build-t98cn       2026-07-03T11:14:30 2026-07-03T11:15:17  2         ~47s
+domain-check-build-qv94b       2026-07-03T11:23:27 2026-07-03T11:37:46  2         ~14m      Duration suggests timeout or slow compile
+domain-check-build-s5z8k       2026-07-03T11:43:03 2026-07-03T11:43:47  2         ~44s
+domain-check-build-wmf2z       2026-07-03T11:50:08 2026-07-03T11:50:53  2         ~45s
+domain-check-build-qms44       2026-07-03T11:53:51 2026-07-03T11:54:35  2         ~44s
+
+All failures are identical: exit code 2, message "main: Error (exit code 2)"
+No log output, no artifacts, no results captured in any workflow node.
+No pods exist (deleted by podGC OnPodCompletion).
+
+Analysis:
+---------
+- Exit code 2 with `set -ex` means a command in the script returned non-zero.
+- The short duration (~45s) for most runs suggests the failure happens early:
+  either during `go vet ./...` or compilation during `go test -race ./...`.
+- The qv94b run took ~14 minutes — this could be a timeout (activeDeadlineSeconds=600s),
+  meaning tests hung or took too long.
+- The `go:1.26-alpine` image tag may not exist or may be outdated — golang:1.26
+  is very new and may have Alpine base image issues.
+
+Recommendations for future log capture:
+---------------------------------------
+1. Add `podGC: OnWorkflowCompletion` to the quality-gate template so pods survive
+   until the workflow itself is cleaned up.
+2. Add a log archiving sidecar or workflow-level artifact collection.
+3. Submit a debug workflow with podGC override to capture the actual error output.
