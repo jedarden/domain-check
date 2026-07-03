@@ -68,6 +68,22 @@ Error: exit status 2
 
 The fix is to add `CGO_ENABLED=1` to the quality-gate container's `env` list in the `domain-check-build` WorkflowTemplate in `declarative-config`. Alpine uses musl libc, so CGO is functional but the resulting binary links against musl rather than glibc.
 
+## Cross-Reference Verification (bf-2zcl)
+
+Verified on 2026-07-03 that all key findings are consistent across `docs/quality-gate-logs.md` and this document:
+
+| Check | Result |
+|-------|--------|
+| Debug workflow name | `domain-check-build-debug-podgc2-5dxln` — identical in both docs |
+| Pod name | `domain-check-build-debug-podgc2-5dxln-build-quality-gate-1082504947` — identical in both docs |
+| Exit code | **2** — consistent (logs line 63, this doc lines 22/61-63) |
+| Error message | `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1` — identical in both docs |
+| Root cause | `golang:1.26-alpine` CGO disabled + `-race` requires CGO — identical analysis |
+| Fix | Add `CGO_ENABLED=1` to quality-gate env — identical recommendation |
+| Audit trail refs | `quality-gate-logs.md` references bf-3mbz/podgc-hqwdk prior attempts; this doc references `quality-gate-logs.md` as the log source — bidirectional |
+
+**Conclusion:** Both documents are fully consistent. No discrepancies found.
+
 ## Audit Trail
 
 - Original workflow `domain-check-build-94972` — no longer present in cluster (garbage collected), all pod logs unrecoverable
