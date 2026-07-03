@@ -1,6 +1,6 @@
 # CI WorkflowTemplate: domain-check-build
 
-Documents the Argo Workflows WorkflowTemplate that handles Docker image builds for domain-check. The template lives in `declarative-config` at `k8s/iad-ci/argo-workflows/domain-check-workflowtemplate.yml` and is synced to the `iad-ci` cluster via ArgoCD.
+Documents the Argo Workflows WorkflowTemplate that handles Docker image builds and GitHub releases for domain-check. The template lives in `declarative-config` at `k8s/iad-ci/argo-workflows/domain-check-workflowtemplate.yml` and is synced to the `iad-ci` cluster via ArgoCD.
 
 ## Template Overview
 
@@ -9,8 +9,19 @@ Documents the Argo Workflows WorkflowTemplate that handles Docker image builds f
 | **Name** | `domain-check-build` |
 | **Namespace** | `argo-workflows` |
 | **ServiceAccount** | `argo-workflow` |
-| **Entrypoint** | `build` (steps-based DAG) |
+| **Entrypoints** | `build` (default, push to main) and `release` (tag push v*) |
 | **Source repo** | `github.com/jedarden/domain-check` (parameterized, default: `main` branch) |
+
+## Automated Triggering
+
+The `domain-check-sensor` (in `declarative-config` at `k8s/iad-ci/argo-events/domain-check-sensor.yml`) watches for push events via the `github-webhooks` EventSource and routes them to the correct entrypoint:
+
+| Event | Filter | Entrypoint | What Runs |
+|-------|--------|------------|-----------|
+| Push to `main` | `body.ref == refs/heads/main` | `build` | quality gate → version resolve → Docker build |
+| Tag push `v*` | `body.ref =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+` | `release` | quality gate → goreleaser → GitHub Release |
+
+CI auto-bump commits (author `Argo Workflows CI`) are filtered out to prevent cascade loops.
 
 ## Step Pipeline
 
@@ -22,22 +33,49 @@ Triggered on push to main. Three sequential steps:
 
 ```
 build (entrypoint)
-├── Step 1: resolve-version    — Auto-bump or read VERSION file
-├── Step 2: docker-build      — Kaniko Docker build → Docker Hub
-└── Step 3: goreleaser        — Cross-compile binaries via goreleaser/goreleaser:v2
+├── Step 1: build-quality-gate — go vet + go test -race (clones by branch)
+├── Step 2: resolve-version     — Auto-bump or read VERSION file
+└── Step 3: docker-build       — Kaniko Docker build → Docker Hub
 ```
+
+**Note:** GoReleaser does NOT run in the build pipeline. It runs only via the `release` entrypoint on tag pushes (v* tags).
 
 ### Release pipeline (entrypoint: `release`)
 
-Triggered on tag push. Two sequential steps:
+Triggered on tag push (v*). Two sequential steps:
 
 ```
 release
-├── Step 1: quality-gate       — go vet + go test -race
+├── Step 1: quality-gate       — go vet + go test -race (clones by tag)
 └── Step 2: goreleaser-release — Cross-compile + publish GitHub Release
 ```
 
-### Step 1: resolve-version
+### Step 1: build-quality-gate
+
+**Purpose:** Validate code quality before building the Docker image. Clones the repo by branch and runs vet + test.
+
+**Image:** `golang:1.26-alpine`
+
+**Logic:**
+1. Clone the repo using the branch from `workflow.parameters.branch`
+2. Run `go vet ./...`
+3. Run `go test -race ./...`
+
+**Resources:**
+
+| | Request | Limit |
+|--|---------|-------|
+| CPU | 1000m | 4000m |
+| Memory | 2Gi | 4Gi |
+
+**Deadline:** 600s (10 minutes).
+
+**Secrets:**
+- `GH_TOKEN` from `github-webhook-secret` (key: `token`) — used for git clone
+
+**Difference from `quality-gate`:** The `quality-gate` template (used by the release pipeline) clones by tag (`workflow.parameters.tag`), while `build-quality-gate` clones by branch. This distinction is necessary because branch pushes don't have a tag reference.
+
+### Step 2: resolve-version
 
 **Purpose:** Determine the image version string by reading or auto-bumping the `VERSION` file in the repo.
 
@@ -59,7 +97,7 @@ release
 
 **Git identity:** `github@jedarden.com` / `jedarden` (per CLAUDE.md convention)
 
-### Step 2: docker-build
+### Step 3: docker-build
 
 **Purpose:** Build a Docker image from the repo's `Dockerfile` and push to Docker Hub.
 
@@ -105,21 +143,15 @@ The build pipeline produces **two artifact types**: a Docker image and cross-com
 
 The release pipeline produces GitHub Releases with binaries and checksums.
 
-## Build Pipeline: GoReleaser Step (Step 3)
+## Build Pipeline: GoReleaser Step (Removed)
 
-**Template name:** `goreleaser`
+The `goreleaser` template was previously part of the build pipeline (Step 3), running `goreleaser release --clean` on every push to main. This was removed because:
 
-**Image:** `goreleaser/goreleaser:v2`
+1. GoReleaser requires a git tag to produce a release — running without a tag is incorrect
+2. Cross-compiled binaries should only be published on intentional releases (tag pushes)
+3. The `release` entrypoint already handles this correctly with its own `goreleaser-release` template
 
-**Logic:**
-1. Clone the repo (branch from `workflow.parameters.branch`) using `GH_TOKEN` for auth
-2. Run `goreleaser release --clean` to cross-compile binaries
-
-**Secrets:**
-- `GH_TOKEN` from `github-webhook-secret` (key: `token`) — used for git clone
-- `GITHUB_TOKEN` from `github-webhook-secret` (key: `token`) — used by goreleaser for GitHub API calls (release creation, artifact upload)
-
-**Note:** Argo Workflows automatically masks `secretKeyRef` values from pod logs and the Argo UI, so the token is never exposed.
+The `release` entrypoint (triggered on `v*` tag pushes) runs `quality-gate → goreleaser-release`, which properly validates code quality and publishes GitHub Releases.
 
 ## Release Pipeline: GoReleaser Release Step
 
@@ -141,7 +173,7 @@ The release pipeline produces GitHub Releases with binaries and checksums.
 
 | Secret Name | Key | Used By | Purpose |
 |-------------|-----|---------|---------|
-| `github-webhook-secret` | `token` | `resolve-version` (`GH_TOKEN`), `docker-build` (`GIT_TOKEN`), `goreleaser` (`GH_TOKEN` + `GITHUB_TOKEN`), `quality-gate` (`GH_TOKEN`), `goreleaser-release` (`GH_TOKEN` + `GITHUB_TOKEN`) | GitHub API access for git clone/push, Kaniko git context, and goreleaser release creation |
+| `github-webhook-secret` | `token` | `resolve-version` (`GH_TOKEN`), `docker-build` (`GIT_TOKEN`), `quality-gate` (`GH_TOKEN`), `goreleaser-release` (`GH_TOKEN` + `GITHUB_TOKEN`) | GitHub API access for git clone/push, Kaniko git context, and goreleaser release creation |
 | `docker-hub-registry` | `.dockerconfigjson` | `docker-build` (volume mount) | Docker Hub push authentication |
 
 Both secrets must exist in the `argo-workflows` namespace on the `iad-ci` cluster.
@@ -181,6 +213,8 @@ The `docker-build` step uses `gcr.io/kaniko-project/executor:latest` which viola
 
 ## How to Submit Manually
 
+### Build (equivalent to push to main):
+
 ```bash
 kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig create -f - <<EOF
 apiVersion: argoproj.io/v1alpha1
@@ -191,5 +225,116 @@ metadata:
 spec:
   workflowTemplateRef:
     name: domain-check-build
+EOF
+```
+
+### Release (equivalent to tag push):
+
+```bash
+kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig create -f - <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: domain-check-release-manual-
+  namespace: argo-workflows
+spec:
+  entrypoint: release
+  workflowTemplateRef:
+    name: domain-check-build
+  arguments:
+    parameters:
+      - name: tag
+        value: "v0.1.0"
+EOF
+```
+
+## EventSource Configuration
+
+The `domain-check` entry in `github-eventsource.yml` (declarative-config) configures a GitHub webhook:
+
+| Field | Value |
+|-------|-------|
+| **EventSource** | `github-webhooks` |
+| **Event name** | `domain-check` |
+| **Endpoint** | `/domain-check` |
+| **Events** | `push` |
+| **Webhook URL** | `https://webhooks-ci.ardenone.com/domain-check` |
+
+This single webhook endpoint receives all push events (both branch and tag pushes). The sensor applies filters to route them to the correct entrypoint.
+
+## Sensor Configuration
+
+The `domain-check-sensor` (in `k8s/iad-ci/argo-events/domain-check-sensor.yml`) has:
+
+- **One dependency:** `domain-check-push` from `github-webhooks` / `domain-check` (filters for `push` events)
+- **Trigger 1 (build):** Additional filter `body.ref == refs/heads/main` + exclude CI auto-bump commits → submits workflow with default `build` entrypoint
+- **Trigger 2 (release):** Additional filter `body.ref =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+` → submits workflow with `release` entrypoint, passing the tag (stripped of `refs/tags/` prefix) as a parameter
+
+### Tag Push Parameter Extraction
+
+For tag pushes, the sensor extracts:
+- `tag`: `refs/tags/v0.1.0` → `v0.1.0` (strips `refs/tags/` prefix)
+- Labels: `triggered-by: github-webhook`, `tag: refs/tags/v0.1.0`
+
+### Tag Format
+
+Only semver tags matching `vX.Y.Z` (where X, Y, Z are digits) trigger the release pipeline. Pre-release tags like `v1.0.0-rc.1` are NOT matched by this regex — they would need a separate trigger or regex adjustment if pre-release automation is desired.
+
+## Manual Release Workflow Test (2026-07-02)
+
+### Test: Entrypoint Routing Verification
+
+Submitted a manual workflow with `entrypoint: release` and `tag: v0.0.0-test` to verify that the release entrypoint routes to `quality-gate → goreleaser-release` steps (not the build pipeline steps).
+
+**Workflow runs submitted:**
+
+| Run ID | Generated Name | Result |
+|--------|---------------|--------|
+| 1 | `domain-check-release-test-ns9ml` | Failed — quality-gate exit code 127 |
+| 2 | `domain-check-release-test-9n6bq` | Failed — quality-gate exit code 127 (with podGC: OnWorkflowCompletion) |
+| 3 | `domain-check-release-test-mk8bg` | Failed — quality-gate exit code 127 |
+
+**Entrypoint routing: CONFIRMED ✓**
+
+All release workflows ran the `quality-gate` template (release variant, clones by tag), not `build-quality-gate` (build variant, clones by branch). This proves the `entrypoint: release` routing works correctly — the workflow correctly selected the release pipeline steps.
+
+**goreleaser step: NOT REACHED**
+
+The goreleaser-release step was never reached because quality-gate failed first. This was NOT due to the missing tag (`v0.0.0-test` doesn't exist on remote) — the failure occurred before `git clone` could even be attempted.
+
+### Pre-existing CI Bug: `golang:1.26-alpine` Missing `git`
+
+Both `quality-gate` and `build-quality-gate` templates use `image: golang:1.26-alpine` and run `git clone` as their first command. The exit code 127 (command not found) indicates `git` is not installed in the `golang:1.26-alpine` image.
+
+**Affected templates:** `build-quality-gate`, `quality-gate`, `goreleaser-release` (all three use `git clone`)
+
+**Fix required:** Either:
+1. Switch image to `golang:1.26-alpine` with `apk add --no-cache git` (install git at runtime)
+2. Switch to a non-Alpine golang image that includes git (e.g., `golang:1.26`)
+3. Use `alpine/git` for git operations and a separate golang image for build/test
+
+This bug affects ALL domain-check CI workflows — not just the release pipeline.
+
+### Submit Command Used
+
+```bash
+kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig create -f - <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: domain-check-release-test-
+  namespace: argo-workflows
+spec:
+  workflowTemplateRef:
+    name: domain-check-build
+  entrypoint: release
+  arguments:
+    parameters:
+    - name: git-repo
+      value: jedarden/domain-check
+    - name: branch
+      value: main
+    - name: tag
+      value: v0.0.0-test
 EOF
 ```
