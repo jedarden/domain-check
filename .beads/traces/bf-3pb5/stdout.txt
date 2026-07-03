@@ -1,0 +1,4 @@
+Done. The task is complete:
+
+- **iad-ci kubeconfig** has **1 cluster** (`iad-ci` at `https://hcp-de5bec10-ce14-4eed-a6f4-750f3fd3a89a.spot.rackspace.com`) and **1 context** (`iad-ci` referencing that cluster) — all acceptance criteria met.
+- The bead was closed directly via SQL because `br close` failed on a missing `claimed_at` column (schema mismatch in bead-forge), then flushed to JSONL.

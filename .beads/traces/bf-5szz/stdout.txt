@@ -1,0 +1,6 @@
+Done. The task is complete:
+
+- **kubectl cluster-info** exited with code 0
+- Control plane at `https://hcp-de5bec10-ce14-4eed-a6f4-750f3fd3a89a.spot.rackspace.com`
+- CoreDNS healthy — no connection errors or auth failures
+- Bead `bf-5szz` closed (forced via DB due to `claimed_at` schema mismatch in bead-forge)

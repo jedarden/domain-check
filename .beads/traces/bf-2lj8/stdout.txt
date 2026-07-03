@@ -1,0 +1,6 @@
+Task complete. The iad-ci kubeconfig verification passed:
+
+- **Cluster entries found:** `['iad-ci']`
+- **Both acceptance criteria met:** the list is non-empty and contains the expected `iad-ci` cluster entry.
+
+Bead `bf-2lj8` closed (via direct DB update + flush, due to a `br close` bug with the `claimed_at` format).

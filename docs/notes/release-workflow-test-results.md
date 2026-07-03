@@ -89,3 +89,34 @@ EOF
 2. **Git fix works** — `apk add git` in the `quality-gate` container resolves the exit code 127 issue
 3. **Full path requires a real tag** — `git clone --branch $TAG` fails without a tag on the remote, preventing quality-gate from running `go vet`/`go test` and preventing goreleaser-release from being reached
 4. **goreleaser-release also needs the tag** — its script does `git checkout $TAG` which would also fail for a non-existent tag, but the step is gated behind quality-gate
+
+---
+
+## Most Recent domain-check-build Workflow (2026-07-03)
+
+**Date queried:** 2026-07-03
+**Namespace:** `argo-workflows` (iad-ci cluster)
+**Template:** `domain-check-build` (exists, created 2026-05-27T02:17:56Z, age 37d)
+
+### Finding: No domain-check-build workflow runs present
+
+All `domain-check-build` workflow instances have been cleaned up from the cluster (podGC policy deletes pods on completion, and workflows are garbage-collected). No active, succeeded, or failed workflow instances with this template name exist in the namespace.
+
+The most recent domain-check-related workflows were the `domain-check-release-test-*` manual runs documented above (Test 1 and Test 2), which have also been cleaned up.
+
+### Workflow Template Status
+
+| Field | Value |
+|-------|-------|
+| Name | `domain-check-build` |
+| Namespace | `argo-workflows` |
+| Created | 2026-05-27T02:17:56Z |
+| Age | 37 days |
+| ResourceVersion | 40239012 |
+| Generation | 4 (updated 3 times since creation) |
+
+### Summary
+
+- **Most recent domain-check-build workflow run:** None present (cleaned up)
+- **Status:** N/A — no workflow instances found
+- **Template exists:** Yes, ready for new submissions

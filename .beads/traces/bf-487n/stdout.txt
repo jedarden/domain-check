@@ -1,0 +1,6 @@
+Bead closed successfully. Summary:
+
+- **Command**: `kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig get workflows -n argo-workflows --sort-by=.metadata.creationTimestamp`
+- **Exit code**: 0 ✅
+- **Output**: 18 workflow entries with NAME, STATUS, AGE, MESSAGE columns ✅
+- **Namespace access**: `argo-workflows` on iad-ci is accessible ✅

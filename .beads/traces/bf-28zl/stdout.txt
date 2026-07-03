@@ -1,0 +1,6 @@
+Done. Both acceptance criteria verified:
+
+- **`api-resources | grep workflows`** — succeeded (exit 0), listed `workflows` and `cronworkflows` CRDs under `argoproj.io/v1alpha1`
+- **`get workflows -n argo-workflows --sort-by=.metadata.creationTimestamp`** — succeeded (exit 0), returned 20 workflows with `NAME`, `STATUS`, `AGE` columns (including a recent `needle-ci-mzgwq` Succeeded and several `sigil-ci-*` Running)
+
+Bead `bf-28zl` closed.

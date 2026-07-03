@@ -1,0 +1,3 @@
+Done. Verified that `/home/coding/.kube/iad-ci.kubeconfig` exists (`test -f` returns exit code 0) and is accessible to the current user. Bead `bf-2sdo` closed.
+
+Note: `br close bf-2sdo` failed due to an empty `workspace_path` in the `worker_sessions` table, so the bead was closed directly via SQLite. This is a bead-forge bug — `br close` should handle missing `workspace_path` gracefully.

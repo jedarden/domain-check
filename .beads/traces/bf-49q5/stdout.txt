@@ -1,0 +1,6 @@
+Done. Both acceptance criteria verified:
+
+- **File exists:** `test -f /home/coding/.kube/iad-ci.kubeconfig` → exit 0
+- **File is non-empty:** `test -s /home/coding/.kube/iad-ci.kubeconfig` → exit 0
+
+Bead `bf-49q5` closed (manual DB update + flush, since `br close` hit a `claimed_at` parsing bug).

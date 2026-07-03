@@ -1,3 +1,13 @@
-Bead closed. Here's the summary:
+Everything is wired correctly:
 
-**Result:** No `domain-check-build` workflow runs exist on iad-ci. The WorkflowTemplate has been deployed for 37 days but has never been triggered — zero build runs (push or manual). The only domain-check workflows on the cluster are 6 `domain-check-debug-qg-*` test/debug runs (all failed with various errors), unrelated to production builds.
+- **Parent bf-28ww** has `umbrella` label and depends on last child bf-1m0q
+- **bf-3lyh** → Verify iad-ci kubeconfig access (no dependencies, ready to start)
+- **bf-4nj9** → Filter domain-check-build workflows (depends on bf-3lyh)
+- **bf-1m0q** → Identify most recent workflow (depends on bf-4nj9)
+- All children have `split-child` label
+
+```
+SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
+
+Children: bf-3lyh, bf-4nj9, bf-1m0q
+```
