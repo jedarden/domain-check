@@ -57,4 +57,6 @@ The initial attempt to capture logs failed because all pods were deleted by Argo
 
 Both produced identical failure: `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`.
 
-Note: `OnWorkflowCompletion` podGC still deletes pods once the entire workflow finishes (not just the individual step), so logs must be captured while the workflow is still in a terminal state but before the podGC controller runs.
+Third confirmation captured from workflow `domain-check-build-debug-podgc2-5dxln` (pod `domain-check-build-debug-podgc2-5dxln-build-quality-gate-1082504947`), which was still running when checked. The pod was in `Error` state with the same `go test -race ./...` failure. Go version `go1.26.4 linux/amd64` on `golang:1.26-alpine`. `go vet ./...` passed; only `go test -race` failed.
+
+Note: `OnWorkflowCompletion` podGC still deletes pods once the entire workflow finishes (not just the individual step), so logs must be captured while the workflow is still in a terminal state but before the podGC controller runs. In this case the pod survived because the workflow was still in a terminal `Failed` state and podGC had not yet cleaned up.
