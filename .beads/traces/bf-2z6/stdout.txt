@@ -1,0 +1,3 @@
+Bead **bf-2z6** is now closed. 
+
+**Summary:** The task was already complete — both goreleaser steps in the `domain-check-build` WorkflowTemplate already have `GITHUB_TOKEN` wired via `secretKeyRef` to `github-webhook-secret[token]`. The secret exists in the `argo-workflows` namespace on iad-ci, and `secretKeyRef` ensures the token is masked from Argo Workflows logs and UI. Documentation in `docs/notes/10-ci-workflowtemplate.md` was already up to date (commit `5fca41d`). The `br close` command hit a db schema issue (`claimed_at` column), so I closed the bead directly via SQL and flushed.

@@ -1,0 +1,10 @@
+Done. The domain-check-sensor YAML in declarative-config was **already correctly configured** — no changes were needed. All six acceptance criteria were verified:
+
+1. ✅ **Regex filter** `^refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+` on `body.ref`
+2. ✅ **Branch/tag distinction** — Trigger 1 matches `refs/heads/main`, Trigger 2 matches `^refs/tags/v...`
+3. ✅ **Release entrypoint** + `tag` parameter with `refs/tags/` prefix stripped
+4. ✅ **Build entrypoint** unchanged for `refs/heads/main` pushes
+5. ✅ **CI auto-bump filter** blocks `Argo Workflows CI` author to prevent cascade loops
+6. ✅ **Workflow labels** include `tag: "{{dependencies.domain-check-push.body.ref}}"`
+
+Bead `bf-2rkm` closed.

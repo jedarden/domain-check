@@ -1,15 +1,15 @@
 {
-  "bead_id": "bf-poq",
+  "bead_id": "bf-3i1s",
   "agent": "glm",
   "provider": "zai",
   "model": "glm-5-turbo",
   "exit_code": 0,
   "outcome": "success",
-  "duration_ms": 144971,
+  "duration_ms": 112388,
   "input_tokens": null,
   "output_tokens": null,
   "cost_usd": null,
-  "captured_at": "2026-07-02T19:42:00.340522194Z",
+  "captured_at": "2026-07-02T22:14:49.083427261Z",
   "trace_format": "raw_text",
   "pruned": false,
   "template_version": null

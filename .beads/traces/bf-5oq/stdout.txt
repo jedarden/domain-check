@@ -1,0 +1,21 @@
+Everything is wired correctly. Here's the complete chain:
+
+```
+bf-60w  Add goreleaser container step to WorkflowTemplate
+  ↓
+bf-2z6  Wire GitHub token secret to goreleaser step
+  ↓
+bf-259  Configure tag-triggered execution for goreleaser step
+  ↓
+bf-3bd  Validate WorkflowTemplate YAML and verify ArgoCD sync
+  ↓
+bf-5oq  [umbrella] Add goreleaser step to Argo WorkflowTemplate
+```
+
+```
+SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+```
+
+```
+Children: bf-60w, bf-2z6, bf-259, bf-3bd
+```

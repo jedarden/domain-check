@@ -1,0 +1,14 @@
+Everything is wired correctly. The dependency tree shows the full chain:
+
+```
+bf-iotu (parent/umbrella)
+  └── bf-5ti6: Document release workflow test results
+      └── bf-35v3: Capture workflow results and verify quality-gate passes
+          └── bf-5wky: Submit manual release workflow with tag
+              └── bf-5tvu: Push test tag v0.0.0-test to remote
+```
+
+```
+SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+Children: bf-5tvu, bf-5wky, bf-35v3, bf-5ti6
+```

@@ -1,0 +1,7 @@
+All acceptance criteria met:
+
+- **Workflow name identified:** `domain-check-build-manual-zwzbk`
+- **Terminal phase reached:** `Failed`
+- **Terminal phase recorded:** The `build-quality-gate` step failed with exit code 127 (command not found), and the underlying child pod also failed.
+
+Bead `bf-1kgw` is now closed.

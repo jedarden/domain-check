@@ -1,0 +1,10 @@
+All done. Here's the summary:
+
+**domain-check-build WorkflowTemplate — build entrypoint verified ✓**
+
+The `build` entrypoint steps are:
+1. **build-quality-gate**
+2. **resolve-version**  
+3. **docker-build**
+
+**goreleaser-release is NOT present** in the build entrypoint — it exists only in the separate `release` entrypoint (alongside `quality-gate`). All acceptance criteria met.

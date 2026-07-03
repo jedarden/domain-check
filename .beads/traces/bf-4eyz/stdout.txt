@@ -1,0 +1,9 @@
+Bead bf-4eyz is closed. The task is complete:
+
+1. **Retrieved workflow data** from iad-ci cluster for both `domain-check-build-manual-zwzbk` (build entrypoint) and `domain-check-release-test-wrr6h` (release entrypoint)
+2. **Added comment #5** to parent bead bf-4wvi with:
+   - Workflow names for both build and release
+   - Final phase (Failed for both)
+   - Step-by-step node summary with phases
+   - Root cause (golang:1.26-alpine image doesn't exist, exit code 127)
+3. **Flushed and closed** bead bf-4eyz
