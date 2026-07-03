@@ -1,0 +1,9 @@
+Bead `bf-3bmi` is closed. Here's the summary of what was captured:
+
+**Quality-gate logs from domain-check-build workflows:**
+
+- **Pods:** All deleted by `podGC: OnPodCompletion` — no container stdout/stderr available
+- **Workflow status (7 runs examined):** All failed identically with exit code 2, message "main: Error (exit code 2)"
+- **Quality-gate template:** Runs `go vet ./...` then `go test -race ./...` with `set -ex` — exit code 2 means the first failing command killed the script
+- **Run durations:** Most failed in ~45s (likely compilation/vet failure), one took ~14m (possible timeout)
+- **Findings saved to:** `.beads/traces/bf-3bmi/quality-gate-logs.txt` with analysis and recommendations for future log capture

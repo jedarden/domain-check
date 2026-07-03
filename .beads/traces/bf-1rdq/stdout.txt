@@ -1,0 +1,20 @@
+Bead `bf-1rdq` is now closed. Here's a summary of what was found:
+
+## Quality-Gate Node Status
+
+**Workflow:** `domain-check-build-qms44` (most recent)
+
+| Field | Value |
+|-------|-------|
+| **Node** | `build-quality-gate` |
+| **Template** | `build-quality-gate` (local scope) |
+| **Phase** | **Failed** |
+| **Exit Code** | `2` |
+| **Message** | `main: Error (exit code 2)` |
+| **Started At** | `2026-07-03T11:53:51Z` |
+| **Finished At** | `2026-07-03T11:54:35Z` |
+| **Duration** | ~44 seconds |
+| **Type** | Pod |
+| **Host** | `prod-instance-17817844549640125` |
+
+The quality-gate step consistently fails across recent runs (t98cn, qv94b, s5z8k, wmf2z, qms44 all show `Failed`). Exit code 2 from the `main` container indicates the quality gate check script itself is returning a failure — likely a lint, build, or test error within the container rather than an infrastructure issue.

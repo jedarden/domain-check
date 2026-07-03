@@ -1,11 +1,14 @@
-All three children are created with the `split-child` label, chained sequentially, and the parent has the `umbrella` label and depends on the last child.
+Bead `bf-5tec` is closed. Here's the summary of findings:
 
-```
-SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
-```
+**All 5 recent `domain-check-build` workflows on iad-ci** (t98cn, qv94b, s5z8k, wmf2z, qms44) show the **same quality-gate failure**:
 
-```
-Children: bf-3ih4, bf-1rdq, bf-3s2m
-```
+| Field | Value |
+|-------|-------|
+| Node | `build-quality-gate` |
+| Phase | **Failed** |
+| Exit Code | **2** |
+| Message | `main: Error (exit code 2)` |
+| Duration | ~44s |
+| Pods | **None remaining** — deleted by podGC (OnPodCompletion) |
 
-Chain: `bf-5tec` → depends on `bf-3s2m` → depends on `bf-1rdq` → depends on `bf-3ih4`
+The consistent exit code 2 across all 5 consecutive runs points to a **systematic issue in the source code** (build, lint, or test failure) rather than a transient/infrastructure problem.

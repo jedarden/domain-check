@@ -1,0 +1,7 @@
+Done. Here's a summary of findings:
+
+**Result: No pods exist for any domain-check-build workflows.**
+
+Queried the two most recent workflows (`domain-check-build-tqkkl` and `domain-check-build-qms44`) — both returned zero pods.
+
+**Root cause confirmed:** The workflow controller configmap (`argo-workflows-iad-ci-workflow-controller-configmap`) sets `podGC.strategy: OnPodCompletion` in `workflowDefaults.spec`. This means pods are deleted the instant each step finishes — they are never available for log inspection after workflow completion. The `ttlStrategy` retains workflow metadata records for 2h after failure / 30min after success, but the pods themselves are gone immediately.

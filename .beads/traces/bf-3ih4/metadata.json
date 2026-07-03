@@ -1,15 +1,15 @@
 {
-  "bead_id": "bf-iaeg",
+  "bead_id": "bf-3ih4",
   "agent": "glm",
   "provider": "zai",
   "model": "glm-5-turbo",
   "exit_code": 0,
   "outcome": "success",
-  "duration_ms": 505152,
+  "duration_ms": 79479,
   "input_tokens": null,
   "output_tokens": null,
   "cost_usd": null,
-  "captured_at": "2026-07-03T13:26:40.103861125Z",
+  "captured_at": "2026-07-03T12:18:43.167810983Z",
   "trace_format": "raw_text",
   "pruned": false,
   "template_version": null
