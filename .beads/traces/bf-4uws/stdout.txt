@@ -1,1 +1,0 @@
-No pods found. The `podGC: OnPodCompletion` policy deleted them immediately after the workflow finished (Failed). This is confirmed behavior — pods are deleted the moment they complete, regardless of success or failure.
