@@ -1,5 +1,5 @@
-Most Recent Failed domain-check-build Workflow Run
-=====================================================
+Most Recent Failed domain-check-build Workflow Run (as of 2026-07-03T23:45Z)
+==============================================================================
 
 Workflow Name:    domain-check-build-zj4z6
 Created:          2026-07-03T23:01:08Z
@@ -9,34 +9,31 @@ Overall Message:  child 'domain-check-build-zj4z6-975713780' failed
 Quality-Gate Node Details
 --------------------------
 Node Name:        build-quality-gate
-Node ID:          domain-check-build-zj4z6-975713780
+Full Node ID:     domain-check-build-zj4z6[0].build-quality-gate
 Node Phase:       Failed
 Node Message:     main: Error (exit code 2)
 Node Type:        Pod
+Started:          2026-07-03T23:01:08Z
+Finished:         2026-07-03T23:02:09Z (duration ~61s)
 
-Quality-Gate Step (from WorkflowTemplate)
------------------------------------------
-The build-quality-gate template runs inside a kaniko-like Alpine container:
-  1. apk --no-cache add git ca-certificates
-  2. git clone the branch/tag
-  3. go vet ./...
-  4. go test -race ./...
-
-Root Cause
-----------
-go test -race requires CGO (it needs the race detector runtime, which is a C library).
-Alpine sets CGO_ENABLED=0 by default (no C compiler/toolchain).
-This causes go test -race to fail with exit code 2.
+Root Cause (from prior analysis in docs/research/15-quality-gate-failure-analysis.md)
+--------------------------------------------------------------------------------------
+go test -race requires CGO (race detector runtime is a C library).
+The quality-gate step runs on an Alpine container where CGO_ENABLED=0 by default
+(no C compiler/toolchain), causing go test -race to fail with exit code 2.
 
 This failure is consistent across ALL recent domain-check-build runs:
-  domain-check-build-zj4z6       2026-07-03T23:01:08Z  Failed (42m ago)
-  domain-check-build-v45wx       2026-07-03T22:52:55Z  Failed (51m ago)
-  domain-check-build-hcvbd        2026-07-03T22:23:Z   Failed (79m ago)
-  domain-check-build-mb25p        2026-07-03T22:20:Z   Failed (82m ago)
-  domain-check-build-cnrsd        2026-07-03T22:16:Z   Failed (86m ago)
-  domain-check-build-mbhcg        2026-07-03T22:02:Z   Failed (100m ago)
-  domain-check-build-ptmfj        2026-07-03T22:05:Z   Failed (107m ago)
-  ...and earlier runs
+  domain-check-build-zj4z6       2026-07-03T23:01:08Z  Failed
+  domain-check-build-debug-qg-k6hrz 2026-07-03T23:10:12Z  Failed (debug run)
+  domain-check-build-v45wx       2026-07-03T22:52:55Z  Failed
+  domain-check-build-hcvbd       2026-07-03T22:24:51Z  Failed
+  domain-check-build-mb25p       2026-07-03T22:21:22Z  Failed
+  domain-check-build-cnrsd       2026-07-03T22:17:29Z  Failed
+  domain-check-build-mbhcg       2026-07-03T22:03:17Z  Failed
+  domain-check-build-ptmfj       2026-07-03T21:56:44Z  Failed
+
+Also observed: domain-check-build-qgdebug-wmx8r (Error, not Failed) —
+  error: serviceaccount "argo-workflow-executor" not found (infra issue, not code issue).
 
 Fix Required
 ------------
