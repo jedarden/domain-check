@@ -1,0 +1,51 @@
+Most Recent Failed domain-check-build Workflow Run
+=====================================================
+
+Workflow Name:    domain-check-build-zj4z6
+Created:          2026-07-03T23:01:08Z
+Phase:            Failed
+Overall Message:  child 'domain-check-build-zj4z6-975713780' failed
+
+Quality-Gate Node Details
+--------------------------
+Node Name:        build-quality-gate
+Node ID:          domain-check-build-zj4z6-975713780
+Node Phase:       Failed
+Node Message:     main: Error (exit code 2)
+Node Type:        Pod
+
+Quality-Gate Step (from WorkflowTemplate)
+-----------------------------------------
+The build-quality-gate template runs inside a kaniko-like Alpine container:
+  1. apk --no-cache add git ca-certificates
+  2. git clone the branch/tag
+  3. go vet ./...
+  4. go test -race ./...
+
+Root Cause
+----------
+go test -race requires CGO (it needs the race detector runtime, which is a C library).
+Alpine sets CGO_ENABLED=0 by default (no C compiler/toolchain).
+This causes go test -race to fail with exit code 2.
+
+This failure is consistent across ALL recent domain-check-build runs:
+  domain-check-build-zj4z6       2026-07-03T23:01:08Z  Failed (42m ago)
+  domain-check-build-v45wx       2026-07-03T22:52:55Z  Failed (51m ago)
+  domain-check-build-hcvbd        2026-07-03T22:23:Z   Failed (79m ago)
+  domain-check-build-mb25p        2026-07-03T22:20:Z   Failed (82m ago)
+  domain-check-build-cnrsd        2026-07-03T22:16:Z   Failed (86m ago)
+  domain-check-build-mbhcg        2026-07-03T22:02:Z   Failed (100m ago)
+  domain-check-build-ptmfj        2026-07-03T22:05:Z   Failed (107m ago)
+  ...and earlier runs
+
+Fix Required
+------------
+Either:
+  a) Use a non-Alpine base image for the quality-gate step (e.g., debian-slim or ubuntu),
+     or install build-base (gcc, musl-dev) on Alpine and set CGO_ENABLED=1.
+  b) Drop the -race flag from go test (loses race detection in CI).
+  c) Use a dedicated test stage on a golang:debian image (separate from the kaniko build).
+
+Option (a) is preferred: install build-base in Alpine and set CGO_ENABLED=1:
+  apk add --no-cache git ca-certificates build-base
+  export CGO_ENABLED=1
