@@ -1,0 +1,7 @@
+Done. Here's a summary:
+
+- **Most recent workflow:** `domain-check-build-x2f2d` (failed 8m31s ago)
+- **Pod query:** `kubectl get pods -n argo-workflows -l workflows.argoproj.io/workflow=domain-check-build-x2f2d`
+- **Result:** No pods found — expected, because the controller uses `podGC: OnPodCompletion` which deletes pods immediately after they finish
+- **Committed and pushed** to main
+- **Bead bf-fql4 closed** and flushed to JSONL

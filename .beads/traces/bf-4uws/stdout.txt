@@ -1,17 +1,1 @@
-The split is wired correctly. The dependency tree shows the parent (bf-4uws) depends on bf-4nz5 (last child), which depends on bf-fql4, which depends on bf-39hn. There are also prior failed split attempts visible in the tree, but the new chain is correct.
-
-```
-SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
-```
-
-```
-Children: bf-39hn, bf-fql4, bf-4nz5
-```
-
-| # | ID | Title | Depends On |
-|---|-----|-------|------------|
-| 1 | bf-39hn | Find the most recent domain-check-build workflow name | — |
-| 2 | bf-fql4 | Query pods for the identified workflow | bf-39hn |
-| 3 | bf-4nz5 | Analyze podGC behavior and document findings | bf-fql4 |
-
-Parent bf-4uws now has label `umbrella` and depends on bf-4nz5 (last child).
+No pods found. The `podGC: OnPodCompletion` policy deleted them immediately after the workflow finished (Failed). This is confirmed behavior — pods are deleted the moment they complete, regardless of success or failure.
