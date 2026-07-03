@@ -1,0 +1,13 @@
+Bead `bf-226u` is now closed.
+
+**Summary of findings:**
+
+| Field | Value |
+|-------|-------|
+| **Workflow** | `domain-check-build-tv2nz` |
+| **Phase** | `Running` |
+| **Message** | *(empty — still in progress)* |
+| **Created** | `2026-07-03T10:12:58Z` |
+| **JSON output** | `/tmp/domain-check-build-tv2nz.json` (32,493 bytes) |
+
+The most recent domain-check-build workflow is still running (90s old at time of check). No node failures observed yet.

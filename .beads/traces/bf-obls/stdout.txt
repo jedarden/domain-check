@@ -1,0 +1,28 @@
+Bead is closed and flushed. Here's a summary of what was accomplished:
+
+## Quality-Gate Node Status Extraction — Complete
+
+**Workflow examined:** `domain-check-build-hxcs5` (most recent completed run)
+
+### Overall Workflow Status
+| Field | Value |
+|-------|-------|
+| Phase | `Failed` |
+| Message | `child 'domain-check-build-hxcs5-882528585' failed` |
+| Started | `2026-07-03T10:05:18Z` |
+| Finished | `2026-07-03T10:07:13Z` |
+
+### Quality-Gate Node (`status.nodes["domain-check-build-hxcs5-882528585"]`)
+| Field | Value |
+|-------|-------|
+| **displayName** | `build-quality-gate` |
+| **Phase** | `Failed` |
+| **Type** | `Pod` |
+| **Exit Code** | `1` (from `outputs.exitCode`) |
+| **Message** | `main: Error (exit code 1)` |
+| **Started At** | `2026-07-03T10:05:18Z` |
+| **Finished At** | `2026-07-03T10:07:07Z` (~109s duration) |
+| **Template** | `build-quality-gate` |
+
+### Key Finding
+Argo Workflows stores container exit codes in `outputs.exitCode` (as a string), **not** as a top-level `exitCode` field on the node. The node-level `exitCode` is `null` for Pod-type nodes — the actual exit code lives in `node.outputs.exitCode`.

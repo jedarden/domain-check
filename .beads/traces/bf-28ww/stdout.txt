@@ -1,11 +1,11 @@
-All wiring is correct:
+Done. Here's the summary:
 
-- **bf-28ww** (parent) depends on **bf-8njy** (last child) ✓ — umbrella label ✓
-- **bf-8njy** depends on **bf-2eld** (child 2) ✓
-- **bf-2eld** depends on **bf-5euy** (child 1) ✓
+**Most recent domain-check-build workflow on iad-ci:**
 
-```
-SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
-```
+| Workflow | Age | Status |
+|----------|-----|--------|
+| `domain-check-build-hxcs5` | ~6m | Failed |
+| `domain-check-build-ztx4z` | ~32m | Failed |
+| `domain-check-build-vdxl5` | ~37m | Failed |
 
-Children: bf-5euy, bf-2eld, bf-8njy
+Three consecutive failures — the most recent being `domain-check-build-hxcs5` (created `2026-07-03T10:05:18Z`). Note: `br close` had a schema mismatch bug (`claimed_at` column expected on `issues` table but only exists on `worker_sessions`), so the bead was closed directly via SQL and flushed to JSONL.
