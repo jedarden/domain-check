@@ -51,4 +51,10 @@ Use `go test ./...` without `-race`. This loses race detection in CI, which is a
 
 ## Log Capture Notes
 
-The initial attempt to capture logs failed because all pods were deleted by Argo's `podGC: OnPodCompletion` policy. Pods are removed the instant they complete, making retroactive log capture impossible. A debug workflow with `podGC: OnWorkflowCompletion` override was submitted successfully, and the logs above were captured from that run.
+The initial attempt to capture logs failed because all pods were deleted by Argo's `podGC: OnPodCompletion` policy. Pods are removed the instant they complete, making retroactive log capture impossible. Two independent debug workflows with `podGC: OnWorkflowCompletion` override were submitted:
+- First: `domain-check-build-debug-mjwllw` (captured in `quality-gate-debug-logs.txt`)
+- Second: `domain-check-build-debug-qg-s8qhl` (confirmed identical root cause)
+
+Both produced identical failure: `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`.
+
+Note: `OnWorkflowCompletion` podGC still deletes pods once the entire workflow finishes (not just the individual step), so logs must be captured while the workflow is still in a terminal state but before the podGC controller runs.
