@@ -1,0 +1,10 @@
+Done. Bead `bf-2eld` is closed.
+
+**Summary:** Filtered `domain-check-build` workflows from the iad-ci cluster. Found 2 entries, both Failed:
+
+| Name | Status | Age | Message |
+|------|--------|-----|---------|
+| `domain-check-build-vdxl5` | Failed | 23m | child failed |
+| `domain-check-build-ztx4z` | Failed | 18m | child failed |
+
+No code changes were needed — this was a query/filtering task with no files to commit.

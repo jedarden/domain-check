@@ -1,0 +1,9 @@
+Done. Here's the summary:
+
+**Most recent domain-check-build workflow:** `domain-check-build-vdxl5`
+- **Phase:** Failed
+- **Created:** 2026-07-03T09:34:11Z
+- **Duration:** ~49 seconds
+- **Failure:** `build-quality-gate` pod exited with code 2
+
+Documented in `docs/notes/recent-ci-status.md`, committed and pushed to main. Bead `bf-1m0q` closed.

@@ -1,13 +1,11 @@
-Everything is wired correctly:
+All wiring is correct:
 
-- **Parent bf-28ww** has `umbrella` label and depends on last child bf-1m0q
-- **bf-3lyh** → Verify iad-ci kubeconfig access (no dependencies, ready to start)
-- **bf-4nj9** → Filter domain-check-build workflows (depends on bf-3lyh)
-- **bf-1m0q** → Identify most recent workflow (depends on bf-4nj9)
-- All children have `split-child` label
+- **bf-28ww** (parent) depends on **bf-8njy** (last child) ✓ — umbrella label ✓
+- **bf-8njy** depends on **bf-2eld** (child 2) ✓
+- **bf-2eld** depends on **bf-5euy** (child 1) ✓
 
 ```
 SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
-
-Children: bf-3lyh, bf-4nj9, bf-1m0q
 ```
+
+Children: bf-5euy, bf-2eld, bf-8njy

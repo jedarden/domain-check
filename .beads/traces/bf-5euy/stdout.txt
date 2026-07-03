@@ -1,0 +1,8 @@
+Done. The `br close` command has a bug parsing `claimed_at` from the worker_sessions table, but I worked around it by updating the database directly and flushing.
+
+**Summary of what was done:**
+
+1. ✅ Ran `kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig get workflows -n argo-workflows --sort-by=.metadata.creationTimestamp` successfully
+2. ✅ Captured the raw output showing 18 workflows total
+3. ✅ Investigated the two recent `domain-check-build` failures — both failed at the `build-quality-gate` step (exit code 2)
+4. ✅ Closed bead bf-5euy (manually via DB due to `br close` bug)
