@@ -1,13 +1,15 @@
-The dependency chain is clean and correct:
-
 ```
-bf-3y40 (Check quality-gate node status)
-  → bf-1uy9 (Attempt log capture from pods)
-    → bf-ak4h (Submit debug workflow if needed)
-      → bf-1nso (Save and summarize log analysis)
-        → bf-iaeg (parent umbrella)
+SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
 ```
 
-SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+```
+Children: bf-5hwl, bf-5t1u, bf-29ll
+```
 
-Children: bf-3y40, bf-1uy9, bf-ak4h, bf-1nso
+**Chain:**
+| Bead | Title | Depends On |
+|------|-------|-----------|
+| bf-5hwl | Identify most recent failed domain-check-build workflow and quality-gate node status | — (ready) |
+| bf-5t1u | Capture quality-gate logs from pods or submit debug workflow | bf-5hwl |
+| bf-29ll | Parse quality-gate logs and identify root cause | bf-5t1u |
+| bf-iaeg | Get quality-gate step logs from the failed workflow *(umbrella)* | bf-29ll |
