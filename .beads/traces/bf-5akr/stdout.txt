@@ -1,0 +1,9 @@
+Bead `bf-5akr` is closed. 
+
+**Summary:** The quality-gate container logs from the failed `domain-check-build` workflows were already captured by a prior bead (`bf-4hba`) and documented in `docs/quality-gate-logs.md`. Key findings:
+
+- **`go vet ./...`** — passed (no errors)
+- **`go test -race ./...`** — failed with: `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`
+- **Root cause:** `golang:1.26-alpine` disables CGO by default; the race detector requires CGO
+- **Fix:** Add `CGO_ENABLED=1` (or `gcc musl-dev`) to the quality-gate step in the WorkflowTemplate
+- All pods are gone (deleted by podGC) — no debug re-run needed since logs are already captured
