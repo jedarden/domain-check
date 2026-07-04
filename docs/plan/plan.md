@@ -120,7 +120,8 @@ Response (available):
   "tld": "com",
   "checked_at": "2026-03-22T14:30:00Z",
   "source": "rdap",
-  "cached": false
+  "cached": false,
+  "duration_ms": 112
 }
 ```
 
@@ -133,6 +134,7 @@ Response (taken):
   "checked_at": "2026-03-22T14:30:00Z",
   "source": "rdap",
   "cached": false,
+  "duration_ms": 108,
   "registration": {
     "registrar": "MarkMonitor Inc.",
     "created": "1997-09-15T04:00:00Z",
@@ -174,7 +176,7 @@ Response:
   "total": 5,
   "succeeded": 5,
   "failed": 0,
-  "duration": "234ms",
+  "duration": 234000000,
   "results": [
     { "domain": "example.com", "tld": "com", "result": { "domain": "example.com", "available": false, "tld": "com", "source": "rdap" } },
     { "domain": "example.org", "tld": "org", "result": { "domain": "example.org", "available": false, "tld": "org", "source": "rdap" } },
@@ -207,7 +209,7 @@ Response:
   "total": 4,
   "succeeded": 4,
   "failed": 0,
-  "duration": "342ms",
+  "duration": 342000000,
   "results": [
     { "domain": "numcrunch.com", "result": { "domain": "numcrunch.com", "available": false, "source": "rdap" } },
     { "domain": "dimecalc.com", "result": { "domain": "dimecalc.com", "available": true, "source": "rdap" } },
