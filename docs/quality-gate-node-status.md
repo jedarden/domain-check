@@ -1,60 +1,43 @@
-# Quality-Gate Node Status — domain-check-build-94972
+# Quality-Gate Node Status — Recent domain-check-build Workflows
 
-**Query Time:** 2026-07-03
+**Query Time:** 2026-07-03 (updated)
 
-## Most Recent Failed Workflow
-
-| Field | Value |
-|-------|-------|
-| Workflow | `domain-check-build-94972` |
-| Phase | Failed |
-| Created | 2026-07-03T13:16:19Z |
-| Overall Message | `child 'domain-check-build-94972-2895068185' failed` |
-| Workflow in Cluster | No — garbage collected |
-
-## Quality-Gate Node
+## Most Recent Failed Run (non-debug)
 
 | Field | Value |
 |-------|-------|
-| Node ID | `domain-check-build-94972-2895068185` |
-| Display Name | `build-quality-gate` |
+| Workflow | `domain-check-build-jxwhw` |
+| Node ID | `domain-check-build-jxwhw-4035286674` |
+| Node Display Name | `build-quality-gate` |
 | Phase | **Failed** |
-| Exit Code | **2** |
 | Message | `main: Error (exit code 2)` |
-| Started | 2026-07-03T13:16:20Z |
-| Finished | 2026-07-03T13:22:01Z |
-| Duration | ~5m 41s |
-| Template | `build-quality-gate` (local/) |
+| Exit Code | null (not recorded at workflow node level) |
+| Type | Pod |
+| Started | 2026-07-04T01:46:35Z |
+| Finished | 2026-07-04T01:47:23Z |
+| Duration | ~48s |
 
-## Pod Status
+## All Recent Failed Runs
 
-| Field | Value |
-|-------|-------|
-| Pods Exist | **No** |
-| Reason | Deleted by `podGC: OnPodCompletion` — the controller deletes pods the moment they finish. |
-| Logs Available | No — cannot be retrieved after podGC deletion. To capture logs from a failed step, either stream them while running or submit a debug workflow with `podGC: OnWorkflowCompletion` override. |
+| Workflow | Node ID | Phase | Message | Started | Finished |
+|----------|---------|-------|---------|---------|----------|
+| `domain-check-build-jxwhw` | `domain-check-build-jxwhw-4035286674` | Failed | `main: Error (exit code 2)` | 2026-07-04T01:46:35Z | 2026-07-04T01:47:23Z |
+| `domain-check-build-hsrx2` | `domain-check-build-hsrx2-3270610851` | Failed | `main: Error (exit code 2)` | 2026-07-04T01:33:23Z | 2026-07-04T01:34:12Z |
+| `domain-check-build-debug-qg-wl5sw` | `domain-check-build-debug-qg-wl5sw-3572223479` | Failed | `main: Error (exit code 2)` | 2026-07-04T02:00:03Z | 2026-07-04T02:01:11Z |
+| `domain-check-build-debug-qg-h89zn` | `domain-check-build-debug-qg-h89zn-2378505076` | Failed | `main: Error (exit code 2)` | 2026-07-04T00:59:32Z | 2026-07-04T01:00:18Z |
+| `domain-check-build-45dk7` | `domain-check-build-45dk7-2865606903` | Failed | `main: Error (exit code 2)` | 2026-07-04T00:51:47Z | 2026-07-04T00:53:58Z |
 
-## Debug Workflow Confirmation
+## Most Recent Run Overall
 
-| Field | Value |
-|-------|-------|
-| Debug Workflow | `domain-check-build-debug-podgc2-5dxln` |
-| Phase | Failed (reproduces the original failure) |
-| Quality-Gate Pod | `domain-check-build-debug-podgc2-5dxln-build-quality-gate-1082504947` |
-| podGC Strategy | `OnWorkflowSuccess` (pods retained on failure) |
-| Exit Code | **2** |
-| Duration | ~39s (21:55:34Z → 21:56:13Z) |
+`domain-check-build-debug-qg-78gw7` — **Succeeded** (6m53s ago).
 
-### Steps Completed Before Failure
+## Root Cause (from prior investigation)
 
-1. `apk --no-cache add git ca-certificates` — OK (20.6 MiB in 29 packages)
-2. `git clone --branch main` — OK
-3. `go version` — OK (go1.26.4 linux/amd64)
-4. `go vet ./...` — OK (no vet errors)
-5. `go test -race ./...` — **FAILED** at 2026-07-03T21:56:13Z
+All quality-gate failures share the same generic message: `main: Error (exit code 2)`. Prior investigation (via debug workflow `domain-check-build-debug-podgc2-5dxln` with `podGC: OnWorkflowSuccess`) confirmed the root cause:
 
-### Key Log Excerpt
+**The `golang:1.26-alpine` base image disables CGO by default. The Go race detector (`-race` flag) requires `CGO_ENABLED=1`.** The quality-gate step sets no `CGO_ENABLED` environment variable, so CGO is off (`0`), and `go test -race` fails immediately.
 
+Key log excerpt:
 ```
 + go test -race ./...
 go: -race requires cgo; enable cgo by setting CGO_ENABLED=1
@@ -62,30 +45,18 @@ time=2026-07-03T21:56:13.054Z level=INFO msg="sub-process exited" argo=true erro
 Error: exit status 2
 ```
 
-## Root Cause Analysis
+**Fix:** Add `CGO_ENABLED=1` to the quality-gate container's `env` list in the `domain-check-build` WorkflowTemplate in `declarative-config`. Alpine uses musl libc, so CGO is functional but the resulting binary links against musl rather than glibc.
 
-**Confirmed:** The `golang:1.26-alpine` base image disables CGO by default. The Go race detector (`-race` flag) requires `CGO_ENABLED=1`. The quality-gate step sets no `CGO_ENABLED` environment variable, so CGO is off (`0`), and `go test -race` fails immediately with exit code 2 before running any tests.
+## Notes
 
-The fix is to add `CGO_ENABLED=1` to the quality-gate container's `env` list in the `domain-check-build` WorkflowTemplate in `declarative-config`. Alpine uses musl libc, so CGO is functional but the resulting binary links against musl rather than glibc.
-
-## Cross-Reference Verification (bf-2zcl)
-
-Verified on 2026-07-03 that all key findings are consistent across `docs/quality-gate-logs.md` and this document:
-
-| Check | Result |
-|-------|--------|
-| Debug workflow name | `domain-check-build-debug-podgc2-5dxln` — identical in both docs |
-| Pod name | `domain-check-build-debug-podgc2-5dxln-build-quality-gate-1082504947` — identical in both docs |
-| Exit code | **2** — consistent (logs line 63, this doc lines 22/61-63) |
-| Error message | `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1` — identical in both docs |
-| Root cause | `golang:1.26-alpine` CGO disabled + `-race` requires CGO — identical analysis |
-| Fix | Add `CGO_ENABLED=1` to quality-gate env — identical recommendation |
-| Audit trail refs | `quality-gate-logs.md` references bf-3mbz/podgc-hqwdk prior attempts; this doc references `quality-gate-logs.md` as the log source — bidirectional |
-
-**Conclusion:** Both documents are fully consistent. No discrepancies found.
+- Pod GC policy (`OnPodCompletion`) means container-level logs and exit codes are not retrievable after the pod finishes.
+- The `exitCode` field is null at the workflow node level — only the message string indicates the code.
+- To capture the actual quality-gate failure reason, the workflow must be submitted with `podGC: OnWorkflowCompletion` override, or logs must be streamed while the pod is running.
+- `domain-check-build-debug-qg-hkst6` failed at the entry template level (service account `github-auth` not found), not at the quality-gate step.
 
 ## Audit Trail
 
 - Original workflow `domain-check-build-94972` — no longer present in cluster (garbage collected), all pod logs unrecoverable
 - Debug workflow `domain-check-build-debug-podgc2-5dxln` — full logs captured in `docs/quality-gate-logs.md`
 - Prior debug workflows (`bf-3mbz`, `podgc-hqwdk`) — pods cleaned up before logs captured; led to the `OnWorkflowSuccess` strategy that succeeded on the third attempt
+- This update: queried cluster 2026-07-03, confirmed consistent failure pattern across 5 consecutive failed runs
