@@ -1,1 +1,17 @@
-done
+Everything is wired correctly. Here's the split summary:
+
+```
+SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+```
+
+**Children (in execution order):**
+| # | Bead ID | Title |
+|---|---------|-------|
+| 1 | bf-4nfe | Untrack coverage.out from git index |
+| 2 | bf-vzag | Remove dead root-level fuzz corpus directories |
+| 3 | bf-63at | Consolidate root test-memory scripts into scripts/ |
+| 4 | bf-35th | Remove stray lone slash from .gitignore |
+
+**Dependency chain:** bf-4nfe → bf-vzag → bf-63at → bf-35th → bf-3l4 (parent)
+
+The parent (bf-3l4) now has label `umbrella` and is `blocked` on the last child completing. Each child is independently completable with clear acceptance criteria in its description.

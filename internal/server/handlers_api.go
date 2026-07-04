@@ -95,6 +95,10 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var parseErr *domain.ParseError
 		if errors.As(err, &parseErr) {
+			if parseErr.Phase == "private-suffix" {
+				writeAPIError(w, http.StatusBadRequest, "private_suffix", parseErr.Err)
+				return
+			}
 			writeAPIError(w, http.StatusBadRequest, "invalid_domain", parseErr.Err)
 			return
 		}

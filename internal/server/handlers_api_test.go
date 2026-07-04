@@ -144,6 +144,48 @@ func TestCheckHandler_UnsupportedTLD(t *testing.T) {
 	}
 }
 
+func TestCheckHandler_PrivateSuffix(t *testing.T) {
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil, nil)
+
+	tests := []struct {
+		name        string
+		domain      string
+		wantError   string
+		wantMessage string // substring expected in message
+	}{
+		{"github.io", "example.github.io", "private_suffix", "github.io"},
+		{"appspot.com", "myapp.appspot.com", "private_suffix", "appspot.com"},
+		{"dyndns.org", "home.dyndns.org", "private_suffix", "dyndns.org"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/v1/check?d="+tt.domain, nil)
+			rec := httptest.NewRecorder()
+
+			handlers.CheckHandler(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+				return
+			}
+
+			var resp ErrorResponse
+			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+
+			if resp.Error != tt.wantError {
+				t.Errorf("expected error %q, got %q", tt.wantError, resp.Error)
+			}
+			if !strings.Contains(resp.Message, tt.wantMessage) {
+				t.Errorf("expected message to contain %q, got %q", tt.wantMessage, resp.Message)
+			}
+		})
+	}
+}
+
 func TestCheckHandler_Success(t *testing.T) {
 	expectedResult := &domain.DomainResult{
 		Domain:     "example.com",

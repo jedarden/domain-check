@@ -1,1 +1,14 @@
-done
+All verified. The dependency chain is correct and the parent is now an umbrella.
+
+```
+SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
+```
+
+**Children:**
+- `bf-1ayn` — Fix dyndns.org test case in parse_test.go (open)
+- `bf-7504` — Fix dyndns.org test case in handlers_api_test.go (blocked by bf-1ayn)
+- `bf-5zwo` — Run full test suites and verify fuzz corpus unaffected (blocked by bf-7504)
+
+**Chain:** bf-1ayn → bf-7504 → bf-5zwo → bf-4nk (parent, umbrella)
+
+**Root cause analysis:** The implementation in `parse.go` and `handlers_api.go` is already correct. The only failures are two test cases (`home.dyndns.org`) that have wrong expected values — the PSL treats `home.dyndns.org` as the entire public suffix (it's a wildcard-style private entry), so it gets rejected at the `tld-extract` step before reaching the private-suffix check. The tests need their expectations adjusted or the domain replaced with one that actually hits the private-suffix path.

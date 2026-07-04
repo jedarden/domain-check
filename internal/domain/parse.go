@@ -84,10 +84,6 @@ func Parse(input string) (*ParsedDomain, error) {
 	// Step 4: Extract TLD via publicsuffix.
 	// This also validates the domain against the PSL.
 	tld, icann := publicsuffix.PublicSuffix(domain)
-	if !icann {
-		// Non-ICANN TLD — could be a private suffix or unknown.
-		// We still allow it but flag it differently.
-	}
 
 	if tld == "" || tld == domain {
 		return nil, &ParseError{Input: original, Phase: "tld-extract", Err: "no registrable domain found"}
@@ -98,11 +94,18 @@ func Parse(input string) (*ParsedDomain, error) {
 		return nil, &ParseError{Input: original, Phase: "ldh", Err: err.Error()}
 	}
 
-	// Step 6: Verify TLD is recognized.
-	if !icann {
-		// TLD not in the ICANN section of the PSL.
-		// We accept it but note it's not an officially recognized TLD.
-		// This allows internal/private domains while flagging unknown TLDs.
+	// Step 6: Reject PSL private-suffix domains.
+	// When icann=false and the public suffix contains a dot, it's a known
+	// private suffix (e.g. github.io, appspot.com) from the PSL PRIVATE
+	// section — these are not registrable public domains. Single-label
+	// non-ICANN suffixes (e.g. "invalidtld") are unknown TLDs that flow
+	// to the existing unsupported_tld path at check time.
+	if !icann && strings.Contains(tld, ".") {
+		return nil, &ParseError{
+			Input: original,
+			Phase: "private-suffix",
+			Err:   fmt.Sprintf("cannot check availability under private suffix %q", tld),
+		}
 	}
 
 	// Step 7: Strip subdomains via EffectiveTLDPlusOne.
