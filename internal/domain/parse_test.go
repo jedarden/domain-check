@@ -475,15 +475,16 @@ func TestParse_EdgeCases(t *testing.T) {
 		wantDomain  string // if success expected
 		description string
 	}{
-		// #45: PSL private suffix - these are non-ICANN domains
-		// The PSL returns icann=false for private suffixes like github.io
-		// We accept them but they may not have RDAP servers
+		// #45: PSL private suffix — rejected at parse time
+		// The PSL returns icann=false for private suffixes like github.io.
+		// We reject them with a distinct "private-suffix" phase so the API
+		// can return a clear message instead of a generic unsupported_tld.
 		{
 			name:        "PSL private suffix (github.io)",
 			input:       "example.github.io",
-			wantErr:     false,
-			wantDomain:  "example.github.io",
-			description: "Private PSL suffixes are accepted, RDAP lookup may fail later",
+			wantErr:     true,
+			wantPhase:   "private-suffix",
+			description: "Private PSL suffixes are rejected with a clear message",
 		},
 		// #46: Wildcard - rejected as invalid character
 		{
@@ -524,6 +525,51 @@ func TestParse_EdgeCases(t *testing.T) {
 			} else {
 				require.NoError(t, err, tt.description)
 				assert.Equal(t, tt.wantDomain, result.Domain, tt.description)
+			}
+		})
+	}
+}
+
+// TestParse_PrivateSuffixRejects verifies that PSL PRIVATE-section suffixes
+// are rejected at parse time, while genuinely unknown TLDs still pass parse
+// validation (to flow to the existing unsupported_tld path at check time).
+func TestParse_PrivateSuffixRejects(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantErr    bool
+		wantPhase  string
+		wantErrStr string // substring expected in error message
+	}{
+		// Domains under known PSL private suffixes — must be rejected
+		{"github.io", "example.github.io", true, "private-suffix", "github.io"},
+		{"appspot.com", "myapp.appspot.com", true, "private-suffix", "appspot.com"},
+		{"herokuapp.com", "myapp.herokuapp.com", true, "private-suffix", "herokuapp.com"},
+		{"readthedocs.io", "docs.readthedocs.io", true, "private-suffix", "readthedocs.io"},
+		{"subdomain under private", "deep.sub.github.io", true, "private-suffix", "github.io"},
+
+		// Unknown TLDs (not in PSL at all) — must still pass parse validation.
+		// They will fail later at check time as unsupported_tld.
+		{"unknown single-label TLD", "example.invalidtld", false, "", ""},
+		{"unknown single-label TLD 2", "example.xyz123abc", false, "", ""},
+
+		// ICANN domains must still work fine
+		{"icann com", "example.com", false, "", ""},
+		{"icann co.uk", "example.co.uk", false, "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Parse(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				require.IsType(t, &ParseError{}, err)
+				pe := err.(*ParseError)
+				assert.Equal(t, tt.wantPhase, pe.Phase)
+				assert.Contains(t, pe.Err, tt.wantErrStr)
+				assert.Nil(t, result)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, result)
 			}
 		})
 	}
