@@ -345,6 +345,49 @@ test.describe('Web UI', () => {
   });
 
   /**
+   * Test 10: Copy-to-clipboard for available domains
+   */
+  test('should copy available domain to clipboard', async ({ page, context }) => {
+    // Grant clipboard permissions so we can read back the copied value
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+
+    // Generate a random domain that is very likely to be available
+    const randomDomain = `copy-test-${Date.now()}-${Math.random().toString(36).substring(7)}.com`;
+
+    // Fill in domain and submit — JS intercepts the submit, fetches the API,
+    // and renders the result card inline (including the copy button for available domains)
+    const input = page.locator('#domain-input');
+    await input.fill(randomDomain);
+
+    const submitBtn = page.locator('.search-form button[type="submit"]');
+    await submitBtn.click();
+
+    // Wait for the copy button to appear (only rendered by JS for available domains)
+    const copyBtn = page.locator('.result-card.available .copy-btn');
+    await expect(copyBtn).toBeVisible({ timeout: 15000 });
+
+    // Verify initial button state
+    await expect(copyBtn).toHaveText('Copy domain');
+    await expect(copyBtn).toHaveAttribute('data-domain', randomDomain);
+
+    // Click the copy button
+    await copyBtn.click();
+
+    // Verify button text changes to "Copied!" and gains the copied class
+    await expect(copyBtn).toContainText('Copied!');
+    await expect(copyBtn).toHaveClass(/\bcopied\b/);
+
+    // Verify the domain was written to the clipboard
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboardText).toBe(randomDomain);
+
+    // Verify button reverts to original state after the 1.5s timeout
+    await page.waitForTimeout(1600);
+    await expect(copyBtn).toHaveText('Copy domain');
+    await expect(copyBtn).not.toHaveClass(/\bcopied\b/);
+  });
+
+  /**
    * Additional test: Verify error handling for invalid domains
    */
   test('should show error for invalid domain', async ({ page }) => {
