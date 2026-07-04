@@ -42,6 +42,10 @@ golangci-lint run
 - `docs/research/08-go-implementation-patterns.md` — Go dep choices and patterns
 - `docs/research/` — RDAP protocol research, rate limits, accuracy testing
 
+## Kubernetes Manifests
+
+All cluster manifests (Deployment, Service, IngressRoute, etc.) live in **jedarden/declarative-config** (`k8s/apexalgo-iad/domain-check/`) and are deployed via ArgoCD. Do not add manifest files to this repo.
+
 ## CI/CD
 
 **GitHub Actions is intentionally disabled.** This project uses Argo Workflows for CI/CD on the `iad-ci` cluster. The WorkflowTemplate `domain-check-build` in `jedarden/declarative-config` handles Docker builds → `ronaldraygun/domain-check`. Do not re-enable GitHub Actions workflows.
