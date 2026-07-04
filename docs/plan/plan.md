@@ -36,12 +36,16 @@ Both are backed by the same core engine that queries RDAP registry servers direc
 │  ┌──────────────────────────────────────────────────┐   │
 │  │                  Router                           │   │
 │  │                                                   │   │
-│  │  GET  /                    → Web UI (HTML)        │   │
-│  │  GET  /check?d=example.com → Web UI result        │   │
-│  │  GET  /api/v1/check?d=...  → JSON single check   │   │
-│  │  POST /api/v1/bulk         → JSON bulk check      │   │
-│  │  GET  /api/v1/tlds         → Supported TLD list   │   │
-│  │  GET  /health              → Health check         │   │
+│  │  GET  /                       → Web UI (HTML)        │   │
+│  │  GET  /check?d=...            → Web UI result        │   │
+│  │  GET  /api/v1/check?d=...     → JSON single check   │   │
+│  │  GET  /api/v1/check?d=...&tlds=... → Multi-TLD     │   │
+│  │  GET  /api/v1/check/multi     → Multi-TLD check     │   │
+│  │  POST /api/v1/bulk            → JSON bulk check      │   │
+│  │  GET  /api/v1/tlds            → Supported TLD list   │   │
+│  │  GET  /metrics                → Prometheus metrics  │   │
+│  │  GET  /health                 → Health check        │   │
+│  │  GET  /robots.txt             → Robots exclusion    │   │
 │  └──────────────────┬───────────────────────────────┘   │
 │                     │                                    │
 │  ┌──────────────────▼───────────────────────────────┐   │
@@ -145,18 +149,29 @@ Response (taken):
 GET /api/v1/check?d=example&tlds=com,org,dev,net,io
 ```
 
+Also available as a dedicated endpoint:
+
+```
+GET /api/v1/check/multi?d=example&tlds=com,org,dev,net,io
+```
+
+Both routes delegate to the same handler. The `tlds` query parameter on `/api/v1/check` triggers multi-TLD mode automatically.
+
 Response:
 ```json
 {
   "name": "example",
+  "total": 5,
+  "succeeded": 5,
+  "failed": 0,
+  "duration": "234ms",
   "results": [
-    { "domain": "example.com", "available": false, "tld": "com" },
-    { "domain": "example.org", "available": false, "tld": "org" },
-    { "domain": "example.dev", "available": true, "tld": "dev" },
-    { "domain": "example.net", "available": false, "tld": "net" },
-    { "domain": "example.io", "available": true, "tld": "io" }
-  ],
-  "checked_at": "2026-03-22T14:30:00Z"
+    { "domain": "example.com", "tld": "com", "result": { "domain": "example.com", "available": false, "tld": "com", "source": "rdap" } },
+    { "domain": "example.org", "tld": "org", "result": { "domain": "example.org", "available": false, "tld": "org", "source": "rdap" } },
+    { "domain": "example.dev", "tld": "dev", "result": { "domain": "example.dev", "available": true, "tld": "dev", "source": "rdap" } },
+    { "domain": "example.net", "tld": "net", "result": { "domain": "example.net", "available": false, "tld": "net", "source": "rdap" } },
+    { "domain": "example.io", "tld": "io", "result": { "domain": "example.io", "available": true, "tld": "io", "source": "rdap" } }
+  ]
 }
 ```
 
@@ -179,14 +194,16 @@ Content-Type: application/json
 Response:
 ```json
 {
+  "total": 4,
+  "succeeded": 4,
+  "failed": 0,
+  "duration": "342ms",
   "results": [
-    { "domain": "numcrunch.com", "available": false },
-    { "domain": "dimecalc.com", "available": true },
-    { "domain": "publiccalc.com", "available": true },
-    { "domain": "publiccalc.org", "available": true }
-  ],
-  "checked_at": "2026-03-22T14:30:00Z",
-  "duration_ms": 342
+    { "domain": "numcrunch.com", "result": { "domain": "numcrunch.com", "available": false, "source": "rdap" } },
+    { "domain": "dimecalc.com", "result": { "domain": "dimecalc.com", "available": true, "source": "rdap" } },
+    { "domain": "publiccalc.com", "result": { "domain": "publiccalc.com", "available": true, "source": "rdap" } },
+    { "domain": "publiccalc.org", "result": { "domain": "publiccalc.org", "available": true, "source": "rdap" } }
+  ]
 }
 ```
 
@@ -335,15 +352,64 @@ Rationale: This is a single-purpose utility. A React/Next.js app would be massiv
 
 **Docker:**
 ```dockerfile
-FROM golang:1.26-alpine AS build
-WORKDIR /app
-COPY . .
-RUN go build -o domain-check .
+# Stage 1: Build the Go binary
+FROM golang:1.26-alpine AS builder
 
+# Install build dependencies
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /build
+
+# Copy go.mod and go.sum first for better layer caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the binary with optimizations
+# CGO_ENABLED=0: Static binary, no libc dependency
+# -ldflags: Strip debug info and DWARF for smaller binary
+# -trimpath: Remove file system paths from binary
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags='-s -w -extldflags "-static"' \
+    -trimpath \
+    -o domain-check \
+    ./cmd/domain-check
+
+# Stage 2: Minimal runtime image
 FROM alpine:3.19
-COPY --from=build /app/domain-check /usr/local/bin/
+
+# Install runtime dependencies
+# ca-certificates: TLS/HTTPS support
+# tzdata: Timezone data
+# wget: Health check support
+RUN apk add --no-cache ca-certificates tzdata wget
+
+# Create non-root user for security
+RUN addgroup -g 1000 appgroup && \
+    adduser -u 1000 -G appgroup -D appuser
+
+WORKDIR /app
+
+# Copy only the binary from builder
+COPY --from=builder /build/domain-check /app/domain-check
+
+# Set ownership to non-root user
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose the HTTP port
 EXPOSE 8080
-CMD ["domain-check", "serve"]
+
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget -q --spider http://localhost:8080/health || exit 1
+
+# Run the server
+CMD ["/app/domain-check", "serve"]
 ```
 
 **Cloudflare Pages + Workers (alternative):**
@@ -757,7 +823,7 @@ All tests run without network access to real registries. CI uses recorded fixtur
 
 | # | Input | Decision | Rationale |
 |---|-------|----------|-----------|
-| 45 | `example.github.io` | Reject | PSL PRIVATE section — return error: "cannot check availability under private suffix" |
+| 45 | `example.github.io` | Accept | PSL PRIVATE section — `publicsuffix.PublicSuffix()` returns `icann=false` but `Parse()` still accepts it. The domain passes all validation steps and is only rejected downstream as `unsupported_tld` if no RDAP/WHOIS server covers that TLD. |
 | 46 | `*.example.com` | Reject: `invalid character: *` | Wildcard not a valid domain |
 | 47 | `xn--invalid.com` | Pass validation, let RDAP determine | Invalid punycode — RDAP will return 404 or 400 |
 | 48 | `test.com` (reserved) | Pass validation, check normally | Reservation is a registry concern, not input validation |
@@ -841,7 +907,7 @@ All tests run without network access to real registries. CI uses recorded fixtur
 | 6 | (no `d` param) | 400, `error: missing parameter "d"` |
 | 7 | `?d=cached.com` (repeat) | 200, `cached: true` on second request |
 
-#### Multi-TLD Endpoint (`GET /api/v1/check?tlds=`)
+#### Multi-TLD Endpoint (`GET /api/v1/check?tlds=` and `GET /api/v1/check/multi`)
 
 | # | Request | Expected |
 |---|---------|----------|
@@ -981,48 +1047,30 @@ Run `vegeta` at 50 req/s for 10 minutes from randomized IPs. Monitor memory via 
 
 ### CI Pipeline
 
-```yaml
-name: CI
-on: [push, pull_request]
+**GitHub Actions is intentionally disabled.** CI/CD runs on Argo Workflows in the `iad-ci` cluster (Rackspace Spot, us-east-iad-1). The WorkflowTemplate `domain-check-build` in `jedarden/declarative-config` handles Docker builds → `ronaldraygun/domain-check`.
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: ['1.26']
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go }}
+For Go lint/test/build validation, `cargo test` is intercepted by the local `cargo-remote` wrapper which submits to iad-ci via the `rust-verify` WorkflowTemplate (fmt + clippy + test). The Go equivalent runs locally under cgroup limits (CPUQuota=200%, MemoryMax=6G).
 
-      - name: Lint
-        uses: golangci/golangci-lint-action@v6
-
-      - name: Test
-        run: go test -race -coverprofile=coverage.out ./...
-
-      - name: Fuzz (30s)
-        run: |
-          go test -fuzz=FuzzValidateDomain -fuzztime=30s ./internal/domain/
-          go test -fuzz=FuzzParseRDAPResponse -fuzztime=30s ./internal/checker/
-
-      - name: Build
-        run: go build -o domain-check ./cmd/domain-check/
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
+Manual workflow submission:
+```bash
+kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig create -f - <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: domain-check-build-manual-
+  namespace: argo-workflows
+spec:
+  workflowTemplateRef:
+    name: domain-check-build
+EOF
 ```
 
 #### CI Guarantees
 
-- Tests run with `-race` flag (data race detector)
-- Two Go versions tested (current + previous)
-- Fuzz tests run for 30s on each push
-- golangci-lint catches common issues
-- Coverage reported to Codecov
-- **No network calls to real RDAP servers in CI** — all tests use fixtures
+- Docker image builds on every push to main (Argo Workflows)
+- No network calls to real RDAP servers in CI — all tests use fixtures
+- Go tests run locally with cgroup-limited resources or submitted remotely
+- Fuzz tests run for 30s per target (`go test -fuzz=... -fuzztime=30s`)
 
 ### Regression Process
 
@@ -1048,10 +1096,12 @@ domain-check/
 ├── internal/
 │   ├── server/
 │   │   ├── server.go            # HTTP server setup, graceful shutdown
-│   │   ├── routes.go            # Route definitions
+│   │   ├── routes.go            # Route definitions (GET /api/v1/check, /api/v1/check/multi, POST /api/v1/bulk, etc.)
 │   │   ├── handlers_web.go      # Web UI handlers
-│   │   ├── handlers_api.go      # API handlers
-│   │   └── middleware.go        # Rate limiting, logging, CORS, security headers, request ID
+│   │   ├── handlers_api.go      # API handlers (single, multi-TLD, bulk response types)
+│   │   ├── middleware.go        # Rate limiting, logging, CORS, security headers, request ID
+│   │   ├── metrics.go           # Prometheus metrics collection
+│   │   └── service_monitor.go    # Uptime and checks-served tracking
 │   ├── checker/
 │   │   ├── checker.go           # Domain check engine (orchestrates RDAP/WHOIS/DNS)
 │   │   ├── rdap.go              # RDAP client with response parsing
@@ -1061,6 +1111,11 @@ domain-check/
 │   │   ├── cache.go             # LRU result cache with per-status TTLs
 │   │   ├── ratelimit.go         # Per-registry rate limiting + concurrency semaphores
 │   │   └── ssrf.go              # Safe dialer with private IP blocking
+│   ├── config/
+│   │   └── config.go            # Configuration via ff/v4 (flags → env → config file → defaults)
+│   ├── cli/
+│   │   ├── check.go             # CLI check subcommand (single and multi-TLD)
+│   │   └── bulk.go              # CLI bulk subcommand (file input, JSON/CSV/text output)
 │   └── domain/
 │       ├── parse.go             # Domain parsing, validation, IDN conversion, PSL lookup
 │       └── result.go            # Result types (DomainResult, Registration, etc.)
@@ -1099,8 +1154,8 @@ domain-check/
 
 ### Phase 2: API Server
 - HTTP server with `net/http` router
-- `GET /api/v1/check` — single domain check
-- `GET /api/v1/check?tlds=` — multi-TLD check
+- `GET /api/v1/check` — single domain check (also supports `?tlds=` for multi-TLD)
+- `GET /api/v1/check/multi` — dedicated multi-TLD check endpoint (same handler as `?tlds=`)
 - `POST /api/v1/bulk` — bulk check (max 50 domains, 64 KB body)
 - `GET /api/v1/tlds` — supported TLD list
 - `GET /health` — health check (bootstrap age, uptime, status)
@@ -1133,8 +1188,8 @@ domain-check/
 - Configuration via ff/v4 (flags → env → config file → defaults)
 
 ### Phase 5: Deployment + CI
-- Dockerfile (multi-stage: golang:alpine → alpine, single binary + embedded assets)
-- GitHub Actions CI: lint (`golangci-lint`), test, fuzz (30s), build, release binaries
+- Dockerfile (multi-stage: golang:alpine → alpine, non-root user, healthcheck, single binary + embedded assets)
+- Argo Workflows CI on iad-ci cluster: Docker builds via `domain-check-build` WorkflowTemplate
 - Load testing baseline with `vegeta`
 - README with usage examples for all interfaces (web, API, CLI)
 - robots.txt (noindex result pages to prevent search engines caching availability data)
