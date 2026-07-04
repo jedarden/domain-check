@@ -2,8 +2,8 @@
 
 Comprehensive performance benchmarking results and analysis for the Domain Check service.
 
-**Last Updated:** 2026-04-09
-**Status:** ✓ All Performance Targets Met
+**Last Updated:** 2026-07-04
+**Status:** ✓ All Performance Targets Met — Automated Regression Tests in CI
 
 ---
 
@@ -40,8 +40,10 @@ Comprehensive performance benchmarking results and analysis for the Domain Check
 
 ### Raw Test Data
 - `cached.txt` — Cached response test output
-- `rate-limit.txt` — Rate limiter verification output
-- `sustained-load.txt` — Sustained load test output (vegeta)
+- `cached-verify.txt` — Cached response verification output
+- `rate-limit.txt` — Rate limiter verification output (200 req/s, single IP)
+- `rate-limit-200reqs.txt` — Rate limiter detailed analysis (2026-04-25)
+- `sustained-load.txt` — Sustained load test output (vegeta, 100 req/s × 30s)
 - `memory-growth.txt` — Memory growth test output
 - `smoke.txt` — Smoke test output
 - `smoke-rotated.txt` — Smoke test with IP rotation
@@ -50,7 +52,22 @@ Comprehensive performance benchmarking results and analysis for the Domain Check
 
 ## Test Categories
 
-### 1. HTTP Load Testing
+### 1. Automated Benchmark Regression (Go tests — CI)
+
+Go `testing.T` benchmarks in `internal/server/benchmark_regression_test.go` run against an `httptest.Server` with mock checkers. These run in CI (skipped with `-short`) and catch performance regressions without external dependencies.
+
+| Test | Plan Target | Go Test Threshold | Purpose |
+|------|-------------|-------------------|---------|
+| `TestBenchmark_CachedResponseP99` | < 10ms | < 50ms | Cache handler overhead |
+| `TestBenchmark_UncachedSingleCheckP99` | < 2s | < 100ms | Uncached handler path |
+| `TestBenchmark_Bulk50DomainsP99` | < 5s | < 500ms | Bulk endpoint throughput |
+| `TestBenchmark_SustainedLoadP99` | < 50ms | < 100ms | Sustained 100 req/s |
+| `TestBenchmark_SustainedLoadP99_Long` | < 50ms | < 100ms | 30s sustained (statistical) |
+| `TestBenchmark_ConcurrentBulkP99` | < 5s | < 500ms | Bulk under sustained load |
+
+The relaxed thresholds account for `httptest` overhead (no HTTP/2, no connection pooling, GC pauses under cgroup limits). The vegeta script enforces exact plan targets against a deployed server.
+
+### 2. HTTP Load Testing
 
 External tools (`hey`, `vegeta`) test the full HTTP stack:
 
@@ -208,6 +225,33 @@ go test -bench=. -memprofile=mem.prof ./internal/checker/
 go tool pprof mem.prof
 ```
 
+### Automated Benchmark Regression (CI)
+
+```bash
+# Run Go benchmark regression tests (skipped with -short)
+go test -timeout=120s -run TestBenchmark_ ./internal/server/
+
+# Run with verbose output
+go test -timeout=120s -run TestBenchmark_ -v ./internal/server/
+```
+
+### Vegeta Regression (Deployed Server)
+
+```bash
+# Start server
+./domain-check serve --addr localhost:8080 --trust-proxy &
+SERVER_PID=$!
+
+# Run vegeta-based regression against plan targets
+./scripts/benchmark-regression.sh
+
+# Skip slow sustained tests
+SKIP_SLOW=1 ./scripts/benchmark-regression.sh
+
+# Cleanup
+kill $SERVER_PID
+```
+
 ### Memory Testing
 
 ```bash
@@ -255,6 +299,8 @@ GODEBUG=gctrace=1 go test -v -run TestMemoryGrowthUnderLoad ./internal/server/
 
 - **Architecture Plan:** `docs/plan/plan.md` — Full system architecture and API specification
 - **Go Patterns:** `docs/research/08-go-implementation-patterns.md` — Implementation decisions
+- **Regression Tests:** `internal/server/benchmark_regression_test.go` — Go benchmark regression tests (CI)
+- **Regression Script:** `scripts/benchmark-regression.sh` — Vegeta-based regression (deployed server)
 - **Load Test Scripts:** `scripts/run-benchmarks.sh` — Automated benchmark execution
 - **Memory Tests:** `internal/server/memory_test.go` — Memory leak detection tests
 

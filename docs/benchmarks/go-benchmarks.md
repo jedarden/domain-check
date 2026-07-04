@@ -10,6 +10,22 @@ Microbenchmarks test the following components:
 
 All benchmarks use mock HTTP servers to eliminate network variability.
 
+## Automated Benchmark Regression Tests
+
+In addition to these microbenchmarks, the test suite includes **automated benchmark regression tests** in `internal/server/benchmark_regression_test.go`. These are `testing.T` tests (not `testing.B`) that fire burst and sustained loads at an `httptest.Server` and verify p99 latency and error rates against plan targets.
+
+These regression tests run in CI (skipped with `-short`) and serve as automated gates against performance regressions:
+
+```bash
+# Run all benchmark regression tests
+go test -timeout=120s -run TestBenchmark_ ./internal/server/
+
+# Verbose output
+go test -timeout=120s -run TestBenchmark_ -v ./internal/server/
+```
+
+For exact plan target enforcement against a deployed server, use the vegeta script: `scripts/benchmark-regression.sh`.
+
 ---
 
 ## Benchmark Results
@@ -246,5 +262,5 @@ func BenchmarkDNSPreFilter_Check(b *testing.B) {
 
 ---
 
-*Last updated: 2026-04-09*
+*Last updated: 2026-07-04*
 *Go version: 1.26.1*
