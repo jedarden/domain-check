@@ -1,53 +1,71 @@
 Quality-Gate Step Logs — Failed domain-check-build Workflows
 ==============================================================
-Captured: 2026-07-03
+Captured: 2026-07-03 (updated 2026-07-04 with fresh reproduction)
 Bead: bf-d9hn
 
 RETRIEVAL ATTEMPTS
 ------------------
 
-Checked workflows (most recent failures):
-  domain-check-build-qpm9l   Created: 2026-07-03T23:48:51Z  Failed  exit code 2
+Checked workflows (most recent failures as of 2026-07-04T00:15Z):
+  domain-check-build-978m2   Created: 2026-07-04T00:02:09Z  Failed  exit code 2
   domain-check-build-7bcfj   Created: 2026-07-03T23:54:29Z  Failed  exit code 2
-  domain-check-build-debug-qg-k6hrz  Created: 2026-07-03T23:08:Z  Failed  exit code 2
+  domain-check-build-qpm9l   Created: 2026-07-03T23:48:51Z  Failed  exit code 2
+  domain-check-build-debug-qg-k6hrz  Created: 2026-07-03T23:10:12Z  Failed  exit code 2
+  domain-check-build-zj4z6   Created: 2026-07-03T23:01:08Z  Failed  exit code 2
+  domain-check-build-v45wx   Created: 2026-07-03T22:52:55Z  Failed  exit code 2
+  domain-check-build-hcvbd   Created: 2026-07-03T22:24:51Z  Failed  exit code 2
+  domain-check-build-mb25p   Created: 2026-07-03T22:21:22Z  Failed  exit code 2
+  domain-check-build-cnrsd   Created: 2026-07-03T22:17:29Z  Failed  exit code 2
 
 Attempt 1 — Pod logs (kubectl logs):
-  All three workflows: No pods found. podGC policy (OnPodCompletion) deletes pods
+  All workflows: No pods found. podGC policy (OnPodCompletion) deletes pods
   immediately after the step finishes. Logs cannot be retrieved after the fact.
 
-Attempt 2 — Argo UI archived logs:
-  Argo API at argo-ci.ardenone.com not accessible (curl returned error).
-  No log archival is configured on the WorkflowTemplate (archiveStrategies: None).
+Attempt 2 — Argo API archived logs:
+  Port-forwarded to argo-workflows-iad-ci-server:2746 on iad-ci.
+  GET /api/v1/workflows/argo-workflows/<wf>/<nodeId>/logs returned:
+  {"code":12,"message":"Not Implemented"} — log archival not available.
 
 Attempt 3 — Workflow CR status:
   Node status contains only metadata (exit code 2, phase Failed), no stored log
   content. Argo Workflows does not inline logs in the workflow CR by default.
 
-Attempt 4 — Prior debug workflow logs:
-  A previous debug run (domain-check-build-debug-qg-k6hrz and earlier) with
-  podGC: OnWorkflowCompletion override captured logs before pods were deleted.
-  Raw output saved in quality-gate-debug-logs.txt (same root cause).
+Attempt 4 — Direct pod name patterns:
+  Tried domain-check-build-978m2-2331026987 (node ID),
+  domain-check-build-978m2-2331026987-main,
+  domain-check-build-978m2-main — all returned NotFound.
+
+Attempt 5 — Fresh reproduction with podGC OnWorkflowCompletion:
+  Submitted domain-check-qg-capture-rlkxt with podGC.strategy=OnWorkflowCompletion
+  and correct serviceAccountName=argo-workflow (the template uses argo-workflow,
+  not argo-workflow-executor which doesn't exist on iad-ci).
+  Pod ran successfully and logs were streamed live. Output below.
 
 CONCLUSION: Logs from the original failed runs are irretrievable — pods were
-deleted by podGC before this capture task ran. The debug workflow logs below are
-from an identical run on the same branch (main) with the same template and
-produced the same failure.
+deleted by podGC before this capture task ran. The reproduction run below used
+the identical quality-gate template on the same branch (main) and produced
+the same failure. The failure is deterministic.
 
 WORKFLOWTEMPLATE (build-quality-gate step)
 ------------------------------------------
 Template: domain-check-build
 Image:    golang:1.26-alpine
+SA:       argo-workflow (on iad-ci cluster)
 Command:  sh -c "set -ex; apk ...; git clone; go vet ./...; go test -race ./..."
 
 The quality-gate step:
   1. Installs git + ca-certificates on Alpine
-  2. Clones the domain-check repo at the specified branch
+  2. Clones the domain-check repo at the specified branch/tag
   3. Runs `go vet ./...`
   4. Runs `go test -race ./...`
 
-RAW LOG OUTPUT (from debug workflow, identical failure)
---------------------------------------------------------
-time=2026-07-03T13:06:16.468Z level=INFO msg="waiting for signals" argo=true signalPath=/var/run/argo/ctr/main/signal
+RAW LOG OUTPUT (from reproduction run domain-check-qg-capture-rlkxt)
+--------------------------------------------------------------------
+Workflow: domain-check-qg-capture-rlkxt
+Created:  2026-07-04T00:19:41Z
+Finished: 2026-07-04T00:20:21Z (duration: ~40s)
+
+time=2026-07-04T00:19:41.838Z level=INFO msg="waiting for signals" argo=true signalPath=/var/run/argo/ctr/main/signal
 + apk --no-cache add git ca-certificates
 ( 1/12) Installing brotli-libs (1.2.0-r1)
 ( 2/12) Installing c-ares (1.34.6-r0)
@@ -69,8 +87,8 @@ Cloning into '/workspace'...
 + cd /workspace
 + go version
 go version go1.26.4 linux/amd64
-Running quality gate on branch: main
 + echo 'Running quality gate on branch: main'
+Running quality gate on branch: main
 + go vet ./...
 go: downloading github.com/peterbourgon/ff/v4 v4.0.0-beta.1
 go: downloading github.com/stretchr/testify v1.11.1
@@ -83,36 +101,43 @@ go: downloading golang.org/x/sync v0.20.0
 go: downloading github.com/davecgh/go-spew v1.1.1
 go: downloading github.com/pmezard/go-difflib v1.0.0
 go: downloading gopkg.in/yaml.v2 v2.4.0
-go: downloading github.com/prometheus/client_model v0.6.2
-go: downloading github.com/prometheus/common v0.66.1
 go: downloading github.com/beorn7/perks v1.0.1
 go: downloading github.com/cespare/xxhash/v2 v2.3.0
+go: downloading github.com/prometheus/client_model v0.6.2
+go: downloading github.com/prometheus/common v0.66.1
 go: downloading github.com/prometheus/procfs v0.16.1
 go: downloading google.golang.org/protobuf v1.36.8
 go: downloading gopkg.in/yaml.v3 v3.0.1
 go: downloading github.com/likexian/gokit v0.25.16
-go: downloading golang.org/x/text v0.35.0
 go: downloading github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 go: downloading go.yaml.in/yaml/v2 v2.4.2
+go: downloading golang.org/x/text v0.35.0
 go: downloading golang.org/x/sys v0.42.0
 + go test -race ./...
 go: -race requires cgo; enable cgo by setting CGO_ENABLED=1
-time=2026-07-03T13:06:55.504Z level=INFO msg="file signal handler exiting due to context cancellation" argo=true
-time=2026-07-03T13:06:55.504Z level=INFO msg="sub-process exited" argo=true error="exit status 2"
+time=2026-07-04T00:20:21.870Z level=INFO msg="file signal handler exiting due to context cancellation" argo=true
+time=2026-07-04T00:20:21.870Z level=INFO msg="sub-process exited" argo=true error="exit status 2"
 Error: exit status 2
 
 EXIT CODE ANALYSIS
 -----------------
-Exit code: 2
+Exit code: 2 (from `set -ex` causing the script to exit on the failing command)
 Failing step: go test -race ./...
 Specific error: "go: -race requires cgo; enable cgo by setting CGO_ENABLED=1"
-Root cause: Alpine Linux lacks gcc/musl-dev needed for CGO; race detector requires CGO
+Root cause: Alpine Linux (golang:1.26-alpine) lacks gcc/musl-dev needed for CGO.
+            The Go race detector requires CGO (it links against a C runtime).
 
 go vet ./... passed successfully (no output = no issues).
 Only go test -race ./... failed due to missing CGO toolchain.
 
+Fix options:
+  1. Switch image from golang:1.26-alpine to golang:1.26 (Debian-based) —
+     glibc + gcc available out of the box, CGO works natively.
+  2. Stay on alpine but add `apk add gcc musl-dev` and set CGO_ENABLED=1.
+  3. Remove `-race` flag (not recommended — race detection is valuable).
+
 RELATED FILES
 -------------
 - docs/research/15-quality-gate-failure-analysis.md  — Full root cause analysis
-- docs/research/quality-gate-debug-logs.txt          — Original debug capture
+- docs/research/quality-gate-debug-logs.txt          — Earlier debug capture
 - docs/research/workflow-status.txt                  — Failed workflow inventory
