@@ -1,0 +1,7 @@
+Bead closed successfully. Here's the summary:
+
+**Result:** Pod absence confirmed — all `domain-check-build` workflow pods have been deleted by Argo Workflows `podGC` policy (`OnPodCompletion`). No quality-gate logs were capturable from any of the recent failed workflow runs.
+
+**Documentation:** Status recorded in `.beads/traces/bf-allu/quality-gate-pod-status.md` with full workflow inventory and pod query results.
+
+**For downstream beads:** Quality-gate logs must be captured via alternative means — Argo UI logs (retained 2h for failures), a debug workflow with `podGC: OnWorkflowCompletion` override, or real-time log streaming while pods are running.

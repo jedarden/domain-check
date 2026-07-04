@@ -1,0 +1,6 @@
+Bead **bf-clao** is closed. Summary of findings:
+
+- **Most recent failed build:** `domain-check-build-hqftd` (~43m ago, namespace `argo-workflows`)
+- **Failure node:** `build-quality-gate` — `main: Error (exit code 2)`
+- **Pod status:** All pods deleted by `podGC: OnPodCompletion` (cluster default) — zero pods exist for any recent failed workflow
+- **Results recorded:** `.beads/traces/bf-clao/quality-gate-pod-status.md`

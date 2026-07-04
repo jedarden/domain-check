@@ -1,15 +1,15 @@
 {
   "bead_id": "bf-clao",
-  "agent": "glm-bravo",
+  "agent": "glm",
   "provider": "zai",
   "model": "glm-5-turbo",
   "exit_code": 0,
   "outcome": "success",
-  "duration_ms": null,
+  "duration_ms": 171907,
   "input_tokens": null,
   "output_tokens": null,
   "cost_usd": null,
-  "captured_at": null,
+  "captured_at": "2026-07-04T04:18:30.756095623Z",
   "trace_format": "raw_text",
   "pruned": false,
   "template_version": null

@@ -1,0 +1,9 @@
+Bead `bf-4x9n` is closed. Here's a summary of findings:
+
+**Failed workflow:** `domain-check-build-5mj2l`
+- **Created:** 2026-07-04T02:33:09Z
+- **Phase:** Failed
+- **Failed node:** `build-quality-gate` (Pod type) — exit code 2
+- **Pod status:** All pods deleted by podGC — none remain
+
+The failure is in the quality-gate step. Since the controller uses `podGC: OnPodCompletion`, logs must be retrieved from the Argo UI (within the 2h failure TTL window) or by re-running with a `podGC: OnWorkflowCompletion` override.
