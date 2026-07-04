@@ -1,0 +1,10 @@
+Done. **bf-560m is closed.**
+
+Summary: Both `docs/quality-gate-node-status.md` and `docs/quality-gate-root-cause.md` already contained all required information:
+
+- ✅ Exit code **2** documented in both files
+- ✅ **CGO_ENABLED=0** root cause identified and explained
+- ✅ Workflow name **`domain-check-build-94972`** referenced correctly
+- ✅ Fix documented: add `CGO_ENABLED=1` to the quality-gate container env in the WorkflowTemplate
+
+No changes were needed — the documents were already complete.

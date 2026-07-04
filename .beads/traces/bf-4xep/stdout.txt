@@ -1,0 +1,8 @@
+Bead `bf-4xep` is closed. 
+
+**Summary:** The task was already completed in a prior run. The file `docs/quality-gate-logs.md` (committed as `048e093`) contains the full quality-gate container logs from the debug workflow `domain-check-build-debug-podgc2-5dxln`, including:
+
+- The quality-gate pod identified: `domain-check-build-debug-podgc2-5dxln-build-quality-gate-1082504947`
+- Full container output from `apk add` through the failure
+- The race detector failure: `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`
+- Analysis with root cause, successful steps, fix recommendation, and debugging notes about podGC strategies

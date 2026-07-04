@@ -1,0 +1,10 @@
+Done. Here's a summary of what was found and recorded:
+
+**Most recent failed domain-check-build workflow:** `domain-check-build-zj4z6`
+- **Created:** 2026-07-03T23:01:08Z
+- **Quality-gate node:** `build-quality-gate` — **Failed** with message `main: Error (exit code 2)`
+- **Root cause:** `go test -race` requires CGO, but Alpine sets `CGO_ENABLED=0` by default (no C compiler/toolchain)
+- **Consistent failure** across all ~10 recent runs — all share the same quality-gate failure
+- **Also noted:** `domain-check-build-qgdebug-wmx8r` had an Error (not Failed) due to a missing serviceaccount — infra issue, not code-related
+
+Results saved to `docs/research/workflow-status.txt`, committed and pushed.

@@ -1,9 +1,5 @@
-All verified. The dependency chain is:
+Bead `bf-5t1u` is closed and flushed. Here's the summary:
 
-```
-bf-3mbz → bf-4xep → bf-6coc → bf-5t1u (umbrella)
-```
+**Task completed:** Captured quality-gate logs from existing pod `domain-check-build-debug-podgc2-5dxln-build-quality-gate-1082504947` on iad-ci.
 
-SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
-
-Children: bf-3mbz, bf-4xep, bf-6coc
+**Key finding:** The same root cause confirmed — `go test -race ./...` fails with `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1` on `golang:1.26-alpine`. `go vet ./...` passes fine. The fix is to either switch the quality-gate image to Debian-based (`golang:1.26-bookworm`) or install `gcc musl-dev` on Alpine.

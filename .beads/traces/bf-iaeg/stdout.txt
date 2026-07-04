@@ -1,15 +1,13 @@
+Everything is wired correctly. The dependency tree shows:
+
+```
+bf-iaeg (umbrella)
+ └── bf-kl18 (last child → Extract and document failure details)
+     └── bf-4wg9 (child 2 → Capture logs)
+         └── bf-2oto (child 1 → Query workflow status)
+```
+
 ```
 SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
+Children: bf-2oto, bf-4wg9, bf-kl18
 ```
-
-```
-Children: bf-5hwl, bf-5t1u, bf-29ll
-```
-
-**Chain:**
-| Bead | Title | Depends On |
-|------|-------|-----------|
-| bf-5hwl | Identify most recent failed domain-check-build workflow and quality-gate node status | — (ready) |
-| bf-5t1u | Capture quality-gate logs from pods or submit debug workflow | bf-5hwl |
-| bf-29ll | Parse quality-gate logs and identify root cause | bf-5t1u |
-| bf-iaeg | Get quality-gate step logs from the failed workflow *(umbrella)* | bf-29ll |

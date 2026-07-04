@@ -1,0 +1,12 @@
+Done. Here's what was completed:
+
+1. **Read** `docs/quality-gate-logs.md` — extracted the debug workflow findings (workflow `domain-check-build-debug-podgc2-5dxln`, pod retained via `podGC: OnWorkflowSuccess`)
+2. **Updated** `docs/quality-gate-node-status.md` with:
+   - Debug workflow name, phase, pod name, and podGC strategy
+   - Quality-gate step exit code (2) and duration (~39s)
+   - Step-by-step execution trace (5 steps, failure at step 5)
+   - Key log excerpt: `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`
+   - **Confirmed root cause:** `golang:1.26-alpine` disables CGO by default; `-race` requires `CGO_ENABLED=1`
+   - Fix guidance: add `CGO_ENABLED=1` to the quality-gate container env in the WorkflowTemplate
+3. **Committed** and **pushed** to `main`
+4. **Closed bead** `bf-6coc` (used direct db update due to br bug with `claimed_at` parsing)

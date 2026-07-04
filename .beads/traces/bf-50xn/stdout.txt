@@ -1,0 +1,17 @@
+Bead **bf-50xn** is closed. Here's the summary:
+
+**Root Cause:** The `domain-check-build` quality-gate step fails because `golang:1.26-alpine` lacks the CGO toolchain needed by `go test -race`. The race detector links against a C runtime, but Alpine images don't include `gcc`/`musl-dev` by default.
+
+**Classification:**
+| Category | Value |
+|----------|-------|
+| **Failure type** | Toolchain/environment misconfiguration |
+| **Severity** | CI pipeline failure (non-code) — all builds blocked |
+| **Failing command** | `go test -race ./...` (exit code 2) |
+| **Passing command** | `go vet ./...` |
+| **Error** | `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1` |
+| **Determinism** | Deterministic — fails every run |
+
+**Fix:** Switch quality-gate image from `golang:1.26-alpine` to `golang:1.26` (Debian-based), which includes gcc/glibc out of the box.
+
+**Deliverable:** Updated `docs/research/15-quality-gate-failure-analysis.md` with formal classification, committed and pushed to `main`.
