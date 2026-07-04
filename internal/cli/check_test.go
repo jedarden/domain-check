@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jedarden/domain-check/internal/checker"
+	"github.com/jedarden/domain-check/internal/ratelimit"
 )
 
 // TestValidateSLD_Valid tests valid second-level domain labels.
@@ -634,7 +635,7 @@ func TestCheck_WithMockRDAPIntegration(t *testing.T) {
 
 	// Create an RDAP client with our bootstrap.
 	httpClient := &http.Client{Timeout: 5 * time.Second}
-	rateLimiter := checker.NewRateLimiter()
+	rateLimiter := ratelimit.NewRateLimiter()
 
 	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -719,7 +720,7 @@ func TestCheck_MultiTLDWithMockRDAP(t *testing.T) {
 
 	// Create an RDAP client with our bootstrap.
 	httpClient := &http.Client{Timeout: 5 * time.Second}
-	rateLimiter := checker.NewRateLimiter()
+	rateLimiter := ratelimit.NewRateLimiter()
 
 	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
 		HTTPClient: httpClient,

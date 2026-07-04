@@ -1,5 +1,7 @@
-// Package checker provides domain availability checking with per-registry rate limiting.
-package checker
+// Package ratelimit provides per-registry rate limiting and concurrency control
+// for RDAP queries. It uses token bucket rate limiting with exponential backoff
+// on HTTP 429 responses and weighted semaphores for concurrency control.
+package ratelimit
 
 import (
 	"context"

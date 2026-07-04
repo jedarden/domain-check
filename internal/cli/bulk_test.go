@@ -14,6 +14,7 @@ import (
 
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/ratelimit"
 )
 
 // TestBulkConfigDefaults tests that BulkConfig has sensible defaults.
@@ -342,7 +343,7 @@ func TestBulk_WithMockRDAP(t *testing.T) {
 
 	// Create checker with our bootstrap.
 	httpClient := &http.Client{Timeout: 5 * time.Second}
-	rateLimiter := checker.NewRateLimiter()
+	rateLimiter := ratelimit.NewRateLimiter()
 
 	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
 		HTTPClient: httpClient,

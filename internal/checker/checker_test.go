@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/ratelimit"
 )
 
 // mockRDAPServer creates a test HTTP server that responds to RDAP queries.
@@ -118,7 +119,7 @@ func TestCheckBulk_SingleDomain(t *testing.T) {
 	httpClient := testHTTPClient()
 
 	// Create rate limiter
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	// Create RDAP client
 	rdapClient := NewRDAPClient(RDAPClientConfig{
@@ -184,7 +185,7 @@ func TestCheckBulk_MultipleDomains(t *testing.T) {
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -239,7 +240,7 @@ func TestCheckBulk_CacheHit(t *testing.T) {
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -313,7 +314,7 @@ func TestCheckBulk_Timeout(t *testing.T) {
 		},
 		Timeout: 200 * time.Millisecond, // Short timeout for this test
 	}
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -379,7 +380,7 @@ func TestCheckBulk_ConcurrencyLimit(t *testing.T) {
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -434,7 +435,7 @@ func TestCheckBulk_PartialResults(t *testing.T) {
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -495,7 +496,7 @@ func TestCheckBulk_RegistryGrouping(t *testing.T) {
 
 	allowlist := NewAllowList([]string{comServer.URL, orgServer.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -558,7 +559,7 @@ func TestCheck_ContextCancellation(t *testing.T) {
 		},
 		Timeout: 5 * time.Second, // Allow time for cancellation
 	}
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -604,7 +605,7 @@ func TestCheckBulk_MaxDomains(t *testing.T) {
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -707,7 +708,7 @@ func BenchmarkCheckBulk_10Domains(b *testing.B) {
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -745,7 +746,7 @@ func BenchmarkCheckBulk_50Domains(b *testing.B) {
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -822,7 +823,7 @@ func TestCheckBulk_PerRegistrySemaphore(t *testing.T) {
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
@@ -937,7 +938,7 @@ func TestCheckBulk_MixedRegistries(t *testing.T) {
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
-	ratelimit := NewRateLimiter()
+	ratelimit := ratelimit.NewRateLimiter()
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,

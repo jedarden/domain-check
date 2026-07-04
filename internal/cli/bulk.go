@@ -17,6 +17,7 @@ import (
 
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/ratelimit"
 )
 
 // BulkConfig holds configuration for the bulk subcommand.
@@ -131,7 +132,7 @@ func Bulk(ctx context.Context, cfg BulkConfig) int {
 		Timeout: cfg.Timeout,
 	}
 
-	rateLimiter := checker.NewRateLimiter()
+	rateLimiter := ratelimit.NewRateLimiter()
 
 	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
 		HTTPClient: httpClient,

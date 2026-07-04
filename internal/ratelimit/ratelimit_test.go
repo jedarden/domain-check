@@ -1,4 +1,4 @@
-package checker
+package ratelimit
 
 import (
 	"context"

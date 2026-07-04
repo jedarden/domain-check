@@ -10,6 +10,7 @@ import (
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/cli"
 	"github.com/jedarden/domain-check/internal/config"
+	"github.com/jedarden/domain-check/internal/ratelimit"
 	"github.com/jedarden/domain-check/internal/server"
 )
 
@@ -447,7 +448,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	}()
 
 	// Create per-registry rate limiter.
-	registryRateLimit := checker.NewRateLimiter()
+	registryRateLimit := ratelimit.NewRateLimiter()
 
 	// Create RDAP client.
 	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{

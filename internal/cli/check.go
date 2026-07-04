@@ -14,6 +14,7 @@ import (
 
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/ratelimit"
 )
 
 // CheckConfig holds configuration for the check subcommand.
@@ -77,7 +78,7 @@ func Check(ctx context.Context, cfg CheckConfig) int {
 		Timeout: cfg.Timeout,
 	}
 
-	rateLimiter := checker.NewRateLimiter()
+	rateLimiter := ratelimit.NewRateLimiter()
 
 	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
 		HTTPClient: httpClient,

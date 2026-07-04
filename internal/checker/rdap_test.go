@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/ratelimit"
 )
 
 // TestRDAPResponseParsing tests parsing of various RDAP response formats.
@@ -854,7 +855,7 @@ func newTestRDAPClient(server *httptest.Server) *RDAPClient {
 	return NewRDAPClient(RDAPClientConfig{
 		HTTPClient: server.Client(),
 		Bootstrap:  bootstrap,
-		RateLimit:  NewRateLimiter(),
+		RateLimit:  ratelimit.NewRateLimiter(),
 		AllowList:  allowlist,
 		UserAgent:  "domain-check-test/1.0",
 	})

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/ratelimit"
 )
 
 // RDAP errors.
@@ -26,7 +27,7 @@ var (
 type RDAPClient struct {
 	httpClient *http.Client
 	bootstrap  *BootstrapManager
-	ratelimit  *RateLimiter
+	ratelimit  *ratelimit.RateLimiter
 	allowlist  *AllowList
 	userAgent  string
 }
@@ -35,7 +36,7 @@ type RDAPClient struct {
 type RDAPClientConfig struct {
 	HTTPClient *http.Client
 	Bootstrap  *BootstrapManager
-	RateLimit  *RateLimiter
+	RateLimit  *ratelimit.RateLimiter
 	AllowList  *AllowList
 	UserAgent  string
 }
@@ -95,7 +96,7 @@ func (c *RDAPClient) Check(ctx context.Context, normalizedDomain string) (*domai
 
 	if rdapErr != nil {
 		// Check for rate limit exhaustion.
-		if errors.Is(rdapErr, ErrServiceBusy) || strings.Contains(rdapErr.Error(), "429") {
+		if errors.Is(rdapErr, ratelimit.ErrServiceBusy) || strings.Contains(rdapErr.Error(), "429") {
 			return &domain.DomainResult{
 				Domain:     normalizedDomain,
 				TLD:        tld,
