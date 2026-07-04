@@ -347,7 +347,7 @@ Rationale: This is a single-purpose utility. A React/Next.js app would be massiv
 
 **Primary: Single Go binary**
 ```bash
-./domain-check serve --port 8080
+./domain-check serve --addr :8080
 ```
 
 **Docker:**
@@ -1049,7 +1049,7 @@ Run `vegeta` at 50 req/s for 10 minutes from randomized IPs. Monitor memory via 
 
 **GitHub Actions is intentionally disabled.** CI/CD runs on Argo Workflows in the `iad-ci` cluster (Rackspace Spot, us-east-iad-1). The WorkflowTemplate `domain-check-build` in `jedarden/declarative-config` handles Docker builds → `ronaldraygun/domain-check`.
 
-For Go lint/test/build validation, `cargo test` is intercepted by the local `cargo-remote` wrapper which submits to iad-ci via the `rust-verify` WorkflowTemplate (fmt + clippy + test). The Go equivalent runs locally under cgroup limits (CPUQuota=200%, MemoryMax=6G).
+Go tests and lint run locally under cgroup limits (CPUQuota=200%, MemoryMax=6G). CI is limited to Docker image builds via Argo Workflows.
 
 Manual workflow submission:
 ```bash
