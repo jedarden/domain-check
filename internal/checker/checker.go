@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/domain"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )

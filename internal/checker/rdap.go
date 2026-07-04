@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/domain"
 )
 
 // RDAP errors.

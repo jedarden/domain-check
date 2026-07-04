@@ -1,1 +1,1 @@
-done
+Bead `bf-i0l` closed. The Go toolchain versions were already aligned across all files — no changes were needed.

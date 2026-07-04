@@ -1,1 +1,10 @@
-done
+Done. Here's what was implemented:
+
+**CI gate added to `domain-check-build` WorkflowTemplate** (`k8s/iad-ci/argo-workflows/domain-check-workflowtemplate.yml`):
+
+1. **golangci-lint** — installed via official script (v1.64.8), replaces the previous `go vet` with full static analysis
+2. **`go test -race -coverprofile=coverage.out ./...`** — race detector + coverage profile added
+3. **30s fuzz runs** — `FuzzValidateDomain` in `internal/domain/` and `FuzzParseRDAPResponse` in `internal/checker/`, both run with no network calls to real RDAP servers
+4. **Timeout increased** from 600s → 900s to accommodate lint + fuzz
+
+All steps run sequentially in the `build-quality-gate` template, which already gates the `resolve-version` → `docker-build` pipeline. Any step failure (`set -ex`) aborts immediately and blocks the image build/push. Committed and pushed to `declarative-config` main on Forgejo.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

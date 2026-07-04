@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/domain"
 )
 
 // CacheTTLs holds per-status TTL durations.

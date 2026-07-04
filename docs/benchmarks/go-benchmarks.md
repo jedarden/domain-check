@@ -19,7 +19,7 @@ All benchmarks use mock HTTP servers to eliminate network variability.
 ```
 goos: linux
 goarch: amd64
-pkg: github.com/coding/domain-check/internal/checker
+pkg: github.com/jedarden/domain-check/internal/checker
 cpu: 13th Gen Intel(R) Core(TM) i5-13500
 ```
 

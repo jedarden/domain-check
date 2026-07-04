@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coding/domain-check/internal/config"
+	"github.com/jedarden/domain-check/internal/config"
 )
 
 func TestRequestID(t *testing.T) {

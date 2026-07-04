@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coding/domain-check/internal/checker"
+	"github.com/jedarden/domain-check/internal/checker"
 )
 
 // TestValidateSLD_Valid tests valid second-level domain labels.

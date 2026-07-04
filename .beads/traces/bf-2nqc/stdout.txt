@@ -1,14 +1,10 @@
-Everything is wired up correctly. The dependency tree confirms:
+Done. Here's the summary:
 
-- `bf-2nqc` (parent) → depends on `bf-46is` (last child)
-- `bf-46is` → `bf-6b6c` → `bf-5akr` → `bf-clao` (sequential chain)
-- Parent already had the `umbrella` label from a prior attempt
-- All children have the `split-child` label
+**Quality-gate logs captured** from pod `domain-check-qg-capture-v4nsl-build-quality-gate-3069676470` on iad-ci.
 
-```
-SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
-```
+- **`go vet ./...`** — passes successfully (all dependencies downloaded, no issues)
+- **`go test -race ./...`** — fails with `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`
 
-```
-Children: bf-clao, bf-5akr, bf-6b6c, bf-46is
-```
+**Root cause:** The `golang:1.26-alpine` image has CGO disabled by default, and `-race` requires CGO. The fix belongs in the WorkflowTemplate `domain-check-build` in declarative-config.
+
+Logs documented in `docs/notes/quality-gate-logs-2026-07-04.md`. Bead `bf-2nqc` closed.

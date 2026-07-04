@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/coding/domain-check/internal/checker"
-	"github.com/coding/domain-check/internal/cli"
-	"github.com/coding/domain-check/internal/config"
-	"github.com/coding/domain-check/internal/server"
+	"github.com/jedarden/domain-check/internal/checker"
+	"github.com/jedarden/domain-check/internal/cli"
+	"github.com/jedarden/domain-check/internal/config"
+	"github.com/jedarden/domain-check/internal/server"
 )
 
 func main() {

@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coding/domain-check/internal/checker"
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/checker"
+	"github.com/jedarden/domain-check/internal/domain"
 )
 
 // memSnapshot captures a point-in-time snapshot of Go runtime memory stats.

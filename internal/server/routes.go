@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/coding/domain-check/internal/config"
-	"github.com/coding/domain-check/web"
+	"github.com/jedarden/domain-check/internal/config"
+	"github.com/jedarden/domain-check/web"
 )
 
 // Router creates and returns the main HTTP handler with all routes and middleware.

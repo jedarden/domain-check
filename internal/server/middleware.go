@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coding/domain-check/internal/config"
+	"github.com/jedarden/domain-check/internal/config"
 	"golang.org/x/time/rate"
 )
 

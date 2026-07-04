@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coding/domain-check/internal/checker"
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/checker"
+	"github.com/jedarden/domain-check/internal/domain"
 )
 
 // BulkConfig holds configuration for the bulk subcommand.

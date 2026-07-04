@@ -1,13 +1,10 @@
-The dependency tree shows some older stale beads from previous failed attempts (`bf-kl18`, `bf-4wg9`, `bf-2oto`). Those are from prior runs. My fresh children are `bf-lvez`, `bf-2nqc`, `bf-1gqk`, `bf-68gr`, and the chain is correctly wired:
+Done. Here's the summary:
 
-```
-bf-iaeg (umbrella)
-  └── bf-68gr → bf-1gqk → bf-2nqc → bf-lvez
-```
+**Bead `bf-iaeg` closed** — Quality-gate logs were already captured from a prior debug workflow (`domain-check-qg-capture-v4nsl`) and saved to `docs/notes/quality-gate-logs-2026-07-04.md`.
 
-The umbrella label is already present on the parent and the dependency from parent to last child is set.
-
-```
-SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
-Children: bf-lvez, bf-2nqc, bf-1gqk, bf-68gr
-```
+**Findings:**
+- **Exit code:** 2
+- **`go vet ./...`**: Passes ✅
+- **`go test -race ./...`**: Fails with `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`
+- **Root cause:** The `golang:1.26-alpine` image has CGO disabled by default; the `-race` flag requires CGO
+- **Fix needed:** Add `CGO_ENABLED=1` + `build-base` apk package to the quality-gate container in the `domain-check-build` WorkflowTemplate, or switch to `golang:1.26` (Debian-based)

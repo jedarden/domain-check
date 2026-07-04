@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/domain"
 )
 
 // mockRDAPServer creates a test HTTP server that responds to RDAP queries.

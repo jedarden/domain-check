@@ -335,7 +335,7 @@ Rationale: This is a single-purpose utility. A React/Next.js app would be massiv
 
 **Docker:**
 ```dockerfile
-FROM golang:1.22-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /app
 COPY . .
 RUN go build -o domain-check .
@@ -990,7 +990,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: ['1.22', '1.23']
+        go: ['1.26']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

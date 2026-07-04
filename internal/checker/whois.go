@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/domain"
 	"github.com/likexian/whois"
 	whoisparser "github.com/likexian/whois-parser"
 	"golang.org/x/time/rate"

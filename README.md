@@ -46,7 +46,7 @@ docker run -p 8080:8080 ronaldraygun/domain-check
 
 ### From Source
 
-Requires [Go 1.23+](https://go.dev/dl/).
+Requires [Go 1.26+](https://go.dev/dl/).
 
 ```bash
 git clone https://github.com/jedarden/domain-check.git

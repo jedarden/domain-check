@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/domain"
 )
 
 // TestRDAPResponseParsing tests parsing of various RDAP response formats.

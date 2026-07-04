@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coding/domain-check/internal/config"
+	"github.com/jedarden/domain-check/internal/config"
 )
 
 // Server wraps an http.Server with graceful shutdown support.

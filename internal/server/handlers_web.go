@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/coding/domain-check/internal/domain"
-	"github.com/coding/domain-check/web"
+	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/web"
 )
 
 // Default alternative TLDs to check for "Also check" section.

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coding/domain-check/internal/checker"
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/checker"
+	"github.com/jedarden/domain-check/internal/domain"
 )
 
 // DomainChecker is the interface for checking domain availability.

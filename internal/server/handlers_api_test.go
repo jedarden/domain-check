@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coding/domain-check/internal/checker"
-	"github.com/coding/domain-check/internal/config"
-	"github.com/coding/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/checker"
+	"github.com/jedarden/domain-check/internal/config"
+	"github.com/jedarden/domain-check/internal/domain"
 )
 
 // mockChecker is a mock checker for testing.
