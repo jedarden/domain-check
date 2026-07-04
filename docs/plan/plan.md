@@ -145,17 +145,27 @@ Response (taken):
 
 ### Multi-TLD Check (check a name across TLDs)
 
+Two routes are available for multi-TLD checks:
+
+**Via `/api/v1/check` (optional `tlds` parameter):**
+
 ```
 GET /api/v1/check?d=example&tlds=com,org,dev,net,io
 ```
 
-Also available as a dedicated endpoint:
+- `d` — domain name (with or without TLD; when `tlds` is present, the TLD in `d` is ignored and each value in `tlds` is appended)
+- `tlds` — **optional** comma-separated TLD list; when present, triggers multi-TLD mode (delegates to `MultiTLDHandler`); when absent, performs a single domain check
+
+**Via `/api/v1/check/multi` (dedicated endpoint):**
 
 ```
 GET /api/v1/check/multi?d=example&tlds=com,org,dev,net,io
 ```
 
-Both routes delegate to the same handler. The `tlds` query parameter on `/api/v1/check` triggers multi-TLD mode automatically.
+- `d` — domain name **without** TLD (e.g., `example`, not `example.com`)
+- `tlds` — **required** comma-separated TLD list; returns `400 missing_parameter` if absent
+
+Both routes use the same `MultiTLDHandler` internally and return identical response shapes. The dedicated `/multi` endpoint is provided for API consumers that always want multi-TLD semantics (avoids the ambiguity of `d=example` being a single check on one route vs. a name on the other).
 
 Response:
 ```json
@@ -911,49 +921,52 @@ All tests run without network access to real registries. CI uses recorded fixtur
 
 | # | Request | Expected |
 |---|---------|----------|
-| 8 | `?d=example&tlds=com,org` | 200, results array with 2 entries |
-| 9 | `?d=example&tlds=com,invalidtld` | 200, partial results (com succeeds, invalidtld has error) |
-| 10 | `?d=example` (no tlds) | Single check on `example` as-is |
+| 8 | `/api/v1/check?d=example&tlds=com,org` | 200, results array with 2 entries |
+| 9 | `/api/v1/check?d=example&tlds=com,invalidtld` | 200, partial results (com succeeds, invalidtld has error) |
+| 10 | `/api/v1/check?d=example` (no tlds) | Single check on `example` as-is |
+| 11 | `/api/v1/check/multi?d=example&tlds=com,org` | 200, results array with 2 entries (same shape as #8) |
+| 12 | `/api/v1/check/multi?d=example` (no tlds) | 400, `error: missing_parameter` (tlds is required on /multi) |
+| 13 | `/api/v1/check/multi` (no params) | 400, `error: missing_parameter` |
 
 #### Bulk Endpoint (`POST /api/v1/bulk`)
 
 | # | Request | Expected |
 |---|---------|----------|
-| 11 | 3 valid domains | 200, 3 results |
-| 12 | 50 domains (max) | 200, 50 results |
-| 13 | 51 domains (over limit) | 400, `error: max 50 domains per request` |
-| 14 | Empty array | 400, `error: no domains provided` |
-| 15 | 128 KB body | 413, body too large |
-| 16 | Invalid JSON | 400, `error: invalid JSON` |
-| 17 | Mixed success/failure | 200, per-domain results with individual errors |
+| 14 | 3 valid domains | 200, 3 results |
+| 15 | 50 domains (max) | 200, 50 results |
+| 16 | 51 domains (over limit) | 400, `error: max 50 domains per request` |
+| 17 | Empty array | 400, `error: no domains provided` |
+| 18 | 128 KB body | 413, body too large |
+| 19 | Invalid JSON | 400, `error: invalid JSON` |
+| 20 | Mixed success/failure | 200, per-domain results with individual errors |
 
 #### Rate Limiting
 
 | # | Scenario | Expected |
 |---|----------|----------|
-| 18 | 11th web check in 1 minute from same IP | 429 with `retry_after` |
-| 19 | 61st API check in 1 minute from same IP | 429 with `retry_after` |
-| 20 | Different IPs within limits | All succeed |
-| 21 | Rate limit response includes `Retry-After` header | Header present |
+| 21 | 11th web check in 1 minute from same IP | 429 with `retry_after` |
+| 22 | 61st API check in 1 minute from same IP | 429 with `retry_after` |
+| 23 | Different IPs within limits | All succeed |
+| 24 | Rate limit response includes `Retry-After` header | Header present |
 
 #### Security Headers
 
 | # | Scenario | Expected |
 |---|----------|----------|
-| 22 | Response has `Content-Security-Policy` header | Present on all responses |
-| 23 | Response has `X-Content-Type-Options: nosniff` | Present |
-| 24 | Response has `X-Frame-Options: DENY` | Present |
-| 25 | Response has `X-Request-Id` header | Present, 16 hex chars |
-| 26 | CORS preflight `OPTIONS /api/v1/check` | 204, correct `Access-Control-*` headers |
-| 27 | API response `Content-Type` | `application/json` |
+| 25 | Response has `Content-Security-Policy` header | Present on all responses |
+| 26 | Response has `X-Content-Type-Options: nosniff` | Present |
+| 27 | Response has `X-Frame-Options: DENY` | Present |
+| 28 | Response has `X-Request-Id` header | Present, 16 hex chars |
+| 29 | CORS preflight `OPTIONS /api/v1/check` | 204, correct `Access-Control-*` headers |
+| 30 | API response `Content-Type` | `application/json` |
 
 #### Health Check
 
 | # | Scenario | Expected |
 |---|----------|----------|
-| 28 | `GET /health` normal | 200, `status: ok`, bootstrap age < 48h |
-| 29 | Bootstrap older than 48h | 200, `status: degraded` |
-| 30 | Bootstrap failed to load | 503, `status: unhealthy` |
+| 31 | `GET /health` normal | 200, `status: ok`, bootstrap age < 48h |
+| 32 | Bootstrap older than 48h | 200, `status: degraded` |
+| 33 | Bootstrap failed to load | 503, `status: unhealthy` |
 
 ### Web UI Tests (Playwright or similar)
 
@@ -1126,10 +1139,13 @@ domain-check/
 │   │   └── layout.html          # Base layout with security headers, CSP
 │   ├── static/
 │   │   ├── style.css            # Minimal CSS (mobile-first)
-│   │   └── app.js               # Progressive enhancement (debounced search, multi-TLD)
+│   │   ├── app.js               # Progressive enhancement (debounced search, multi-TLD)
+│   │   ├── favicon.svg          # Favicon
+│   │   ├── og-card.png          # Open Graph social card image
+│   │   └── robots.txt           # Robots exclusion (noindex result pages)
 │   └── embed.go                 # //go:embed directives for templates/ and static/
 ├── testdata/
-│   └── rdap/                    # Recorded RDAP response fixtures (8+ registries)
+│   └── fuzz/                    # Fuzz corpus and recorded RDAP response fixtures
 ├── docs/
 │   ├── research/                # Research documents (01-08)
 │   └── plan/                    # This file
