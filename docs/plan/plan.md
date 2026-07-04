@@ -1062,7 +1062,7 @@ Run `vegeta` at 50 req/s for 10 minutes from randomized IPs. Monitor memory via 
 
 ### CI Pipeline
 
-**GitHub Actions is intentionally disabled.** CI/CD runs on Argo Workflows in the `iad-ci` cluster (Rackspace Spot, us-east-iad-1). The WorkflowTemplate `domain-check-build` in `jedarden/declarative-config` handles Docker builds → `ronaldraygun/domain-check`.
+CI/CD runs on Argo Workflows in the `iad-ci` cluster (Rackspace Spot, us-east-iad-1). The WorkflowTemplate `domain-check-build` in `jedarden/declarative-config` handles Docker builds → `ronaldraygun/domain-check`.
 
 Go tests and lint run locally under cgroup limits (CPUQuota=200%, MemoryMax=6G). CI is limited to Docker image builds via Argo Workflows.
 
