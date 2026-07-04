@@ -1,13 +1,13 @@
-Everything is wired correctly. The dependency tree shows:
+The dependency tree shows some older stale beads from previous failed attempts (`bf-kl18`, `bf-4wg9`, `bf-2oto`). Those are from prior runs. My fresh children are `bf-lvez`, `bf-2nqc`, `bf-1gqk`, `bf-68gr`, and the chain is correctly wired:
 
 ```
 bf-iaeg (umbrella)
- └── bf-kl18 (last child → Extract and document failure details)
-     └── bf-4wg9 (child 2 → Capture logs)
-         └── bf-2oto (child 1 → Query workflow status)
+  └── bf-68gr → bf-1gqk → bf-2nqc → bf-lvez
 ```
 
+The umbrella label is already present on the parent and the dependency from parent to last child is set.
+
 ```
-SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
-Children: bf-2oto, bf-4wg9, bf-kl18
+SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+Children: bf-lvez, bf-2nqc, bf-1gqk, bf-68gr
 ```
