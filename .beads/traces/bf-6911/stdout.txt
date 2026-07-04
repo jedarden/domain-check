@@ -1,0 +1,7 @@
+Done. Here's a summary of what was done:
+
+**Problem:** The `quality-gate` step in `domain-check-build` WorkflowTemplate used `golang:1.26-alpine`, which sets `CGO_ENABLED=0` by default. `go test -race` requires `CGO_ENABLED=1` (the race detector needs a C toolchain), causing exit code 2 failures.
+
+**Fix:** Switched the `quality-gate` step image from `golang:1.26-alpine` to `golang:1.26` (Debian-based). This provides a working C toolchain out of the box, matching the precedent of the `build-quality-gate` step which already uses `golang:1.26` successfully. Also removed the now-unnecessary `apk add build-base`, `CGO_ENABLED=1` env var, and inline `CGO_ENABLED=1` prefixes.
+
+**File changed:** `k8s/iad-ci/argo-workflows/domain-check-workflowtemplate.yml` in `declarative-config` — committed locally, not pushed per acceptance criteria.

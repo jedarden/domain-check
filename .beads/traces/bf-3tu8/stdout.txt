@@ -1,0 +1,27 @@
+The split is complete and verified. Here's the summary:
+
+```
+SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+```
+
+```
+Children: bf-6911, bf-2099, bf-dxdn, bf-22mb
+```
+
+**Dependency chain:**
+```
+bf-3tu8 (umbrella)
+  └── bf-22mb: Document quality-gate fix in domain-check project docs
+        └── bf-dxdn: Trigger and poll a test build to verify quality-gate passes
+              └── bf-2099: Commit and push WorkflowTemplate fix to declarative-config
+                    └── bf-6911: Fix WorkflowTemplate quality-gate step to support CGO/race detector
+```
+
+**Child breakdown:**
+
+| # | ID | Title | Scope |
+|---|-----|-------|-------|
+| 1 | bf-6911 | Fix WorkflowTemplate quality-gate step to support CGO/race detector | Edit the YAML in declarative-config (switch alpine→debian or add build-base) |
+| 2 | bf-2099 | Commit and push WorkflowTemplate fix to declarative-config | Git commit + push to Forgejo, ArgoCD syncs to iad-ci |
+| 3 | bf-dxdn | Trigger and poll a test build to verify quality-gate passes | Submit manual workflow, confirm quality-gate exits 0 |
+| 4 | bf-22mb | Document quality-gate fix in domain-check project docs | Update docs, archive stale debug files, commit to domain-check repo |

@@ -169,9 +169,9 @@ func TestIsAvailableFromRaw(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isAvailableFromRaw(tt.raw, tt.tld)
+			result := IsAvailableFromRaw(tt.raw, tt.tld)
 			if result != tt.expected {
-				t.Errorf("isAvailableFromRaw() = %v, want %v", result, tt.expected)
+				t.Errorf("IsAvailableFromRaw() = %v, want %v", result, tt.expected)
 			}
 		})
 	}
@@ -359,10 +359,10 @@ func TestWHOISFixtureParsing(t *testing.T) {
 			}
 
 			raw := string(data)
-			gotAvailable := isAvailableFromRaw(raw, tt.tld)
+			gotAvailable := IsAvailableFromRaw(raw, tt.tld)
 
 			if gotAvailable != tt.wantAvailable {
-				t.Errorf("isAvailableFromRaw() = %v, want %v", gotAvailable, tt.wantAvailable)
+				t.Errorf("IsAvailableFromRaw() = %v, want %v", gotAvailable, tt.wantAvailable)
 			}
 		})
 	}
@@ -413,9 +413,9 @@ func TestWHOISFixtureParsingWithClient(t *testing.T) {
 			raw := string(data)
 
 			// Test the raw parsing function
-			gotAvailable := isAvailableFromRaw(raw, tt.tld)
+			gotAvailable := IsAvailableFromRaw(raw, tt.tld)
 			if gotAvailable != tt.wantAvailable {
-				t.Errorf("isAvailableFromRaw() = %v, want %v", gotAvailable, tt.wantAvailable)
+				t.Errorf("IsAvailableFromRaw() = %v, want %v", gotAvailable, tt.wantAvailable)
 			}
 
 			// Test the parseResponse method
@@ -458,9 +458,9 @@ func TestWHOISDENICPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isAvailableFromRaw(tt.raw, "de")
+			result := IsAvailableFromRaw(tt.raw, "de")
 			if result != tt.expected {
-				t.Errorf("isAvailableFromRaw() = %v, want %v", result, tt.expected)
+				t.Errorf("IsAvailableFromRaw() = %v, want %v", result, tt.expected)
 			}
 		})
 	}
@@ -492,9 +492,9 @@ func TestWHOISJPRSPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isAvailableFromRaw(tt.raw, "jp")
+			result := IsAvailableFromRaw(tt.raw, "jp")
 			if result != tt.expected {
-				t.Errorf("isAvailableFromRaw() = %v, want %v", result, tt.expected)
+				t.Errorf("IsAvailableFromRaw() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

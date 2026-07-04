@@ -1,0 +1,5 @@
+Done. The quality-gate failure is classified as **Configuration issue (category 4)**.
+
+**Verbatim error:** `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`
+
+**Root cause:** The `golang:1.26-alpine` image has CGO disabled by default, but the `go test -race` step requires CGO to compile the race detector instrumentation. No source file or line number applies — this is a CI/CD WorkflowTemplate configuration problem, not a code defect.

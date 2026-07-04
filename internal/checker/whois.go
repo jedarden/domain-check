@@ -334,7 +334,7 @@ func (c *WHOISClient) parseResponse(rawWhois, domainName, tld string, start time
 	parsed, err := whoisparser.Parse(rawWhois)
 	if err != nil {
 		// Parser failed - try to determine availability from raw response.
-		result.Available = isAvailableFromRaw(rawWhois, tld)
+		result.Available = IsAvailableFromRaw(rawWhois, tld)
 		if !result.Available {
 			result.Error = fmt.Sprintf("%s: parse error: %v", ErrWHOISParseFailure.Error(), err)
 		}
@@ -344,7 +344,7 @@ func (c *WHOISClient) parseResponse(rawWhois, domainName, tld string, start time
 	// Check domain status.
 	if parsed.Domain == nil {
 		// No domain info - likely available.
-		result.Available = isAvailableFromRaw(rawWhois, tld)
+		result.Available = IsAvailableFromRaw(rawWhois, tld)
 		return result
 	}
 
@@ -357,7 +357,7 @@ func (c *WHOISClient) parseResponse(rawWhois, domainName, tld string, start time
 		if parsed.Domain.Name != "" {
 			result.Available = false
 		} else {
-			result.Available = isAvailableFromRaw(rawWhois, tld)
+			result.Available = IsAvailableFromRaw(rawWhois, tld)
 		}
 	}
 
@@ -397,9 +397,10 @@ func (c *WHOISClient) parseResponse(rawWhois, domainName, tld string, start time
 	return result
 }
 
-// isAvailableFromRaw checks the raw WHOIS response for availability indicators.
+// IsAvailableFromRaw checks the raw WHOIS response for availability indicators.
 // Different registries use different patterns to indicate availability.
-func isAvailableFromRaw(raw string, tld string) bool {
+// Exported for use in integration tests.
+func IsAvailableFromRaw(raw string, tld string) bool {
 	rawLower := strings.ToLower(raw)
 
 	// Common "not found" patterns.

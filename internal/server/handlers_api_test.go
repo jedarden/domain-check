@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -2561,6 +2563,595 @@ func TestTLDsHandler_LargeList(t *testing.T) {
 	if len(resp.TLDs) != 500 {
 		t.Errorf("expected 500 TLDs, got %d", len(resp.TLDs))
 	}
+}
+
+// ============================================================================
+// WHOIS ccTLD Integration Tests
+// These tests exercise the full HTTP stack (router → middleware → handler)
+// using a mock checker that returns WHOIS-sourced results for .de/.jp domains.
+// The mock reads fixture data from testdata/whois/ to simulate real WHOIS
+// responses without network access.
+// ============================================================================
+
+// whoisMockChecker simulates the WHOIS fallback path for ccTLDs.
+// It returns DomainResults with Source=WHOIS for .de and .jp domains,
+// and with Source=RDAP for other TLDs (so mixed bulk/multi-TLD works).
+type whoisMockChecker struct {
+	// fixtureResults pre-loaded results keyed by domain name.
+	fixtureResults map[string]*domain.DomainResult
+	// fallbackRDAP used for non-WHOIS TLDs (e.g. .com in mixed bulk).
+	fallbackRDAP *domain.DomainResult
+}
+
+// loadWHOISFixture builds a DomainResult from a WHOIS fixture file.
+// Available fixtures: de-registered.txt, de-available.txt, jp-registered.txt, jp-available.txt
+func loadWHOISFixture(t *testing.T, fixtureFile, domainName, tld string) *domain.DomainResult {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "checker", "testdata", "whois", fixtureFile))
+	if err != nil {
+		t.Fatalf("failed to read WHOIS fixture %s: %v", fixtureFile, err)
+	}
+
+	raw := string(data)
+	available := checker.IsAvailableFromRaw(raw, tld)
+
+	result := &domain.DomainResult{
+		Domain:     domainName,
+		TLD:        tld,
+		Source:     domain.SourceWHOIS,
+		CheckedAt:  time.Now(),
+		Cached:     false,
+		Available:  available,
+		DurationMs: 85, // Typical WHOIS query time
+	}
+
+	if !available {
+		// Parse registration info from the fixture for registered domains.
+		reg := &domain.Registration{}
+		switch tld {
+		case "de":
+			// DENIC format: Domain:, Nserver:, Status:
+			for _, line := range strings.Split(raw, "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "Domain:") {
+					reg.Registrar = "DENIC"
+				}
+				if strings.HasPrefix(line, "Nserver:") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						reg.Nameservers = append(reg.Nameservers, strings.TrimRight(strings.ToLower(parts[1]), "."))
+					}
+				}
+				if strings.HasPrefix(line, "Status:") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						reg.Status = append(reg.Status, strings.ToLower(parts[1]))
+					}
+				}
+				if strings.HasPrefix(line, "Changed:") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						reg.Created = parts[1]
+					}
+				}
+			}
+		case "jp":
+			// JPRS format: [Domain Name], [Name Server], [登録年月日], [有効期限]
+			for _, line := range strings.Split(raw, "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "[Name Server]") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						reg.Nameservers = append(reg.Nameservers, strings.TrimRight(strings.ToLower(parts[1]), "."))
+					}
+				}
+				if strings.HasPrefix(line, "[登録年月日]") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						reg.Created = parts[1]
+					}
+				}
+				if strings.HasPrefix(line, "[有効期限]") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						reg.Expires = parts[1]
+					}
+				}
+				if strings.HasPrefix(line, "[状態]") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						reg.Status = append(reg.Status, strings.ToLower(parts[1]))
+					}
+				}
+				if strings.HasPrefix(line, "[Registrant]") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						reg.Registrar = strings.Join(parts[1:], " ")
+					}
+				}
+			}
+		}
+		result.Registration = reg
+	}
+
+	return result
+}
+
+// newWHOISMockChecker creates a mock checker pre-loaded with WHOIS fixture results.
+func newWHOISMockChecker(t *testing.T) *whoisMockChecker {
+	t.Helper()
+	wc := &whoisMockChecker{
+		fixtureResults: make(map[string]*domain.DomainResult),
+		fallbackRDAP: &domain.DomainResult{
+			Domain:     "mixed.example.com",
+			Available:  true,
+			TLD:        "com",
+			Source:     domain.SourceRDAP,
+			DurationMs: 50,
+		},
+	}
+
+	// Load .de fixtures.
+	wc.fixtureResults["whoisavailtest1234.de"] = loadWHOISFixture(t, "de-available.txt", "whoisavailtest1234.de", "de")
+	wc.fixtureResults["whoisregistest5678.de"] = loadWHOISFixture(t, "de-registered.txt", "whoisregistest5678.de", "de")
+
+	// Load .jp fixtures.
+	wc.fixtureResults["whoisavailtest1234.jp"] = loadWHOISFixture(t, "jp-available.txt", "whoisavailtest1234.jp", "jp")
+	wc.fixtureResults["whoisregistest5678.jp"] = loadWHOISFixture(t, "jp-registered.txt", "whoisregistest5678.jp", "jp")
+
+	return wc
+}
+
+func (w *whoisMockChecker) Check(_ context.Context, normalizedDomain string) (*domain.DomainResult, error) {
+	if res, ok := w.fixtureResults[normalizedDomain]; ok {
+		return res, nil
+	}
+	return nil, checker.ErrTLDNotFound
+}
+
+func (w *whoisMockChecker) CheckBulk(_ context.Context, domains []string) *checker.BulkResult {
+	result := &checker.BulkResult{
+		Results: make(map[string]*domain.DomainResult),
+		Errors:  make(map[string]string),
+	}
+	for _, d := range domains {
+		if res, ok := w.fixtureResults[d]; ok {
+			result.Results[d] = res
+		} else {
+			result.Errors[d] = "domain not found in WHOIS mock"
+		}
+	}
+	return result
+}
+
+func TestIntegration_WHOIS_SingleCheck(t *testing.T) {
+	wc := newWHOISMockChecker(t)
+
+	t.Run("de-available-domain", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=whoisavailtest1234.de", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp domain.DomainResult
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Available != true {
+			t.Errorf("expected available=true, got %v", resp.Available)
+		}
+		if resp.Source != domain.SourceWHOIS {
+			t.Errorf("expected source=whois, got %s", resp.Source)
+		}
+		if resp.TLD != "de" {
+			t.Errorf("expected TLD=de, got %s", resp.TLD)
+		}
+		if resp.Registration != nil {
+			t.Errorf("expected nil registration for available domain, got %v", resp.Registration)
+		}
+	})
+
+	t.Run("de-registered-domain", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=whoisregistest5678.de", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp domain.DomainResult
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Available != false {
+			t.Errorf("expected available=false, got %v", resp.Available)
+		}
+		if resp.Source != domain.SourceWHOIS {
+			t.Errorf("expected source=whois, got %s", resp.Source)
+		}
+		if resp.TLD != "de" {
+			t.Errorf("expected TLD=de, got %s", resp.TLD)
+		}
+		if resp.Registration == nil {
+			t.Fatal("expected registration data for registered .de domain")
+		}
+		if resp.Registration.Registrar != "DENIC" {
+			t.Errorf("expected registrar=DENIC, got %s", resp.Registration.Registrar)
+		}
+		if len(resp.Registration.Nameservers) == 0 {
+			t.Error("expected at least one nameserver for registered .de domain")
+		}
+	})
+
+	t.Run("jp-available-domain", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=whoisavailtest1234.jp", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp domain.DomainResult
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Available != true {
+			t.Errorf("expected available=true, got %v", resp.Available)
+		}
+		if resp.Source != domain.SourceWHOIS {
+			t.Errorf("expected source=whois, got %s", resp.Source)
+		}
+		if resp.TLD != "jp" {
+			t.Errorf("expected TLD=jp, got %s", resp.TLD)
+		}
+		if resp.Registration != nil {
+			t.Errorf("expected nil registration for available domain, got %v", resp.Registration)
+		}
+	})
+
+	t.Run("jp-registered-domain", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=whoisregistest5678.jp", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp domain.DomainResult
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Available != false {
+			t.Errorf("expected available=false, got %v", resp.Available)
+		}
+		if resp.Source != domain.SourceWHOIS {
+			t.Errorf("expected source=whois, got %s", resp.Source)
+		}
+		if resp.TLD != "jp" {
+			t.Errorf("expected TLD=jp, got %s", resp.TLD)
+		}
+		if resp.Registration == nil {
+			t.Fatal("expected registration data for registered .jp domain")
+		}
+		if len(resp.Registration.Nameservers) == 0 {
+			t.Error("expected at least one nameserver for registered .jp domain")
+		}
+		if len(resp.Registration.Status) == 0 {
+			t.Error("expected at least one status value for registered .jp domain")
+		}
+	})
+
+	t.Run("whois-response-content-type", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=whoisavailtest1234.de", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		ct := rec.Header().Get("Content-Type")
+		if ct != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %s", ct)
+		}
+	})
+
+	t.Run("whois-response-has-security-headers", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=whoisavailtest1234.jp", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("expected X-Content-Type-Options nosniff, got %s", got)
+		}
+		if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("expected X-Frame-Options DENY, got %s", got)
+		}
+		rid := rec.Header().Get("X-Request-Id")
+		if rid == "" {
+			t.Error("expected X-Request-Id header")
+		}
+	})
+}
+
+func TestIntegration_WHOIS_BulkCheck(t *testing.T) {
+	wc := newWHOISMockChecker(t)
+
+	t.Run("bulk-mixed-cctlds", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		body := `{"domains": ["whoisavailtest1234.de", "whoisregistest5678.de", "whoisavailtest1234.jp", "whoisregistest5678.jp"]}`
+		req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp BulkCheckResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Total != 4 {
+			t.Errorf("expected total 4, got %d", resp.Total)
+		}
+		if resp.Succeeded != 4 {
+			t.Errorf("expected succeeded 4, got %d", resp.Succeeded)
+		}
+		if resp.Failed != 0 {
+			t.Errorf("expected failed 0, got %d", resp.Failed)
+		}
+		if len(resp.Results) != 4 {
+			t.Errorf("expected 4 results, got %d", len(resp.Results))
+		}
+
+		// Verify each result came from WHOIS source.
+		for _, r := range resp.Results {
+			if r.Result == nil {
+				t.Errorf("expected result for %s, got nil", r.Domain)
+				continue
+			}
+			if r.Result.Source != domain.SourceWHOIS {
+				t.Errorf("expected source=whois for %s, got %s", r.Domain, r.Result.Source)
+			}
+		}
+	})
+
+	t.Run("bulk-cctld-available-registered-mix", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		// 2 available + 2 registered
+		body := `{"domains": ["whoisavailtest1234.de", "whoisregistest5678.jp", "whoisavailtest1234.jp", "whoisregistest5678.de"]}`
+		req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp BulkCheckResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		// Verify availability matches expectations.
+		expectedAvail := map[string]bool{
+			"whoisavailtest1234.de":  true,
+			"whoisregistest5678.jp":  false,
+			"whoisavailtest1234.jp":  true,
+			"whoisregistest5678.de":  false,
+		}
+		for _, r := range resp.Results {
+			if r.Result == nil {
+				t.Errorf("expected result for %s", r.Domain)
+				continue
+			}
+			want, ok := expectedAvail[r.Domain]
+			if !ok {
+				t.Errorf("unexpected domain %s in results", r.Domain)
+				continue
+			}
+			if r.Result.Available != want {
+				t.Errorf("domain %s: expected available=%v, got %v", r.Domain, want, r.Result.Available)
+			}
+		}
+	})
+
+	t.Run("bulk-cctld-registration-details", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		body := `{"domains": ["whoisregistest5678.de", "whoisregistest5678.jp"]}`
+		req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp BulkCheckResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		for _, r := range resp.Results {
+			if r.Result == nil {
+				t.Errorf("expected result for %s", r.Domain)
+				continue
+			}
+			if r.Result.Registration == nil {
+				t.Errorf("expected registration data for registered domain %s", r.Domain)
+				continue
+			}
+			if len(r.Result.Registration.Nameservers) == 0 {
+				t.Errorf("expected nameservers for registered domain %s", r.Domain)
+			}
+		}
+	})
+}
+
+func TestIntegration_WHOIS_MultiTLD(t *testing.T) {
+	wc := newWHOISMockChecker(t)
+
+	t.Run("multi-tld-with-cctlds", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=whoisavailtest1234&tlds=de,jp", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp MultiTLDResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Total != 2 {
+			t.Errorf("expected total 2, got %d", resp.Total)
+		}
+		if resp.Succeeded != 2 {
+			t.Errorf("expected succeeded 2, got %d", resp.Succeeded)
+		}
+		if resp.Failed != 0 {
+			t.Errorf("expected failed 0, got %d", resp.Failed)
+		}
+		if len(resp.Results) != 2 {
+			t.Errorf("expected 2 results, got %d", len(resp.Results))
+		}
+
+		// Both should be available and from WHOIS source.
+		for _, r := range resp.Results {
+			if r.Result == nil {
+				t.Errorf("expected result for %s, got nil", r.Domain)
+				continue
+			}
+			if r.Result.Available != true {
+				t.Errorf("expected available=true for %s, got %v", r.Domain, r.Result.Available)
+			}
+			if r.Result.Source != domain.SourceWHOIS {
+				t.Errorf("expected source=whois for %s, got %s", r.Domain, r.Result.Source)
+			}
+		}
+	})
+
+	t.Run("multi-tld-mixed-avail-registered", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		// whoisregistest5678 is registered, whoisavailtest1234 is available
+		req := httptest.NewRequest("GET", "/api/v1/check?d=whoisregistest5678&tlds=de,jp", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp MultiTLDResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		// Both should be registered (not available).
+		for _, r := range resp.Results {
+			if r.Result == nil {
+				t.Errorf("expected result for %s, got nil", r.Domain)
+				continue
+			}
+			if r.Result.Available != false {
+				t.Errorf("expected available=false for registered domain %s, got %v", r.Domain, r.Result.Available)
+			}
+		}
+	})
+
+	t.Run("multi-tld-de-registered-has-reg-data", func(t *testing.T) {
+		router := setupIntegrationRouter(wc)
+
+		req := httptest.NewRequest("GET", "/api/v1/check?d=whoisregistest5678&tlds=de", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp MultiTLDResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if len(resp.Results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(resp.Results))
+		}
+
+		r := resp.Results[0]
+		if r.Result == nil {
+			t.Fatal("expected result")
+		}
+		if r.Result.Registration == nil {
+			t.Fatal("expected registration data for registered .de domain via multi-TLD")
+		}
+		if r.Result.Registration.Registrar != "DENIC" {
+			t.Errorf("expected registrar=DENIC, got %s", r.Result.Registration.Registrar)
+		}
+	})
+}
+
+func TestIntegration_WHOIS_SourceVerification(t *testing.T) {
+	wc := newWHOISMockChecker(t)
+
+	t.Run("all-whois-tlds-return-whois-source", func(t *testing.T) {
+		whoisTLDs := []string{"de", "jp"}
+		for _, tld := range whoisTLDs {
+			t.Run(tld, func(t *testing.T) {
+				domainName := "whoisavailtest1234." + tld
+				router := setupIntegrationRouter(wc)
+
+				req := httptest.NewRequest("GET", "/api/v1/check?d="+domainName, nil)
+				rec := httptest.NewRecorder()
+				router.ServeHTTP(rec, req)
+
+				if rec.Code != http.StatusOK {
+					t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+				}
+
+				var resp domain.DomainResult
+				if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+					t.Fatalf("failed to decode: %v", err)
+				}
+
+				if resp.Source != domain.SourceWHOIS {
+					t.Errorf("expected source=whois for TLD %s, got %s", tld, resp.Source)
+				}
+			})
+		}
+	})
 }
 
 func TestIntegration_TLDsEndpoint(t *testing.T) {
