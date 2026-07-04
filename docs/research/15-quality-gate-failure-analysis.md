@@ -6,14 +6,24 @@
 
 ## Raw Logs
 
-Full quality-gate pod output captured via debug workflow with `podGC: OnWorkflowCompletion` override. See [quality-gate-debug-logs.txt](quality-gate-debug-logs.txt).
+Full quality-gate pod output captured via reproduction workflow with `podGC: OnWorkflowCompletion` override. See [quality-gate-logs.txt](quality-gate-logs.txt) for the definitive capture (includes raw output, retrieval attempts, and exit code analysis). Earlier captures in [quality-gate-debug-logs.txt](quality-gate-debug-logs.txt).
+
+## Failure Classification
+
+| Category | Value |
+|----------|-------|
+| **Failure type** | Toolchain/environment misconfiguration — CGO unavailable |
+| **Severity** | CI pipeline failure (non-code) — all builds blocked |
+| **Determinism** | Deterministic — fails on every run on `golang:1.26-alpine` |
+| **Impact scope** | Entire `domain-check-build` WorkflowTemplate |
+| **Affected step** | `build-quality-gate` |
+| **Exit code** | 2 (from `set -ex` propagating the `go test` failure) |
 
 ## Failure Summary
 
 | Field | Value |
 |-------|-------|
 | **Failed node** | `build-quality-gate` |
-| **Exit code** | 2 |
 | **Step that failed** | `go test -race ./...` |
 | **Step that passed** | `go vet ./...` |
 | **Error message** | `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1` |
