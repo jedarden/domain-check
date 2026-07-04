@@ -1,0 +1,6 @@
+Bead **bf-4wg9** is closed. The child bead bf-2oto already completed the work:
+
+- **Raw quality-gate log output** saved to `docs/research/quality-gate-logs.txt` (committed at `95b18a5`)
+- **Exit code**: 2
+- **Root cause**: `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1` — the `golang:1.26-alpine` image lacks `gcc/musl-dev` needed for the Go race detector
+- **Reproduction run**: `domain-check-qg-capture-rlkxt` captured live logs via a debug workflow with `podGC: OnWorkflowCompletion`

@@ -1,0 +1,11 @@
+```
+SPLIT_COMPLETE: Created 4 children, parent converted to umbrella
+```
+
+**Children:**
+- **bf-4x9n** — Identify failed workflow run and check pod status
+- **bf-allu** — Stream logs from quality-gate pod or confirm pods deleted (depends on bf-4x9n)
+- **bf-4hba** — Submit debug re-run with persistent podGC if needed (depends on bf-allu)
+- **bf-xwfi** — Capture and save quality-gate logs from available source (depends on bf-4hba)
+
+**Parent bf-2nqc** now has label `umbrella` and depends on bf-xwfi (last child). The full chain flows: identify → stream-or-confirm → debug-rerun-if-needed → capture-logs → parent closes.
