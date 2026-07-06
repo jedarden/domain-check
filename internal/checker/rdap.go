@@ -95,6 +95,12 @@ func (c *RDAPClient) Check(ctx context.Context, normalizedDomain string) (*domai
 	})
 
 	if rdapErr != nil {
+		// Propagate context errors (timeout, cancellation) so the caller
+		// can return appropriate HTTP status codes (504, no response).
+		// These are transport-level failures, not domain-availability results.
+		if errors.Is(rdapErr, context.DeadlineExceeded) || errors.Is(rdapErr, context.Canceled) {
+			return nil, rdapErr
+		}
 		// Check for rate limit exhaustion.
 		if errors.Is(rdapErr, ratelimit.ErrServiceBusy) || strings.Contains(rdapErr.Error(), "429") {
 			return &domain.DomainResult{

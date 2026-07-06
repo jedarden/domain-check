@@ -1,0 +1,7 @@
+Done. Here's what was completed:
+
+- **`checker/ratelimit.go` → `internal/ratelimit/ratelimit.go`** — per-registry rate limiter with token bucket + exponential backoff + concurrency semaphores
+- **`checker/ratelimit_test.go` → `internal/ratelimit/ratelimit_test.go`** — 22 tests covering rate limiting, retries, concurrency limits, queue depth, context cancellation, and multi-registry isolation
+- **Self-contained package** — only depends on `golang.org/x/sync` and `golang.org/x/time`
+- **`checker` package** already imported `internal/ratelimit` correctly, so no additional changes needed
+- Full project builds cleanly (`go build ./...`) ✅

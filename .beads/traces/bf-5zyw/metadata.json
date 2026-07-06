@@ -11,6 +11,6 @@
   "cost_usd": null,
   "captured_at": "2026-05-06T00:58:12.395151929Z",
   "trace_format": "claude_json",
-  "pruned": false,
+  "pruned": true,
   "template_version": null
 }

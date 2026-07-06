@@ -1,0 +1,4 @@
+Done. Removed the "GitHub Actions is intentionally disabled." phrase from `docs/plan/plan.md:1065`. The CI Pipeline section already correctly described Argo Workflows, the `domain-check-build` WorkflowTemplate, and the manual submission example — no other changes needed. Acceptance criteria verified:
+
+1. `grep -i 'github.actions' docs/plan/plan.md` → no matches
+2. CI section mentions "Argo Workflows" and "domain-check-build" template ✓

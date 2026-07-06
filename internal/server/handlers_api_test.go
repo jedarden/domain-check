@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -343,8 +344,8 @@ func TestCheckHandler_CachedResponse(t *testing.T) {
 	}
 }
 
-func TestCheckHandler_CheckFailed(t *testing.T) {
-	// Test internal server error when check fails
+func TestCheckHandler_TimeoutReturns504(t *testing.T) {
+	// Test that context.DeadlineExceeded returns 504 with Retry-After header
 	mockCh := &mockChecker{
 		err: context.DeadlineExceeded,
 	}
@@ -352,6 +353,38 @@ func TestCheckHandler_CheckFailed(t *testing.T) {
 	handlers := NewAPIHandlers(mockCh, log, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=timeout.com", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.CheckHandler(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Errorf("expected status %d, got %d", http.StatusGatewayTimeout, rec.Code)
+	}
+
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "upstream_timeout" {
+		t.Errorf("expected error %q, got %q", "upstream_timeout", resp.Error)
+	}
+
+	retryAfter := rec.Header().Get("Retry-After")
+	if retryAfter == "" {
+		t.Error("expected Retry-After header to be set")
+	}
+}
+
+func TestCheckHandler_InternalError(t *testing.T) {
+	// Test internal server error for non-timeout failures
+	mockCh := &mockChecker{
+		err: errors.New("unexpected internal failure"),
+	}
+	log := DefaultLogger("text", "error")
+	handlers := NewAPIHandlers(mockCh, log, nil)
+
+	req := httptest.NewRequest("GET", "/api/v1/check?d=example.com", nil)
 	rec := httptest.NewRecorder()
 
 	handlers.CheckHandler(rec, req)
@@ -367,6 +400,27 @@ func TestCheckHandler_CheckFailed(t *testing.T) {
 
 	if resp.Error != "check_failed" {
 		t.Errorf("expected error %q, got %q", "check_failed", resp.Error)
+	}
+}
+
+func TestCheckHandler_ContextCanceled(t *testing.T) {
+	// Test that context.Canceled returns no response (client disconnected)
+	mockCh := &mockChecker{
+		err: context.Canceled,
+	}
+	log := DefaultLogger("text", "error")
+	handlers := NewAPIHandlers(mockCh, log, nil)
+
+	req := httptest.NewRequest("GET", "/api/v1/check?d=example.com", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.CheckHandler(rec, req)
+
+	// context.Canceled means client disconnected — response body should be empty
+	// (no JSON error written), status code is 200 by default in httptest.Recorder
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err == nil && resp.Error != "" {
+		t.Errorf("expected no error response for canceled context, got %q", resp.Error)
 	}
 }
 
@@ -1092,6 +1146,37 @@ func TestValidateDomainName(t *testing.T) {
 			}
 			if !tt.expectErr && err != nil {
 				t.Errorf("expected no error, got %v", err)
+			}
+		})
+	}
+}
+
+// isTimeoutError Tests
+
+func TestIsTimeoutError(t *testing.T) {
+	tests := []struct {
+		name  string
+		err   error
+		match bool
+	}{
+		{"nil error", nil, false},
+		{"non-timeout error", errors.New("something went wrong"), false},
+		{"context deadline exceeded", errors.New("context deadline exceeded"), true},
+		{"i/o timeout", errors.New("dial tcp 192.0.2.1:443: i/o timeout"), true},
+		{"bare timeout", errors.New("request timeout after 15s"), true},
+		{"wrapped timeout in url.Error", &url.Error{Op: "Get", URL: "https://rdap.example.com/domain/example.com", Err: errors.New("net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)")}, true},
+		{"TLS handshake timeout", errors.New("TLS handshake timeout"), true},
+		{"dial tcp timeout", errors.New("dial tcp 192.0.2.1:443: i/o timeout"), true},
+		{"rate limit error", errors.New("429 rate limit exceeded"), false},
+		{"DNS error", errors.New("lookup rdap.example.com: no such host"), false},
+		{"connection refused", errors.New("dial tcp 192.0.2.1:443: connection refused"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isTimeoutError(tt.err)
+			if got != tt.match {
+				t.Errorf("isTimeoutError(%v) = %v, want %v", tt.err, got, tt.match)
 			}
 		})
 	}

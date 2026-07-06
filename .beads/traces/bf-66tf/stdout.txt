@@ -1,0 +1,32 @@
+Everything is wired correctly. The dependency tree from the parent shows the full chain:
+
+```
+bf-66tf (umbrella)
+  ← bf-2ewy: Verify Pluck worker can discover and claim beads end-to-end
+    ← bf-1xa5: Fix label hygiene on incorrectly filtered beads
+      ← bf-694t: Audit open beads and categorize claimability
+        ← bf-5vfu: Investigate br claim exclusion logic
+          ← bf-4mq7: Diagnose why br claim finds no beads despite 19 open
+```
+
+The children were created in a prior split attempt but the dependencies were never wired. Now everything is connected.
+
+---
+
+```
+SPLIT_COMPLETE: Created 5 children, parent converted to umbrella
+```
+
+```
+Children: bf-4mq7, bf-5vfu, bf-694t, bf-1xa5, bf-2ewy
+```
+
+| # | Child ID | Title | Status |
+|---|----------|-------|--------|
+| 1 | bf-4mq7 | Diagnose why br claim finds no beads despite 19 open | open (unblocked — first in chain) |
+| 2 | bf-5vfu | Investigate br claim exclusion logic | blocked by bf-4mq7 |
+| 3 | bf-694t | Audit open beads and categorize claimability | blocked by bf-5vfu |
+| 4 | bf-1xa5 | Fix label hygiene on incorrectly filtered beads | blocked by bf-694t |
+| 5 | bf-2ewy | Verify Pluck worker can discover and claim beads end-to-end | blocked by bf-1xa5 |
+
+Parent `bf-66tf` is now a blocked umbrella bead (depends on bf-2ewy), labeled `umbrella`. The first child (bf-4mq7) is immediately claimable.

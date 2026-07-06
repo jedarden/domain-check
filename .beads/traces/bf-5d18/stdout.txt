@@ -1,0 +1,21 @@
+Everything is wired correctly.
+
+```
+SPLIT_COMPLETE: Created 3 children, parent converted to umbrella
+```
+
+```
+Children: bf-5gh5, bf-2srn, bf-66q2
+```
+
+**Summary of the split:**
+
+| # | Bead | Title | Depends On |
+|---|------|-------|------------|
+| 1 | bf-5gh5 | Define missing `isTimeoutError` function in handlers_api.go | — |
+| 2 | bf-2srn | Add test for string-matched timeout errors in CheckHandler | bf-5gh5 |
+| 3 | bf-66q2 | Verify full timeout handling chain compiles and all tests pass | bf-2srn |
+
+**Parent bf-5d18** now has label `umbrella` and depends on bf-66q2 (last child).
+
+**Root cause found during analysis:** `isTimeoutError` is called at `handlers_api.go:120` but never defined — the code doesn't compile (`go build ./internal/server/` fails with `undefined: isTimeoutError`). This means timeout errors that aren't directly `context.DeadlineExceeded` (e.g. wrapped in `fmt.Errorf` by the HTTP client) fall through to the generic ERROR handler, returning 500 instead of 504.

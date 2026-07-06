@@ -1,0 +1,1 @@
+Closed bead `bf-5gh5`. The `isTimeoutError` function was already present in the codebase — build succeeds, all 11 test cases pass.

@@ -1,0 +1,9 @@
+Bead closed. Summary of changes:
+
+**Updated `docs/plan/plan.md` API response schemas to match the implementation:**
+
+1. **Single domain check responses** — added missing `duration_ms` field (integer, milliseconds) to both the "available" and "taken" example responses, matching `DomainResult.DurationMs` in `internal/domain/result.go`
+2. **Multi-TLD response `duration`** — changed from string `"234ms"` to integer `234000000` (nanoseconds), matching Go's `time.Duration` JSON serialization in `MultiTLDResponse`
+3. **Bulk response `duration`** — changed from string `"342ms"` to integer `342000000` (nanoseconds), matching Go's `time.Duration` JSON serialization in `BulkCheckResponse`
+
+The multi-TLD and bulk wrapper structures (`total`/`succeeded`/`failed`/`duration` + nested per-domain `result` payloads) were already correct in plan.md.

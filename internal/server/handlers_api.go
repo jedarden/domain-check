@@ -114,6 +114,19 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusBadRequest, "unsupported_tld", "No RDAP or WHOIS support for TLD: "+parsed.TLD)
 			return
 		}
+		// Transient timeout — the upstream registry was too slow to respond.
+		// Check both errors.Is (for properly wrapped errors) and string matching
+		// as a fallback for errors wrapped in types without Unwrap().
+		if errors.Is(err, context.DeadlineExceeded) || isTimeoutError(err) {
+			h.log.Warn("domain check timed out", "domain", parsed.Domain, "error", err)
+			w.Header().Set("Retry-After", "30")
+			writeAPIError(w, http.StatusGatewayTimeout, "upstream_timeout", "Registry did not respond in time, please retry")
+			return
+		}
+		// Context canceled (client disconnected).
+		if errors.Is(err, context.Canceled) {
+			return
+		}
 		// Other errors.
 		h.log.Error("domain check failed", "domain", parsed.Domain, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "check_failed", "Domain availability check failed")
@@ -313,6 +326,36 @@ func validateDomainName(name string) error {
 // isLDH reports whether c is a valid LDH character: a-z, 0-9, or hyphen.
 func isLDH(c rune) bool {
 	return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'
+}
+
+// isTimeoutError reports whether err represents a timeout from an upstream registry.
+// It complements errors.Is(err, context.DeadlineExceeded) by string-matching common
+// timeout messages that appear in errors wrapped in types without Unwrap() support
+// (e.g. net/url.Error, custom RDAP client wrappers). It also walks the error chain
+// via Unwrap() so that wrapped errors are still detected by their inner message.
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	for e := err; e != nil; {
+		msg := strings.ToLower(e.Error())
+		for _, substr := range timeoutStrings {
+			if strings.Contains(msg, substr) {
+				return true
+			}
+		}
+		e = errors.Unwrap(e)
+	}
+	return false
+}
+
+// timeoutStrings is the set of lowercase substrings that indicate a timeout error.
+var timeoutStrings = []string{
+	"context deadline exceeded",
+	"i/o timeout",
+	"timeout",
+	"client connection timed out",
+	"tls handshake timeout",
 }
 
 // Bulk check constants.
