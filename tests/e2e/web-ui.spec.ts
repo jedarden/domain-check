@@ -595,4 +595,111 @@ test.describe('Web UI', () => {
     // Re-enable JS for cleanup
     await page.context().setJavaScriptEnabled(true);
   });
+
+  /**
+   * Test: Recent checks complete flow with page reload
+   */
+  test('should persist recent checks across page reload and support full interaction', async ({ page }) => {
+    // Step 1: Navigate to home page
+    await page.goto('/');
+    await expect(page).toHaveTitle(/Domain Check/);
+
+    // Step 2: Check a domain (example.com)
+    const testDomain = 'example.com';
+    const input = page.locator('#domain-input');
+    await input.fill(testDomain);
+
+    const submitBtn = page.locator('.search-form button[type="submit"]');
+    await submitBtn.click();
+
+    // Step 3: Verify the check completes successfully
+    await page.waitForURL(/\/check\?d=/);
+    await page.waitForLoadState('networkidle');
+
+    const resultSection = page.locator('.result-section');
+    await expect(resultSection).toBeVisible();
+
+    const domainName = page.locator('.domain-name');
+    await expect(domainName).toContainText(testDomain);
+
+    const status = page.locator('.status');
+    await expect(status).toBeVisible();
+    await expect(status).toMatch(/Available|Taken/);
+
+    // Step 4: Reload the page (not navigate) - this tests localStorage persistence
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Step 5: Assert that the checked domain appears in the recent-checks list
+    const recentSection = page.locator('#recent-checks');
+    await expect(recentSection).toBeVisible();
+
+    const recentList = page.locator('.recent-checks-list');
+    await expect(recentList).toBeVisible();
+
+    // Verify the specific domain is in the history
+    const domainLink = page.locator('.recent-checks-list .recent-check-domain');
+    await expect(domainLink).toHaveCountGreaterThan(0);
+
+    const historyItems = await domainLink.allTextContents();
+    expect(historyItems).toContain(testDomain);
+
+    // Step 6: Verify the domain link is clickable and navigates to /check?d=example.com
+    const historyLink = page.locator(`.recent-checks-list .recent-check-domain[href*="/check?d=${encodeURIComponent(testDomain)}"]`);
+    await expect(historyLink).toBeVisible();
+
+    // Click the history link and verify it navigates correctly
+    await historyLink.click();
+    await page.waitForURL(/\/check\?d=/);
+    await page.waitForLoadState('networkidle');
+
+    // Verify we're back on the result page for the same domain
+    await expect(page.locator('.domain-name')).toContainText(testDomain);
+
+    // Step 7: Navigate back to home page for clear history test
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Verify recent checks section is still visible after navigation
+    await expect(recentSection).toBeVisible();
+
+    // Step 8: Test the clear history functionality
+    const clearBtn = page.locator('#clear-history');
+    await expect(clearBtn).toBeVisible();
+    await expect(clearBtn).toHaveText('Clear history');
+
+    // Click the clear history button
+    await clearBtn.click();
+
+    // Verify the list disappears
+    await expect(recentSection).not.toBeVisible();
+
+    // Step 9: Verify graceful degradation with JS disabled
+    // First, add a domain to history again
+    await page.context().setJavaScriptEnabled(true);
+    await input.fill('test-after-clear.com');
+    await submitBtn.click();
+    await page.waitForURL(/\/check\?d=/);
+    await page.waitForLoadState('networkidle');
+
+    // Navigate back to home
+    await page.goto('/');
+    await expect(recentSection).toBeVisible();
+
+    // Now disable JS and reload
+    await page.context().setJavaScriptEnabled(false);
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Recent checks section should not be visible without JS
+    await expect(recentSection).not.toBeVisible();
+
+    // Verify noscript message is shown
+    const noscriptMessage = page.locator('.noscript-message');
+    await expect(noscriptMessage).toBeVisible();
+    await expect(noscriptMessage).toContainText('JavaScript');
+
+    // Re-enable JS for cleanup
+    await page.context().setJavaScriptEnabled(true);
+  });
 });
