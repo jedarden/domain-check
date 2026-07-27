@@ -15,16 +15,13 @@ Authoritative domain availability checker powered by RDAP — the ICANN-mandated
 ```
 cmd/domain-check/main.go          # Entry point
 internal/
-  domain/     # Input validation, IDN, TLD extraction via publicsuffix
-  bootstrap/  # IANA RDAP bootstrap loader + 24h cache refresh
-  rdap/       # RDAP client, response parser, per-registry rate limiting
-  whois/      # WHOIS fallback for ccTLDs without RDAP
-  cache/      # In-memory LRU with per-status TTLs
-  httpclient/ # SSRF-safe HTTP client (private IP blocking)
-  ratelimit/  # Per-IP rate limiter middleware
-  server/     # HTTP server, router, middleware, API handlers
-  web/        # HTML templates, static assets, template handlers
-  cli/        # CLI subcommands (check, bulk)
+  checker/   # Core RDAP client, bootstrap, cache, SSRF-safe HTTP client, WHOIS fallback
+  domain/    # Input validation, IDN, TLD extraction via publicsuffix
+  ratelimit/ # Per-IP rate limiter middleware
+  server/    # HTTP server, router, middleware, API handlers
+  cli/       # CLI subcommands (check, bulk)
+  config/    # Configuration loading from flags/env/file
+web/            # HTML templates, static assets (embedded via go:embed)
 ```
 
 ## Development
