@@ -1,5 +1,10 @@
 /* Domain Check - Minimal Mobile-First CSS */
 
+/* Utility classes */
+.hidden {
+    display: none;
+}
+
 :root {
     --color-bg: #f8f9fa;
     --color-surface: #ffffff;
@@ -172,6 +177,13 @@ main {
 /* Result section */
 .result-section {
     margin-bottom: 2rem;
+}
+
+/* Multi-TLD results heading */
+.results-heading {
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    color: var(--color-text-secondary);
 }
 
 .result-card {
