@@ -583,13 +583,13 @@ func TestPerRegistryRoundTripper_PoolSizes(t *testing.T) {
 	rt := NewPerRegistryRoundTripper()
 
 	// All known registries must have a dedicated transport.
-	for host := range registryPoolConfigs {
+	for host := range RegistryPoolConfigs {
 		_, ok := rt.transports[host]
 		assert.True(t, ok, "expected dedicated transport for registry %s", host)
 	}
 
 	// Pool sizes must match the config values.
-	for host, pool := range registryPoolConfigs {
+	for host, pool := range RegistryPoolConfigs {
 		tr, ok := rt.transports[host].(*http.Transport)
 		require.True(t, ok, "transport for %s must be *http.Transport", host)
 		assert.Equal(t, pool.MaxIdleConns, tr.MaxIdleConnsPerHost,
@@ -601,8 +601,8 @@ func TestPerRegistryRoundTripper_PoolSizes(t *testing.T) {
 	// Fallback transport exists and uses the default pool config.
 	fallback, ok := rt.fallback.(*http.Transport)
 	require.True(t, ok, "fallback must be *http.Transport")
-	assert.Equal(t, defaultPoolConfig.MaxIdleConns, fallback.MaxIdleConnsPerHost)
-	assert.Equal(t, defaultPoolConfig.MaxConns, fallback.MaxConnsPerHost)
+	assert.Equal(t, DefaultPoolConfig.MaxIdleConns, fallback.MaxIdleConnsPerHost)
+	assert.Equal(t, DefaultPoolConfig.MaxConns, fallback.MaxConnsPerHost)
 }
 
 func TestPerRegistryRoundTripper_Routing(t *testing.T) {
@@ -685,14 +685,20 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestRegistryPoolConfigs_AlignWithRateLimits(t *testing.T) {
 	// Pool sizes must be >= concurrency limits from ratelimit.go.
 	// This test documents (and enforces) the alignment between the two configs.
-	for host, pool := range registryPoolConfigs {
-		cfg, ok := defaultConfigs[host]
+	// Expected concurrency limits for known registries (must match ratelimit.defaultConfigs).
+	expectedConcurrency := map[string]int{
+		"rdap.verisign.com":                10, // Verisign (.com/.net)
+		"rdap.publicinterestregistry.org":  10, // PIR (.org)
+		"pubapi.registry.google":            2, // Google Registry (.app/.dev/etc)
+	}
+	for host, pool := range RegistryPoolConfigs {
+		concurrency, ok := expectedConcurrency[host]
 		if !ok {
 			continue
 		}
-		assert.GreaterOrEqual(t, pool.MaxConns, int(cfg.Concurrency),
-			"MaxConns for %s must be >= Concurrency limit %d", host, cfg.Concurrency)
-		assert.GreaterOrEqual(t, pool.MaxIdleConns, int(cfg.Concurrency),
-			"MaxIdleConns for %s must be >= Concurrency limit %d", host, cfg.Concurrency)
+		assert.GreaterOrEqual(t, pool.MaxConns, concurrency,
+			"MaxConns for %s must be >= Concurrency limit %d", host, concurrency)
+		assert.GreaterOrEqual(t, pool.MaxIdleConns, concurrency,
+			"MaxIdleConns for %s must be >= Concurrency limit %d", host, concurrency)
 	}
 }

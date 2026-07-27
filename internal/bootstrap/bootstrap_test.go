@@ -91,7 +91,7 @@ func TestBootstrapManager_Lookup(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -111,7 +111,7 @@ func TestBootstrapManager_LookupNotFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -126,7 +126,7 @@ func TestBootstrapManager_FallbackOnFetchFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -145,7 +145,7 @@ func TestBootstrapManager_FallbackOnFetchFailure(t *testing.T) {
 }
 
 func TestBootstrapManager_FallbackOnNetworkError(t *testing.T) {
-	b, err := NewBootstrapManager(context.Background(), "http://127.0.0.1:1")
+	b, err := NewManager(context.Background(), "http://127.0.0.1:1")
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -161,7 +161,7 @@ func TestBootstrapManager_FallbackOnMalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -178,7 +178,7 @@ func TestBootstrapManager_Updated(t *testing.T) {
 	defer srv.Close()
 
 	before := time.Now()
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -192,7 +192,7 @@ func TestBootstrapManager_ServerCount(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -218,7 +218,7 @@ func TestBootstrapManager_RefreshReplacesData(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -241,7 +241,7 @@ func TestBootstrapManager_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately.
 
-	_, err := NewBootstrapManager(ctx, "http://127.0.0.1:1")
+	_, err := NewManager(ctx, "http://127.0.0.1:1")
 	require.NoError(t, err) // Should fall back gracefully.
 }
 
@@ -252,7 +252,7 @@ func TestBootstrapManager_ConcurrentReads(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -281,7 +281,7 @@ func TestBootstrapManager_ConcurrentReadWrite(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -317,7 +317,7 @@ func TestBootstrapManager_Stop(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 
 	// Stop should not block.
@@ -351,7 +351,7 @@ func TestBootstrapManager_HTTPErrors(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			b, err := NewBootstrapManager(context.Background(), srv.URL)
+			b, err := NewManager(context.Background(), srv.URL)
 			require.NoError(t, err) // Falls back.
 			defer b.Stop()
 
@@ -370,7 +370,7 @@ func TestBootstrapManager_RefreshLoopStopsOnContextCancel(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 
 	// Verify the manager is running.
@@ -397,7 +397,7 @@ func TestBootstrapManager_RefreshOnErrorKeepsOldData(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -515,7 +515,7 @@ func TestBootstrapManager_LargeBootstrap(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -533,7 +533,7 @@ func TestBootstrapManager_ContextTimeoutDuringRefresh(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err) // Initial fetch succeeds (30s timeout)
 	defer b.Stop()
 
