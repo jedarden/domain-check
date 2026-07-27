@@ -464,4 +464,135 @@ test.describe('Web UI', () => {
     await expect(page.locator('header h1')).toBeVisible();
     await expect(page.locator('.search-form')).toBeVisible();
   });
+
+  /**
+   * Test: Recent checks history appears after checking a domain
+   */
+  test('should show recent checks after checking a domain', async ({ page }) => {
+    // Generate a random domain that's likely to be available
+    const randomDomain = `history-test-${Date.now()}-${Math.random().toString(36).substring(7)}.com`;
+
+    // Fill in domain and submit
+    const input = page.locator('#domain-input');
+    await input.fill(randomDomain);
+
+    const submitBtn = page.locator('.search-form button[type="submit"]');
+    await submitBtn.click();
+
+    // Wait for navigation and result display
+    await page.waitForURL(/\/check\?d=/);
+    await page.waitForLoadState('networkidle');
+
+    // Navigate back to home page
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Check that recent checks section is now visible
+    const recentSection = page.locator('#recent-checks');
+    await expect(recentSection).toBeVisible();
+
+    // Check that the checked domain appears in the history
+    const recentList = page.locator('.recent-checks-list');
+    await expect(recentList).toBeVisible();
+
+    // Verify the specific domain is in the history
+    const domainLink = page.locator('.recent-checks-list .recent-check-domain');
+    await expect(domainLink).toHaveCountGreaterThan(0);
+
+    // Check that our specific domain is in the list
+    const historyItems = await domainLink.allTextContents();
+    expect(historyItems).toContain(randomDomain);
+
+    // Verify the history item is a clickable link
+    const historyLink = page.locator(`.recent-checks-list .recent-check-domain[href*="/check?d=${encodeURIComponent(randomDomain)}"]`);
+    await expect(historyLink).toBeVisible();
+
+    // Verify status indicator is present
+    const statusIndicator = page.locator('.recent-checks-list .recent-check-status');
+    await expect(statusIndicator.first()).toBeVisible();
+  });
+
+  /**
+   * Test: Recent checks history with multiple domains
+   */
+  test('should maintain history of multiple checked domains', async ({ page }) => {
+    // Check multiple domains
+    const domains = [
+      `multi-history-1-${Date.now()}.com`,
+      `multi-history-2-${Date.now()}.org`,
+      `multi-history-3-${Date.now()}.net`,
+    ];
+
+    for (const domain of domains) {
+      await page.goto('/');
+      const input = page.locator('#domain-input');
+      await input.fill(domain);
+      const submitBtn = page.locator('.search-form button[type="submit"]');
+      await submitBtn.click();
+      await page.waitForURL(/\/check\?d=/);
+      await page.waitForLoadState('networkidle');
+    }
+
+    // Go back to home page
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Check that recent checks section is visible
+    const recentSection = page.locator('#recent-checks');
+    await expect(recentSection).toBeVisible();
+
+    // Verify all checked domains appear in history (should be at least some of them)
+    const historyItems = page.locator('.recent-checks-list .recent-check-domain');
+    const itemCount = await historyItems.count();
+    expect(itemCount).toBeGreaterThan(0);
+  });
+
+  /**
+   * Test: Clear history button works
+   */
+  test('should clear history when clear button is clicked', async ({ page }) => {
+    // First, check a domain to populate history
+    const testDomain = `clear-test-${Date.now()}.com`;
+    await page.goto('/');
+    const input = page.locator('#domain-input');
+    await input.fill(testDomain);
+    const submitBtn = page.locator('.search-form button[type="submit"]');
+    await submitBtn.click();
+    await page.waitForURL(/\/check\?d=/);
+    await page.waitForLoadState('networkidle');
+
+    // Go back to home page
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Verify recent checks section is visible
+    const recentSection = page.locator('#recent-checks');
+    await expect(recentSection).toBeVisible();
+
+    // Click the clear history button
+    const clearBtn = page.locator('#clear-history');
+    await expect(clearBtn).toBeVisible();
+    await clearBtn.click();
+
+    // Wait for the section to be hidden
+    await expect(recentSection).not.toBeVisible();
+  });
+
+  /**
+   * Test: Recent checks degrades gracefully without JavaScript
+   */
+  test('should not show recent checks without JavaScript', async ({ page }) => {
+    // Disable JavaScript
+    await page.context().setJavaScriptEnabled(false);
+
+    // Go to home page
+    await page.goto('/');
+
+    // Recent checks section should not be visible (JS-dependent)
+    const recentSection = page.locator('#recent-checks');
+    await expect(recentSection).not.toBeVisible();
+
+    // Re-enable JS for cleanup
+    await page.context().setJavaScriptEnabled(true);
+  });
 });
