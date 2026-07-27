@@ -547,6 +547,7 @@ func TestParse_PrivateSuffixAccepted(t *testing.T) {
 		{"appspot.com", "myapp.appspot.com", false, "", ""},
 		{"herokuapp.com", "myapp.herokuapp.com", false, "", ""},
 		{"readthedocs.io", "docs.readthedocs.io", false, "", ""},
+		{"blogspot.com", "myblog.blogspot.com", false, "", ""},
 		{"subdomain under private", "deep.sub.github.io", false, "", ""},
 
 		// Unknown TLDs (not in PSL at all) — must still pass parse validation.
