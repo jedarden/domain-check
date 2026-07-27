@@ -135,6 +135,12 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Record bulk check size metric (single check = size 1).
+	if h.metrics != nil {
+		h.metrics.RecordBulkCheck(1)
+		h.metrics.AddChecksServed(1)
+	}
+
 	// Increment the service monitor counter (count all served requests, including errors).
 	if h.monitor != nil {
 		h.monitor.IncrementCheck()
@@ -253,6 +259,12 @@ func (h *APIHandlers) MultiTLDHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		response.Results = append(response.Results, result)
+	}
+
+	// Record bulk check size metric.
+	if h.metrics != nil {
+		h.metrics.RecordBulkCheck(len(tlds))
+		h.metrics.AddChecksServed(response.Succeeded)
 	}
 
 	writeJSONResponse(w, http.StatusOK, response)
