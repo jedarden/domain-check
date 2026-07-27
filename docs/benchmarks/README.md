@@ -104,13 +104,33 @@ go test -bench=. -benchmem ./internal/checker/
 
 # Run specific benchmark
 go test -bench=BenchmarkCheckBulk_10Domains -benchmem ./internal/checker/
+```
 
-# Run memory growth test (2 minutes)
-go test -v -run TestMemoryGrowthUnderLoad -timeout 5m ./internal/server/
+### Long-Running Memory and Load Tests
+
+Long-running tests (memory growth tests > 30s, sustained load tests) require an explicit opt-in environment variable to prevent `go test ./...` from timing out:
+
+```bash
+# Run memory growth test (30 seconds)
+DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestMemoryGrowthUnderLoad ./internal/server/
+
+# Run extended memory growth test (2 minutes)
+DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestMemoryGrowthUnderLoadExtended -timeout 5m ./internal/server/
 
 # Run full 10-minute memory test
-go test -v -run TestMemoryGrowthUnderLoadFull -timeout 15m ./internal/server/
+DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestMemoryGrowthUnderLoadFull -timeout 15m ./internal/server/
+
+# Run sustained load benchmark (10 seconds)
+DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestBenchmark_SustainedLoadP99 ./internal/server/
+
+# Run long sustained load benchmark (30 seconds)
+DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestBenchmark_SustainedLoadP99_Long ./internal/server/
+
+# Run concurrent bulk benchmark (5 seconds)
+DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestBenchmark_ConcurrentBulkP99 ./internal/server/
 ```
+
+**Note:** The `DOMCHECK_RUN_LONG_TESTS=1` environment variable is required for these tests. Without it, they are skipped by default. This ensures `go test ./...` completes quickly in CI/CD and development workflows.
 
 ## Performance Targets Status
 
