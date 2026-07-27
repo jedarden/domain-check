@@ -80,7 +80,7 @@ func testHTTPClient() *http.Client {
 }
 
 func TestCheckBulk_Empty(t *testing.T) {
-	cache := NewResultCache(DefaultTTLs(), 100)
+	cache := NewResultCache(DefaultTTLs(), 100, nil)
 	checker := NewChecker(CheckerConfig{
 		Cache: cache,
 	})
@@ -130,7 +130,7 @@ func TestCheckBulk_SingleDomain(t *testing.T) {
 	})
 
 	// Create cache
-	cache := NewResultCache(DefaultTTLs(), 100)
+	cache := NewResultCache(DefaultTTLs(), 100, nil)
 
 	// Create checker
 	checker := NewChecker(CheckerConfig{
@@ -194,7 +194,7 @@ func TestCheckBulk_MultipleDomains(t *testing.T) {
 		AllowList:  allowlist,
 	})
 
-	cache := NewResultCache(DefaultTTLs(), 100)
+	cache := NewResultCache(DefaultTTLs(), 100, nil)
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
@@ -249,7 +249,7 @@ func TestCheckBulk_CacheHit(t *testing.T) {
 		AllowList:  allowlist,
 	})
 
-	cache := NewResultCache(DefaultTTLs(), 100)
+	cache := NewResultCache(DefaultTTLs(), 100, nil)
 
 	// Pre-populate cache
 	now := time.Now()
@@ -446,7 +446,7 @@ func TestCheckBulk_PartialResults(t *testing.T) {
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Cache:      NewResultCache(DefaultTTLs(), 100),
+		Cache:      NewResultCache(DefaultTTLs(), 100, nil),
 		Bootstrap:  bootstrap,
 	})
 
@@ -507,7 +507,7 @@ func TestCheckBulk_RegistryGrouping(t *testing.T) {
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Cache:      NewResultCache(DefaultTTLs(), 100),
+		Cache:      NewResultCache(DefaultTTLs(), 100, nil),
 		Bootstrap:  bootstrap,
 	})
 
