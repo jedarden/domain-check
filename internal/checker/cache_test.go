@@ -34,14 +34,14 @@ func makeErrorResult(name string) domain.DomainResult {
 
 func TestNewResultCache_Defaults(t *testing.T) {
 	ttls := CacheTTLs{Available: time.Second, Registered: time.Hour, Error: 100 * time.Millisecond}
-	c := NewResultCache(ttls, 0) // 0 should become 10000
+	c := NewResultCache(ttls, 0, nil) // 0 should become 10000
 	assert.Equal(t, 10000, c.maxSize)
 	assert.Equal(t, 0, c.Len())
 }
 
 func TestSetAndGet(t *testing.T) {
 	ttls := DefaultTTLs()
-	c := NewResultCache(ttls, 100)
+	c := NewResultCache(ttls, 100, nil)
 
 	c.Set("example.com", makeResult("example.com", true))
 	got := c.Get("example.com")
@@ -52,12 +52,12 @@ func TestSetAndGet(t *testing.T) {
 }
 
 func TestGet_Miss(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 	assert.Nil(t, c.Get("nonexistent.com"))
 }
 
 func TestSet_Overwrite(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 
 	c.Set("example.com", makeResult("example.com", true))
 	c.Set("example.com", makeResult("example.com", false))
@@ -70,7 +70,7 @@ func TestSet_Overwrite(t *testing.T) {
 
 func TestExpiry_Available(t *testing.T) {
 	ttls := CacheTTLs{Available: 50 * time.Millisecond, Registered: time.Hour, Error: time.Hour}
-	c := NewResultCache(ttls, 100)
+	c := NewResultCache(ttls, 100, nil)
 
 	c.Set("example.com", makeResult("example.com", true))
 	got := c.Get("example.com")
@@ -83,7 +83,7 @@ func TestExpiry_Available(t *testing.T) {
 
 func TestExpiry_Registered(t *testing.T) {
 	ttls := CacheTTLs{Available: time.Hour, Registered: 50 * time.Millisecond, Error: time.Hour}
-	c := NewResultCache(ttls, 100)
+	c := NewResultCache(ttls, 100, nil)
 
 	c.Set("example.com", makeResult("example.com", false))
 	got := c.Get("example.com")
@@ -96,7 +96,7 @@ func TestExpiry_Registered(t *testing.T) {
 
 func TestExpiry_Error(t *testing.T) {
 	ttls := CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: 50 * time.Millisecond}
-	c := NewResultCache(ttls, 100)
+	c := NewResultCache(ttls, 100, nil)
 
 	c.Set("example.com", makeErrorResult("example.com"))
 	got := c.Get("example.com")
@@ -108,7 +108,7 @@ func TestExpiry_Error(t *testing.T) {
 }
 
 func TestLRUEviction(t *testing.T) {
-	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 3)
+	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 3, nil)
 
 	c.Set("a.com", makeResult("a.com", true))
 	c.Set("b.com", makeResult("b.com", true))
@@ -126,7 +126,7 @@ func TestLRUEviction(t *testing.T) {
 }
 
 func TestLRU_AccessPromotes(t *testing.T) {
-	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 3)
+	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 3, nil)
 
 	c.Set("a.com", makeResult("a.com", true))
 	c.Set("b.com", makeResult("b.com", true))
@@ -145,7 +145,7 @@ func TestLRU_AccessPromotes(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 
 	c.Set("example.com", makeResult("example.com", true))
 	assert.Equal(t, 1, c.Len())
@@ -156,13 +156,13 @@ func TestDelete(t *testing.T) {
 }
 
 func TestDelete_Nonexistent(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 	c.Delete("nonexistent.com") // should not panic
 	assert.Equal(t, 0, c.Len())
 }
 
 func TestClear(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 	c.Set("a.com", makeResult("a.com", true))
 	c.Set("b.com", makeResult("b.com", true))
 
@@ -173,7 +173,7 @@ func TestClear(t *testing.T) {
 
 func TestPurgeExpired(t *testing.T) {
 	ttls := CacheTTLs{Available: 30 * time.Millisecond, Registered: time.Hour, Error: time.Hour}
-	c := NewResultCache(ttls, 100)
+	c := NewResultCache(ttls, 100, nil)
 
 	c.Set("a.com", makeResult("a.com", true))  // will expire
 	c.Set("b.com", makeResult("b.com", false)) // registered, stays
@@ -188,13 +188,13 @@ func TestPurgeExpired(t *testing.T) {
 }
 
 func TestPurgeExpired_NoneExpired(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 	c.Set("a.com", makeResult("a.com", true))
 	assert.Equal(t, 0, c.PurgeExpired())
 }
 
 func TestCachedFlag_OnlySetOnGet(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 
 	original := makeResult("example.com", true)
 	original.Cached = false
@@ -206,7 +206,7 @@ func TestCachedFlag_OnlySetOnGet(t *testing.T) {
 }
 
 func TestConcurrentReads(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 
 	// Pre-populate cache.
 	for i := 0; i < 50; i++ {
@@ -233,7 +233,7 @@ func TestConcurrentReads(t *testing.T) {
 }
 
 func TestConcurrentWrites(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
@@ -251,7 +251,7 @@ func TestConcurrentWrites(t *testing.T) {
 }
 
 func TestConcurrentReadWrite(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 
 	// Pre-populate.
 	for i := 0; i < 30; i++ {
@@ -294,7 +294,7 @@ func TestConcurrentReadWrite(t *testing.T) {
 
 func TestConcurrentWithEviction(t *testing.T) {
 	// Small cache to trigger evictions under concurrency.
-	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 10)
+	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 10, nil)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
@@ -313,7 +313,7 @@ func TestConcurrentWithEviction(t *testing.T) {
 
 func TestConcurrentPurgeExpired(t *testing.T) {
 	ttls := CacheTTLs{Available: 30 * time.Millisecond, Registered: time.Hour, Error: time.Hour}
-	c := NewResultCache(ttls, 100)
+	c := NewResultCache(ttls, 100, nil)
 
 	// Pre-populate with mix of short and long TTL.
 	for i := 0; i < 50; i++ {
@@ -350,7 +350,7 @@ func TestConcurrentPurgeExpired(t *testing.T) {
 }
 
 func TestStats_InitialState(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 	stats := c.Stats()
 	assert.Equal(t, int64(0), stats.Hits)
 	assert.Equal(t, int64(0), stats.Misses)
@@ -359,7 +359,7 @@ func TestStats_InitialState(t *testing.T) {
 }
 
 func TestStats_Hits(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 	c.Set("example.com", makeResult("example.com", true))
 
 	// Multiple hits
@@ -374,7 +374,7 @@ func TestStats_Hits(t *testing.T) {
 }
 
 func TestStats_Misses(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 
 	// Multiple misses
 	for i := 0; i < 3; i++ {
@@ -387,7 +387,7 @@ func TestStats_Misses(t *testing.T) {
 }
 
 func TestStats_HitMissMix(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 	c.Set("example.com", makeResult("example.com", true))
 	c.Set("test.com", makeResult("test.com", false))
 
@@ -406,7 +406,7 @@ func TestStats_HitMissMix(t *testing.T) {
 
 func TestStats_ExpiredEntryCountsAsMiss(t *testing.T) {
 	ttls := CacheTTLs{Available: 30 * time.Millisecond, Registered: time.Hour, Error: time.Hour}
-	c := NewResultCache(ttls, 100)
+	c := NewResultCache(ttls, 100, nil)
 
 	c.Set("example.com", makeResult("example.com", true))
 	time.Sleep(40 * time.Millisecond)
@@ -421,7 +421,7 @@ func TestStats_ExpiredEntryCountsAsMiss(t *testing.T) {
 }
 
 func TestStats_ConcurrentAccess(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 	c.Set("example.com", makeResult("example.com", true))
 
 	var wg sync.WaitGroup
@@ -452,7 +452,7 @@ func TestStats_ConcurrentAccess(t *testing.T) {
 }
 
 func TestStats_AfterEviction(t *testing.T) {
-	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 3)
+	c := NewResultCache(CacheTTLs{Available: time.Hour, Registered: time.Hour, Error: time.Hour}, 3, nil)
 
 	c.Set("a.com", makeResult("a.com", true))
 	c.Set("b.com", makeResult("b.com", true))
@@ -476,7 +476,7 @@ func TestStats_AfterEviction(t *testing.T) {
 }
 
 func TestStats_AfterClear(t *testing.T) {
-	c := NewResultCache(DefaultTTLs(), 100)
+	c := NewResultCache(DefaultTTLs(), 100, nil)
 	c.Set("a.com", makeResult("a.com", true))
 	c.Set("b.com", makeResult("b.com", true))
 

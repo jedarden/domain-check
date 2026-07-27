@@ -208,6 +208,34 @@ func Logging(log *slog.Logger) Middleware {
 	}
 }
 
+// MetricsMiddleware records Prometheus metrics for all requests.
+func MetricsMiddleware(metrics *Metrics) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			// Wrap response writer to capture status
+			wrapped := &responseWriter{ResponseWriter: w}
+
+			next.ServeHTTP(wrapped, r)
+
+			// Record request metrics if metrics is available
+			if metrics != nil {
+				duration := time.Since(start).Seconds()
+				method := r.Method
+				path := r.URL.Path
+				status := wrapped.status
+
+				if status == 0 {
+					status = http.StatusOK // Default if no WriteHeader was called
+				}
+
+				metrics.RecordRequest(method, path, status, duration)
+			}
+		})
+	}
+}
+
 // responseWriter wraps http.ResponseWriter to capture the status code.
 type responseWriter struct {
 	http.ResponseWriter

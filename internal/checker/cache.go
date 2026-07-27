@@ -8,6 +8,11 @@ import (
 	"github.com/jedarden/domain-check/internal/domain"
 )
 
+// CacheMetrics records metrics for cache operations.
+type CacheMetrics interface {
+	RecordCacheHit(result string)
+}
+
 // CacheTTLs holds per-status TTL durations.
 type CacheTTLs struct {
 	Available  time.Duration // TTL for available domains
@@ -42,6 +47,7 @@ type ResultCache struct {
 	maxSize int
 	hits    int64
 	misses  int64
+	metrics CacheMetrics
 }
 
 type cacheEntry struct {
@@ -52,7 +58,7 @@ type cacheEntry struct {
 
 // NewResultCache creates a new ResultCache with the given TTLs and max entries.
 // If maxEntries is <= 0, a default of 10000 is used.
-func NewResultCache(ttls CacheTTLs, maxEntries int) *ResultCache {
+func NewResultCache(ttls CacheTTLs, maxEntries int, metrics CacheMetrics) *ResultCache {
 	if maxEntries <= 0 {
 		maxEntries = 10000
 	}
@@ -61,6 +67,7 @@ func NewResultCache(ttls CacheTTLs, maxEntries int) *ResultCache {
 		order:   list.New(),
 		ttls:    ttls,
 		maxSize: maxEntries,
+		metrics: metrics,
 	}
 }
 
@@ -73,6 +80,9 @@ func (c *ResultCache) Get(key string) *domain.DomainResult {
 	el, ok := c.items[key]
 	if !ok {
 		c.misses++
+		if c.metrics != nil {
+			c.metrics.RecordCacheHit("miss")
+		}
 		return nil
 	}
 
@@ -80,12 +90,19 @@ func (c *ResultCache) Get(key string) *domain.DomainResult {
 	if time.Now().After(entry.expiry) {
 		c.removeElement(el)
 		c.misses++
+		if c.metrics != nil {
+			c.metrics.RecordCacheHit("miss")
+		}
 		return nil
 	}
 
 	// Move to front (most recently used).
 	c.order.MoveToFront(el)
 	c.hits++
+
+	if c.metrics != nil {
+		c.metrics.RecordCacheHit("hit")
+	}
 
 	result := entry.result
 	result.Cached = true

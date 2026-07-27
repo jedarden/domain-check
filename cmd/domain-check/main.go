@@ -360,9 +360,12 @@ func runServer(args []string) {
 		}
 	}()
 
+	// Initialize Prometheus metrics.
+	metrics := server.GetMetrics()
+
 	// Initialize the domain checker with all its dependencies.
 	ctx := context.Background()
-	domainChecker, bootstrap, err := setupDomainChecker(ctx, cfg, log)
+	domainChecker, bootstrap, err := setupDomainChecker(ctx, cfg, log, metrics)
 	if err != nil {
 		log.Error("failed to initialize domain checker", "error", err)
 		os.Exit(1)
@@ -370,9 +373,6 @@ func runServer(args []string) {
 
 	// Create service monitor for uptime and check counting.
 	monitor := server.NewServiceMonitor()
-
-	// Initialize Prometheus metrics.
-	metrics := server.GetMetrics()
 
 	// Create router with all routes and middleware.
 	handler := server.Router(cfg, log, rateLimiter, domainChecker, bootstrap, monitor, metrics)
@@ -405,7 +405,7 @@ func runServer(args []string) {
 
 // setupDomainChecker creates and initializes a fully configured domain checker.
 // It returns the checker, bootstrap manager, and any error.
-func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logger) (*checker.Checker, *checker.BootstrapManager, error) {
+func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logger, metrics *server.Metrics) (*checker.Checker, *checker.BootstrapManager, error) {
 	// Create bootstrap manager for IANA RDAP bootstrap.
 	bootstrap, err := checker.NewBootstrapManager(ctx, "")
 	if err != nil {
@@ -457,6 +457,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 		RateLimit:  registryRateLimit,
 		AllowList:  allowlist,
 		UserAgent:  "domain-check/1.0",
+		Metrics:    metrics,
 	})
 
 	// Create WHOIS client for ccTLD fallback.
@@ -472,7 +473,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 		Available:  cfg.CacheTTLAvailable,
 		Registered: cfg.CacheTTLRegistered,
 		Error:      30 * time.Second,
-	}, cfg.CacheSize)
+	}, cfg.CacheSize, metrics)
 
 	// Create the main checker with all components.
 	domainChecker := checker.NewChecker(checker.CheckerConfig{
@@ -483,6 +484,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 		Bootstrap:       bootstrap,
 		UseDNSPrefilter: false, // Disabled by default - can be enabled via config
 		BulkConfig:      checker.DefaultBulkCheckConfig(),
+		ActiveMetrics:   metrics,
 	})
 
 	return domainChecker, bootstrap, nil

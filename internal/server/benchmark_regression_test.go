@@ -194,7 +194,7 @@ func setupBenchmarkServer(ch DomainChecker) *httptest.Server {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	mux := http.NewServeMux()
-	apiHandlers := NewAPIHandlers(ch, log, nil)
+	apiHandlers := NewAPIHandlers(ch, log, nil, nil, nil)
 	mux.HandleFunc("GET /api/v1/check", apiHandlers.CheckHandler)
 	mux.HandleFunc("GET /api/v1/check/multi", apiHandlers.MultiTLDHandler)
 	mux.HandleFunc("POST /api/v1/bulk", apiHandlers.BulkHandler)

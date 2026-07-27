@@ -178,7 +178,7 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 	t.Logf("GOMAXPROCS: %d", runtime.GOMAXPROCS(0))
 
 	// Create components.
-	cache := checker.NewResultCache(checker.DefaultTTLs(), 10000)
+	cache := checker.NewResultCache(checker.DefaultTTLs(), 10000, nil)
 	rateLimiter := NewRateLimiter(testLogger(t))
 
 	// Start periodic cleanup (same as production, every 10 minutes).
@@ -200,7 +200,7 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 
 	// Create a real server with full middleware chain.
 	mux := http.NewServeMux()
-	apiHandlers := NewAPIHandlers(mc, testLogger(t), nil)
+	apiHandlers := NewAPIHandlers(mc, testLogger(t), nil, nil, nil)
 	mux.HandleFunc("GET /api/v1/check", apiHandlers.CheckHandler)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
