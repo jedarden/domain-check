@@ -475,16 +475,16 @@ func TestParse_EdgeCases(t *testing.T) {
 		wantDomain  string // if success expected
 		description string
 	}{
-		// #45: PSL private suffix — rejected at parse time
+		// #45: PSL private suffix — accepted during parsing
 		// The PSL returns icann=false for private suffixes like github.io.
-		// We reject them with a distinct "private-suffix" phase so the API
-		// can return a clear message instead of a generic unsupported_tld.
+		// Parse() accepts these domains; they flow through to RDAP/WHOIS lookup
+		// and are rejected downstream as unsupported_tld if no server covers the TLD.
 		{
 			name:        "PSL private suffix (github.io)",
 			input:       "example.github.io",
-			wantErr:     true,
-			wantPhase:   "private-suffix",
-			description: "Private PSL suffixes are rejected with a clear message",
+			wantErr:     false,
+			wantDomain:  "example.github.io",
+			description: "Private PSL suffixes are accepted at parse time, rejected later if TLD unsupported",
 		},
 		// #46: Wildcard - rejected as invalid character
 		{
@@ -530,10 +530,11 @@ func TestParse_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestParse_PrivateSuffixRejects verifies that PSL PRIVATE-section suffixes
-// are rejected at parse time, while genuinely unknown TLDs still pass parse
-// validation (to flow to the existing unsupported_tld path at check time).
-func TestParse_PrivateSuffixRejects(t *testing.T) {
+// TestParse_PrivateSuffixAccepted verifies that PSL PRIVATE-section suffixes
+// are accepted during parsing (per plan.md edge case #45), while genuinely
+// unknown TLDs also pass parse validation. Both flow to the existing
+// unsupported_tld path at RDAP/WHOIS check time.
+func TestParse_PrivateSuffixAccepted(t *testing.T) {
 	tests := []struct {
 		name       string
 		input      string
@@ -541,12 +542,12 @@ func TestParse_PrivateSuffixRejects(t *testing.T) {
 		wantPhase  string
 		wantErrStr string // substring expected in error message
 	}{
-		// Domains under known PSL private suffixes — must be rejected
-		{"github.io", "example.github.io", true, "private-suffix", "github.io"},
-		{"appspot.com", "myapp.appspot.com", true, "private-suffix", "appspot.com"},
-		{"herokuapp.com", "myapp.herokuapp.com", true, "private-suffix", "herokuapp.com"},
-		{"readthedocs.io", "docs.readthedocs.io", true, "private-suffix", "readthedocs.io"},
-		{"subdomain under private", "deep.sub.github.io", true, "private-suffix", "github.io"},
+		// Domains under known PSL private suffixes — must be ACCEPTED during parse
+		{"github.io", "example.github.io", false, "", ""},
+		{"appspot.com", "myapp.appspot.com", false, "", ""},
+		{"herokuapp.com", "myapp.herokuapp.com", false, "", ""},
+		{"readthedocs.io", "docs.readthedocs.io", false, "", ""},
+		{"subdomain under private", "deep.sub.github.io", false, "", ""},
 
 		// Unknown TLDs (not in PSL at all) — must still pass parse validation.
 		// They will fail later at check time as unsupported_tld.

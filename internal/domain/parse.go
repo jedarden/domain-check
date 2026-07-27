@@ -40,15 +40,14 @@ type ParsedDomain struct {
 
 var lookupProfile = idna.Lookup
 
-// Parse validates and normalizes a domain name input through a 7-step pipeline:
+// Parse validates and normalizes a domain name input through a 6-step pipeline:
 //
 //  1. Trim whitespace, strip trailing dot, lowercase
 //  2. Reject if contains URL characters (/:@)
 //  3. IDN conversion via idna.Lookup profile (handles punycode encoding)
 //  4. Extract TLD via publicsuffix (handles multi-level TLDs like .co.uk)
 //  5. Validate each label against LDH rules (RFC 1035)
-//  6. Verify TLD is recognized by the public suffix list
-//  7. Strip subdomains via EffectiveTLDPlusOne
+//  6. Strip subdomains via EffectiveTLDPlusOne
 func Parse(input string) (*ParsedDomain, error) {
 	original := input
 
@@ -83,7 +82,7 @@ func Parse(input string) (*ParsedDomain, error) {
 
 	// Step 4: Extract TLD via publicsuffix.
 	// This also validates the domain against the PSL.
-	tld, icann := publicsuffix.PublicSuffix(domain)
+	tld, _ := publicsuffix.PublicSuffix(domain)
 
 	if tld == "" || tld == domain {
 		return nil, &ParseError{Input: original, Phase: "tld-extract", Err: "no registrable domain found"}
@@ -94,21 +93,7 @@ func Parse(input string) (*ParsedDomain, error) {
 		return nil, &ParseError{Input: original, Phase: "ldh", Err: err.Error()}
 	}
 
-	// Step 6: Reject PSL private-suffix domains.
-	// When icann=false and the public suffix contains a dot, it's a known
-	// private suffix (e.g. github.io, appspot.com) from the PSL PRIVATE
-	// section — these are not registrable public domains. Single-label
-	// non-ICANN suffixes (e.g. "invalidtld") are unknown TLDs that flow
-	// to the existing unsupported_tld path at check time.
-	if !icann && strings.Contains(tld, ".") {
-		return nil, &ParseError{
-			Input: original,
-			Phase: "private-suffix",
-			Err:   fmt.Sprintf("cannot check availability under private suffix %q", tld),
-		}
-	}
-
-	// Step 7: Strip subdomains via EffectiveTLDPlusOne.
+	// Step 6: Strip subdomains via EffectiveTLDPlusOne.
 	etld1, err := publicsuffix.EffectiveTLDPlusOne(domain)
 	if err != nil {
 		return nil, &ParseError{Input: original, Phase: "etld1", Err: err.Error()}
