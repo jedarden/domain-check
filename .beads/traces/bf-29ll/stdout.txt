@@ -1,9 +1,0 @@
-Done. Bead `bf-29ll` is closed.
-
-**Summary:** The quality-gate root cause was already identified and documented by prior bead `bf-5t1u` (commit `faea253`). The analysis is saved to `docs/quality-gate-root-cause.md`:
-
-- **Exit code:** 2 (Go toolchain usage error)
-- **Failing command:** `go test -race ./...` — fails because `golang:1.26-alpine` defaults to `CGO_ENABLED=0`
-- **Passing command:** `go vet ./...` — passes cleanly
-- **Test failures:** None — no tests were executed; the `-race` flag is rejected before compilation
-- **Root cause:** Alpine's musl libc disables CGO by default, but the race detector requires CGO for C-level atomic instrumentation

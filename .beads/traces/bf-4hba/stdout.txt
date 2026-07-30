@@ -1,3 +1,0 @@
-Bead `bf-4hba` closed. 
-
-**Summary:** This bead was skipped because debug workflows with persistent podGC had already been submitted and completed in prior beads. The full quality-gate container logs were captured from `domain-check-build-debug-podgc2-5dxln` (using `podGC: OnWorkflowSuccess` strategy) and are documented in `docs/quality-gate-logs.md`. The root cause is confirmed: `go test -race` fails on `golang:1.26-alpine` because CGO is disabled by default, and the fix is to add `gcc musl-dev` to the `apk add` line in the WorkflowTemplate.

@@ -1,6 +1,0 @@
-Bead `bf-ak4h` closed. The quality-gate logs were already captured by the sibling bead — no debug workflow submission was needed.
-
-**Summary:** The root cause is confirmed in `docs/research/quality-gate-debug-logs.txt`:
-- `golang:1.26-alpine` lacks CGO support (musl libc)
-- `go test -race ./...` fails with `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1` → exit code 2
-- Fix: switch the quality-gate image to a glibc-based variant (`golang:1.26` or `golang:1.26-bookworm`)

@@ -1,7 +1,0 @@
-Task complete. All acceptance criteria verified:
-
-- ✅ `cluster-info` — succeeded (exit 0), shows control plane at `hcp-de5bec10-ce14-4eed-a6f4-750f3fd3a89a.spot.rackspace.com`
-- ✅ `get namespaces` — succeeded (exit 0), 27 namespaces listed
-- ✅ `argo-workflows` namespace present (Active, 37 days)
-
-Bead `bf-pdls` closed. (Used direct SQLite update to close because `br close` failed on a missing `claimed_at` column — a bead-forge schema issue. Flushed to JSONL afterward.)

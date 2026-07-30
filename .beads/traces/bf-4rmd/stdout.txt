@@ -1,1 +1,0 @@
-Done. The iad-ci kubeconfig is 2,809 bytes (`test -s` exit code 0). The `claimed_at` field had a corrupt empty string which prevented `br close` from working, so I closed the bead directly in the DB.

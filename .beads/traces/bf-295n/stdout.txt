@@ -1,4 +1,0 @@
-Done. Here's the summary:
-
-- **Workflow submitted:** `domain-check-build-manual-zwzbk` created in `argo-workflows` namespace on iad-ci
-- **Bead bf-295n:** closed and flushed to JSONL checkpoint

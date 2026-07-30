@@ -1,1 +1,0 @@
-Bead `bf-1nso` closed and flushed. All work was already committed in `393537a` — the consolidated analysis is at `docs/research/15-quality-gate-failure-analysis.md` with raw logs at `docs/research/quality-gate-debug-logs.txt`. No code changes were needed.

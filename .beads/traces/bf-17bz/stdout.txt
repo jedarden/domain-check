@@ -1,6 +1,0 @@
-Done. The iad-ci kubeconfig file verification is complete:
-
-- **File exists** at `/home/coding/.kube/iad-ci.kubeconfig` ✅
-- **File is non-empty** ✅
-
-Bead bf-17bz closed as completed.

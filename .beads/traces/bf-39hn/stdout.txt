@@ -1,3 +1,0 @@
-Bead **bf-39hn** is now closed.
-
-**Result:** The most recent `domain-check-build` workflow on iad-ci is **`domain-check-build-tv2nz`** (status: Failed, created ~35 minutes ago).

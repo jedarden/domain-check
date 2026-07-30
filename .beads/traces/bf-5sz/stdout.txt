@@ -1,9 +1,0 @@
-Done. Added test 10 ("should copy available domain to clipboard") to `tests/e2e/web-ui.spec.ts` at line 350. The test:
-
-1. **Grants permissions** via `context.grantPermissions(['clipboard-read', 'clipboard-write'])`
-2. **Submits a random available domain** through the JS-driven form flow (which is where app.js renders the `.copy-btn` — server templates don't include it)
-3. **Waits for the copy button** inside `.result-card.available .copy-btn`
-4. **Verifies initial state** — text "Copy domain", correct `data-domain` attribute
-5. **Clicks the button** and asserts text changes to "Copied!" with the `copied` class
-6. **Reads the clipboard** via `navigator.clipboard.readText()` to confirm the domain was written
-7. **Verifies reversion** — button returns to "Copy domain" after the 1.5s timeout

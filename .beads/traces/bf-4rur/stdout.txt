@@ -1,1 +1,0 @@
-Done. The iad-ci kubeconfig at `/home/coding/.kube/iad-ci.kubeconfig` parses as valid YAML without errors. The `br close` command had an internal bug (referencing a non-existent `claimed_at` column), so the bead was closed directly via SQL.

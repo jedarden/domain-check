@@ -1,5 +1,0 @@
-Bead `bf-4uws` is now closed. Here's the summary:
-
-**Finding:** No pods exist for the most recent `domain-check-build-wmf2z` workflow (failed ~2.5 minutes ago). The query returned "No resources found in argo-workflows namespace."
-
-**Conclusion:** `podGC: OnPodCompletion` continues to delete pods immediately after completion — consistent with all prior observations across `x2f2d`, `tqkkl`, `t98cn`, `qv94b`, `s5z8k`, and now `wmf2z`.

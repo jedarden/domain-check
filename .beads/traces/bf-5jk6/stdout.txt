@@ -1,6 +1,0 @@
-Done. The bead has been closed successfully. Here's the summary:
-
-**Verified:** `/home/coding/.kube/iad-ci.kubeconfig` contains:
-- **1 cluster:** `iad-ci`
-- **1 context:** `iad-ci`
-- All assertions passed without error.

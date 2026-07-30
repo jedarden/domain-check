@@ -1,7 +1,0 @@
-Bead **bf-5rtz** is now **closed** with status "skipped".
-
-**Summary:** The task was completed as a skip because child bead **bf-d9hn** already captured the quality-gate logs successfully:
-
-- **Reproduction workflow** `domain-check-qg-capture-rlkxt` was submitted with `podGC: OnWorkflowCompletion` and logs were streamed live
-- **Root cause identified:** `golang:1.26-alpine` image lacks gcc/musl-dev needed for CGO, causing `go test -race ./...` to fail with `exit code 2`
-- **Logs saved** to `docs/research/quality-gate-logs.txt` with full raw output and analysis

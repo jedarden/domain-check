@@ -1,3 +1,0 @@
-Bead **bf-4nj9** is now **closed**.
-
-**Summary:** Queried the `argo-workflows` namespace on iad-ci — 20 workflows exist total, but **zero match `domain-check-build`**. They've all been garbage-collected. The namespace currently contains `sigil-ci`, `needle-ci`, and some older errored manual workflows. No commit was needed since this was a read-only investigation task.

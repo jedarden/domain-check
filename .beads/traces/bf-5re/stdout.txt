@@ -1,6 +1,0 @@
-Done. Summary:
-
-1. **Diffed all 8 manifest files** between `cluster-configuration/` and `declarative-config` — 5 were identical, 3 differed
-2. **Ported real drift** to declarative-config: added `passClientIP: true` to the Traefik headers middleware in `ingressroute.yaml` (the ServiceMonitor label changes were left alone since they could break the currently-deployed Prometheus scraping)
-3. **Deleted `cluster-configuration/`** (8 files, 260 lines removed)
-4. **Added pointer** in `CLAUDE.md` — new "Kubernetes Manifests" section directing to `jedarden/declarative-config`

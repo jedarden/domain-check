@@ -1,1 +1,0 @@
-Bead `bf-xwfi` closed. The quality-gate logs were already captured by a prior bead (bf-4hba) and saved to `docs/quality-gate-logs.md` — verified complete with full go vet and go test output.

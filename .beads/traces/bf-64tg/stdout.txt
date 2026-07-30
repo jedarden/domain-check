@@ -1,1 +1,0 @@
-Bead closed. The module path was already `github.com/jedarden/domain-check` — no changes were needed.
