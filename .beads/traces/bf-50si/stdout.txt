@@ -1,8 +1,0 @@
-Done. Here's what was updated in `docs/plan/plan.md`:
-
-1. **Multi-TLD Check API section** — Rewrote to clearly document both routes side-by-side:
-   - `GET /api/v1/check?d=...&tlds=...` — `d` is a full domain, `tlds` is **optional** (triggers multi-mode when present)
-   - `GET /api/v1/check/multi?d=...&tlds=...` — `d` is a name **without** TLD, `tlds` is **required** (returns 400 if absent)
-   - Noted both use the same `MultiTLDHandler` internally
-
-2. **Integration tests** — Added 3 explicit `/api/v1/check/multi` test cases (#11-13: normal multi-TLD via `/multi`, missing `tlds` returns 400, missing all params returns 400) and renumbered all subsequent test cases through #33.

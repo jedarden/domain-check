@@ -1,7 +1,0 @@
-Bead `bf-5hwl` is closed. Here's what was done:
-
-**Summary:**
-- The most recent failed domain-check-build workflow was `domain-check-build-94972` (created 2026-07-03T13:16:19Z)
-- The quality-gate node (`build-quality-gate`) failed with **exit code 2** — caused by `go test -race` on Alpine lacking CGO support (musl libc)
-- **Pods deleted by podGC** — no pods remain in the cluster, all logs unrecoverable
-- Complete node status summary saved to `docs/quality-gate-node-status.md` and pushed

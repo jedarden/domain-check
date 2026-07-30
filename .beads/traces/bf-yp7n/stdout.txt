@@ -1,1 +1,0 @@
-Done. The kubeconfig at `/home/coding/.kube/iad-ci.kubeconfig` parses as valid YAML — `yaml.safe_load()` completed without exception. Bead `bf-yp7n` is closed.

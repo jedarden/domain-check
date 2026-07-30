@@ -1,1 +1,0 @@
-Done. `coverage.out` has been untracked from git via `git rm --cached`, verified it no longer appears in `git ls-files`, committed and pushed, and the bead is closed.

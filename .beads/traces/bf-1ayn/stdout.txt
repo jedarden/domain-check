@@ -1,5 +1,0 @@
-Done. Here's a summary of what was done:
-
-- **Problem:** `home.dyndns.org` in `TestParse_PrivateSuffixRejects` expected phase `private-suffix`, but the PSL returns `home.dyndns.org` as the full public suffix itself — so `tld == domain` at step 4 and it gets caught at `tld-extract` (no registrable domain found) before ever reaching the private-suffix check.
-- **Fix:** Replaced the test row with `myapp.herokuapp.com` / `herokuapp.com`, which is a proper PSL private suffix that exercises the `private-suffix` rejection path correctly.
-- **Verified:** `go test ./internal/domain/ -run TestParse_PrivateSuffixRejects` passes.

@@ -1,4 +1,0 @@
-Done. The bead `bf-3xiy` is closed. Both acceptance criteria were already satisfied by the prior commit — no code changes were needed:
-
-- **Project Structure**: All 16 directories and 37 files listed in plan.md exist on disk. `internal/config/` and `internal/cli/` are already included.
-- **Dockerfile snippet**: Identical to the real `Dockerfile` (diff produced zero differences).

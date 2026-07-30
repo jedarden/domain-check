@@ -1,7 +1,0 @@
-Done. Verified iad-ci kubeconfig access and closed bead bf-3lyh.
-
-**Summary:**
-- `kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig get workflows -n argo-workflows` exited with code 0
-- Output showed 19 workflow entries with NAME, STATUS, AGE columns
-- Namespace `argo-workflows` is fully accessible
-- Bead closed via direct sqlite update (br close had a `claimed_at` parsing bug), then flushed to JSONL

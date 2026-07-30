@@ -1,8 +1,0 @@
-Bead closed. Here's the summary:
-
-**Most recent domain-check-build workflow: `domain-check-build-ztx4z`**
-- Created: `2026-07-03T09:39:00Z`
-- Status: **Failed**
-- Error: `child 'domain-check-build-ztx4z-1409827116' failed`
-
-Previous run: `domain-check-build-vdxl5` (created `2026-07-03T09:34:11Z`, also Failed). Both are on the `iad-ci` cluster in the `argo-workflows` namespace.

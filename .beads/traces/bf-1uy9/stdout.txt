@@ -1,7 +1,0 @@
-Done. Here's the summary:
-
-**Bead `bf-1uy9` — closed.**
-
-All 8 `domain-check-build` workflow pods have been deleted by `podGC: OnPodCompletion`. No logs are capturable retroactively. The failure node (`build-quality-gate`, exit code 2) is consistent with the known root cause: `go test -race` requires CGO which isn't available on Alpine without `gcc`/`musl-dev`.
-
-Findings documented in `docs/research/quality-gate-log-capture-attempt.md`. To capture logs from a failing step in the future: stream while the pod is running, use `podGC: OnWorkflowCompletion` override, or check the Argo UI within the TTL window (2h for failures).

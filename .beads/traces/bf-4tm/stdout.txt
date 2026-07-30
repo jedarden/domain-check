@@ -1,1 +1,0 @@
-Bead `bf-4tm` is closed. The `.goreleaser.yml` configuration was already thoroughly documented across 4 research docs (`docs/research/09-` through `12-`). No additional work was needed — all acceptance criteria were met by existing documentation.

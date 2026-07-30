@@ -1,7 +1,0 @@
-Bead `bf-kqo` is now closed. The documentation at `docs/research/10-goreleaser-archives-checksum-changelog.md` was already complete and committed (`ee42bbb`), covering all acceptance criteria:
-
-- **Archive formats** per OS (tar.gz for linux/darwin/freebsd, zip for windows)
-- **Name template arch mapping** (amd64→x86_64, 386→i386, arm→armv{ver}, arm64→arm64)
-- **Included files** in archives (LICENSE, README.md)
-- **Checksum config** (checksums.txt with SHA256 digests)
-- **Changelog config** (ascending sort, exclude filters: `docs:`, `test:`, `ci:`, `chore:`, `build:`)

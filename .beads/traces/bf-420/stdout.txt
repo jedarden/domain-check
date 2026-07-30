@@ -1,1 +1,0 @@
-Bead `bf-420` closed successfully. The audit summary at `docs/research/14-audit-summary.md` was already committed and comprehensive — no new work was needed.

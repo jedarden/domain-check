@@ -1,9 +1,0 @@
-Bead `bf-3ih4` is now closed. 
-
-**Summary of findings for the next child bead:**
-
-- **Most recent workflow:** `domain-check-build-qms44`
-- **Phase:** Failed
-- **Created:** 2026-07-03T11:53:51Z
-- **Failure point:** `build-quality-gate` step (exit code 2) — all 8 recent builds are failing at the same step
-- **Pods:** Already deleted by `podGC: OnPodCompletion`, so container build logs are not accessible without re-running or submitting with `podGC: OnWorkflowCompletion`

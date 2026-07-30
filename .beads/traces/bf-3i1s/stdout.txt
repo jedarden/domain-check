@@ -1,3 +1,0 @@
-Bead `bf-3i1s` is now closed. 
-
-**Audit summary:** The `build` entrypoint in `domain-check-workflowtemplate.yml` is clean — exactly 3 steps (`build-quality-gate` → `resolve-version` → `docker-build`), no goreleaser contamination, all parameters unchanged. The `release` entrypoint is properly isolated with its own separate templates. No code changes were needed.

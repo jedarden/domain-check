@@ -1,1 +1,0 @@
-Bead **bf-2vg2** closed. The plan.md edge case #45 at `docs/plan/plan.md:826` already accurately describes the implementation — no changes were needed. `Parse()` accepts private-suffix domains and they're only rejected downstream when no RDAP/WHOIS server covers the TLD.
