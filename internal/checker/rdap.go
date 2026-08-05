@@ -30,6 +30,7 @@ type RDAPClient struct {
 	ratelimit  *ratelimit.RateLimiter
 	allowlist  *AllowList
 	userAgent  string
+	metrics    RDAPMetrics
 }
 
 // RDAPClientConfig holds configuration for the RDAP client.
@@ -39,6 +40,12 @@ type RDAPClientConfig struct {
 	RateLimit  *ratelimit.RateLimiter
 	AllowList  *AllowList
 	UserAgent  string
+	Metrics    RDAPMetrics
+}
+
+// RDAPMetrics records metrics for RDAP requests.
+type RDAPMetrics interface {
+	RecordRDAPRequest(registry, status string, durationSeconds float64)
 }
 
 // NewRDAPClient creates a new RDAP client.
@@ -49,6 +56,7 @@ func NewRDAPClient(cfg RDAPClientConfig) *RDAPClient {
 		ratelimit:  cfg.RateLimit,
 		allowlist:  cfg.AllowList,
 		userAgent:  cfg.UserAgent,
+		metrics:    cfg.Metrics,
 	}
 }
 
@@ -93,6 +101,38 @@ func (c *RDAPClient) Check(ctx context.Context, normalizedDomain string) (*domai
 	resp, rdapErr = c.ratelimit.Acquire(ctx, registry, func() (*http.Response, error) {
 		return c.doRequest(ctx, rdapURL)
 	})
+
+	// Record RDAP request metrics if metrics is available
+	if c.metrics != nil {
+		duration := time.Since(start).Seconds()
+		status := "success"
+		if rdapErr != nil {
+			switch {
+			case errors.Is(rdapErr, context.DeadlineExceeded):
+				status = "timeout"
+			case errors.Is(rdapErr, context.Canceled):
+				status = "canceled"
+			case errors.Is(rdapErr, ratelimit.ErrServiceBusy) || strings.Contains(rdapErr.Error(), "429"):
+				status = "rate_limited"
+			default:
+				status = "error"
+			}
+		} else if resp != nil {
+			switch resp.StatusCode {
+			case http.StatusOK:
+				status = "success"
+			case http.StatusNotFound:
+				status = "not_found"
+			case http.StatusTooManyRequests:
+				status = "rate_limited"
+			case http.StatusBadRequest:
+				status = "bad_request"
+			default:
+				status = fmt.Sprintf("http_%d", resp.StatusCode)
+			}
+		}
+		c.metrics.RecordRDAPRequest(registry, status, duration)
+	}
 
 	if rdapErr != nil {
 		// Propagate context errors (timeout, cancellation) so the caller

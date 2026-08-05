@@ -57,6 +57,7 @@ type Checker struct {
 	bootstrap  *BootstrapManager
 	useDNSPrefilter bool
 	bulkConfig BulkCheckConfig
+	activeMetrics  ActiveCheckMetrics
 
 	// Per-registry semaphores for bulk operation rate limiting.
 	registrySemMu   sync.Mutex
@@ -72,6 +73,13 @@ type CheckerConfig struct {
 	Bootstrap       *BootstrapManager
 	UseDNSPrefilter bool
 	BulkConfig      BulkCheckConfig
+	ActiveMetrics   ActiveCheckMetrics
+}
+
+// ActiveCheckMetrics records metrics for active domain checks.
+type ActiveCheckMetrics interface {
+	IncrementActiveChecks()
+	DecrementActiveChecks()
 }
 
 // NewChecker creates a new domain check engine.
@@ -89,6 +97,7 @@ func NewChecker(cfg CheckerConfig) *Checker {
 		bootstrap:  cfg.Bootstrap,
 		useDNSPrefilter: cfg.UseDNSPrefilter,
 		bulkConfig: bulkConfig,
+		activeMetrics: cfg.ActiveMetrics,
 		registrySems: make(map[string]*semaphore.Weighted),
 	}
 }
@@ -116,6 +125,11 @@ func (c *Checker) getRegistrySem(registry string) *semaphore.Weighted {
 // It first checks the cache, then optionally uses DNS pre-filtering,
 // and finally queries RDAP or WHOIS as needed.
 func (c *Checker) Check(ctx context.Context, normalizedDomain string) (*domain.DomainResult, error) {
+	if c.activeMetrics != nil {
+		c.activeMetrics.IncrementActiveChecks()
+		defer c.activeMetrics.DecrementActiveChecks()
+	}
+
 	start := time.Now()
 
 	// Sanitize domain input.

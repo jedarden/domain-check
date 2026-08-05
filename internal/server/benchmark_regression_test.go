@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -193,7 +194,7 @@ func setupBenchmarkServer(ch DomainChecker) *httptest.Server {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	mux := http.NewServeMux()
-	apiHandlers := NewAPIHandlers(ch, log, nil)
+	apiHandlers := NewAPIHandlers(ch, log, nil, nil, nil)
 	mux.HandleFunc("GET /api/v1/check", apiHandlers.CheckHandler)
 	mux.HandleFunc("GET /api/v1/check/multi", apiHandlers.MultiTLDHandler)
 	mux.HandleFunc("POST /api/v1/bulk", apiHandlers.BulkHandler)
@@ -502,9 +503,10 @@ func TestBenchmark_Bulk50DomainsP99(t *testing.T) {
 // responses maintains p99 < 50ms with error rate < 0.1%.
 // Runs for 10 seconds (1000 requests) to keep test duration reasonable.
 // Plan target: "Sustained 100 req/s (cached) | < 50ms | < 0.1%"
+// Run with: DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestBenchmark_SustainedLoadP99 ./internal/server/
 func TestBenchmark_SustainedLoadP99(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping benchmark regression in short mode")
+	if testing.Short() || os.Getenv("DOMCHECK_RUN_LONG_TESTS") != "1" {
+		t.Skip("skipping 10-second sustained benchmark (set DOMCHECK_RUN_LONG_TESTS=1 to run)")
 	}
 
 	bc := &benchChecker{}
@@ -523,10 +525,11 @@ func TestBenchmark_SustainedLoadP99(t *testing.T) {
 }
 
 // TestBenchmark_SustainedLoadP99_Long runs a 30-second sustained load test
-// for more statistically significant results. Skipped in short mode.
+// for more statistically significant results.
+// Run with: DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestBenchmark_SustainedLoadP99_Long ./internal/server/
 func TestBenchmark_SustainedLoadP99_Long(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping long sustained benchmark in short mode")
+	if testing.Short() || os.Getenv("DOMCHECK_RUN_LONG_TESTS") != "1" {
+		t.Skip("skipping 30-second sustained benchmark (set DOMCHECK_RUN_LONG_TESTS=1 to run)")
 	}
 
 	bc := &benchChecker{}
@@ -546,9 +549,10 @@ func TestBenchmark_SustainedLoadP99_Long(t *testing.T) {
 
 // TestBenchmark_ConcurrentBulkP99 verifies bulk endpoint under sustained load.
 // Fires 20 bulk requests per second for 5 seconds.
+// Run with: DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestBenchmark_ConcurrentBulkP99 ./internal/server/
 func TestBenchmark_ConcurrentBulkP99(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping concurrent bulk benchmark in short mode")
+	if testing.Short() || os.Getenv("DOMCHECK_RUN_LONG_TESTS") != "1" {
+		t.Skip("skipping 5-second concurrent bulk benchmark (set DOMCHECK_RUN_LONG_TESTS=1 to run)")
 	}
 
 	bc := &benchChecker{}

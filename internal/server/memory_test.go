@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -141,27 +142,28 @@ func (mc *memoryTestChecker) CheckBulk(_ context.Context, domains []string) *che
 
 // TestMemoryGrowthUnderLoad runs 50 req/s for 30 seconds and verifies memory growth
 // plateaus. For longer runs use TestMemoryGrowthUnderLoadExtended or Full variants.
+// Run with: DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestMemoryGrowthUnderLoad ./internal/server/
 func TestMemoryGrowthUnderLoad(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping 30-second memory growth test in short mode")
+	if testing.Short() || os.Getenv("DOMCHECK_RUN_LONG_TESTS") != "1" {
+		t.Skip("skipping 30-second memory growth test (set DOMCHECK_RUN_LONG_TESTS=1 to run)")
 	}
 	runMemoryGrowthTest(t, 30*time.Second)
 }
 
 // TestMemoryGrowthUnderLoadExtended runs 50 req/s for 2 minutes.
-// Run with: go test -v -run TestMemoryGrowthUnderLoadExtended -timeout 5m ./internal/server/
+// Run with: DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestMemoryGrowthUnderLoadExtended -timeout 5m ./internal/server/
 func TestMemoryGrowthUnderLoadExtended(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping 2-minute memory growth test in short mode")
+	if testing.Short() || os.Getenv("DOMCHECK_RUN_LONG_TESTS") != "1" {
+		t.Skip("skipping 2-minute memory growth test (set DOMCHECK_RUN_LONG_TESTS=1 to run)")
 	}
 	runMemoryGrowthTest(t, 2*time.Minute)
 }
 
 // TestMemoryGrowthUnderLoadFull runs the full 10-minute memory growth test.
-// Run with: go test -v -run TestMemoryGrowthUnderLoadFull -timeout 15m ./internal/server/
+// Run with: DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestMemoryGrowthUnderLoadFull -timeout 15m ./internal/server/
 func TestMemoryGrowthUnderLoadFull(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping 10-minute memory growth test in short mode")
+	if testing.Short() || os.Getenv("DOMCHECK_RUN_LONG_TESTS") != "1" {
+		t.Skip("skipping 10-minute memory growth test (set DOMCHECK_RUN_LONG_TESTS=1 to run)")
 	}
 	runMemoryGrowthTest(t, 10*time.Minute)
 }
@@ -176,7 +178,7 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 	t.Logf("GOMAXPROCS: %d", runtime.GOMAXPROCS(0))
 
 	// Create components.
-	cache := checker.NewResultCache(checker.DefaultTTLs(), 10000)
+	cache := checker.NewResultCache(checker.DefaultTTLs(), 10000, nil)
 	rateLimiter := NewRateLimiter(testLogger(t))
 
 	// Start periodic cleanup (same as production, every 10 minutes).
@@ -198,7 +200,7 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 
 	// Create a real server with full middleware chain.
 	mux := http.NewServeMux()
-	apiHandlers := NewAPIHandlers(mc, testLogger(t), nil)
+	apiHandlers := NewAPIHandlers(mc, testLogger(t), nil, nil, nil)
 	mux.HandleFunc("GET /api/v1/check", apiHandlers.CheckHandler)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

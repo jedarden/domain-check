@@ -27,11 +27,12 @@ func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch D
 	registerRoutes(mux, cfg, log, rateLimiter, ch, bootstrap, monitor, metrics)
 
 	// Build middleware chain (applied in reverse order).
-	// Outer to inner: RequestID -> ClientIP -> Logging -> SecurityHeaders -> RateLimit -> CORS -> Handler
+	// Outer to inner: RequestID -> ClientIP -> Logging -> Metrics -> SecurityHeaders -> RateLimit -> CORS -> Handler
 	handler := Chain(mux,
 		RequestID,
 		ClientIP(cfg.TrustProxy),
 		Logging(log),
+		MetricsMiddleware(metrics),
 		SecurityHeaders,
 		BodyLimit(64 * 1024), // 64 KB max body for POST endpoints
 		CORS(cfg),
@@ -43,7 +44,7 @@ func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch D
 // registerRoutes adds all routes to the mux.
 func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker, bootstrap BootstrapProvider, monitor *ServiceMonitor, metrics *Metrics) {
 	// Create handlers
-	apiHandlers := NewAPIHandlers(ch, log, bootstrap)
+	apiHandlers := NewAPIHandlers(ch, log, bootstrap, metrics, monitor)
 	webHandlers := NewWebHandlers(ch, log)
 
 	// Health check - no rate limiting.

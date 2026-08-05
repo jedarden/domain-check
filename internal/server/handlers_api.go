@@ -48,15 +48,21 @@ type APIHandlers struct {
 	checker   DomainChecker
 	log       *slog.Logger
 	bootstrap BootstrapProvider
+	metrics   *Metrics
+	monitor   *ServiceMonitor
 }
 
 // NewAPIHandlers creates a new APIHandlers instance.
 // The bootstrap parameter is optional; pass nil if bootstrap data is not available.
-func NewAPIHandlers(ch DomainChecker, log *slog.Logger, bootstrap BootstrapProvider) *APIHandlers {
+// The metrics parameter is optional; pass nil to disable metrics recording.
+// The monitor parameter is optional; pass nil to disable service monitoring.
+func NewAPIHandlers(ch DomainChecker, log *slog.Logger, bootstrap BootstrapProvider, metrics *Metrics, monitor *ServiceMonitor) *APIHandlers {
 	return &APIHandlers{
 		checker:   ch,
 		log:       log,
 		bootstrap: bootstrap,
+		metrics:   metrics,
+		monitor:   monitor,
 	}
 }
 
@@ -95,10 +101,6 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var parseErr *domain.ParseError
 		if errors.As(err, &parseErr) {
-			if parseErr.Phase == "private-suffix" {
-				writeAPIError(w, http.StatusBadRequest, "private_suffix", parseErr.Err)
-				return
-			}
 			writeAPIError(w, http.StatusBadRequest, "invalid_domain", parseErr.Err)
 			return
 		}
@@ -131,6 +133,17 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		h.log.Error("domain check failed", "domain", parsed.Domain, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "check_failed", "Domain availability check failed")
 		return
+	}
+
+	// Record bulk check size metric (single check = size 1).
+	if h.metrics != nil {
+		h.metrics.RecordBulkCheck(1)
+		h.metrics.AddChecksServed(1)
+	}
+
+	// Increment the service monitor counter (count all served requests, including errors).
+	if h.monitor != nil {
+		h.monitor.IncrementCheck()
 	}
 
 	// Return the result as JSON.
@@ -215,6 +228,11 @@ func (h *APIHandlers) MultiTLDHandler(w http.ResponseWriter, r *http.Request) {
 	bulkResult := bulkChecker.CheckBulk(r.Context(), domains)
 	duration := time.Since(start)
 
+	// Increment the service monitor counter (count all served requests).
+	if h.monitor != nil {
+		h.monitor.AddChecks(len(tlds))
+	}
+
 	// Build response.
 	response := MultiTLDResponse{
 		Name:     name,
@@ -241,6 +259,12 @@ func (h *APIHandlers) MultiTLDHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		response.Results = append(response.Results, result)
+	}
+
+	// Record bulk check size metric.
+	if h.metrics != nil {
+		h.metrics.RecordBulkCheck(len(tlds))
+		h.metrics.AddChecksServed(response.Succeeded)
 	}
 
 	writeJSONResponse(w, http.StatusOK, response)
@@ -275,6 +299,12 @@ func (h *APIHandlers) checkMultiTLDSequential(ctx context.Context, w http.Respon
 	}
 
 	response.Duration = time.Since(start)
+
+	// Increment the service monitor counter (count all served requests).
+	if h.monitor != nil {
+		h.monitor.AddChecks(len(tlds))
+	}
+
 	writeJSONResponse(w, http.StatusOK, response)
 }
 
@@ -424,6 +454,11 @@ func (h *APIHandlers) BulkHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Record bulk check size metric.
+	if h.metrics != nil {
+		h.metrics.RecordBulkCheck(len(req.Domains))
+	}
+
 	// Validate and normalize all domains first.
 	normalizedDomains := make([]string, 0, len(req.Domains))
 	domainErrors := make(map[string]string)
@@ -493,6 +528,16 @@ func (h *APIHandlers) BulkHandler(w http.ResponseWriter, r *http.Request) {
 		response.Results = append(response.Results, result)
 	}
 
+	// Record checks served metric.
+	if h.metrics != nil {
+		h.metrics.AddChecksServed(response.Succeeded)
+	}
+
+	// Increment the service monitor counter (count all served requests).
+	if h.monitor != nil {
+		h.monitor.AddChecks(len(req.Domains))
+	}
+
 	writeJSONResponse(w, http.StatusOK, response)
 }
 
@@ -531,6 +576,12 @@ func (h *APIHandlers) checkBulkSequential(ctx context.Context, w http.ResponseWr
 	}
 
 	response.Duration = time.Since(start)
+
+	// Increment the service monitor counter (count all served requests).
+	if h.monitor != nil {
+		h.monitor.AddChecks(len(domains) + len(domainErrors))
+	}
+
 	writeJSONResponse(w, http.StatusOK, response)
 }
 

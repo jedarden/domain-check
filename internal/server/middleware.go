@@ -127,7 +127,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("X-Xss-Protection", "1; mode=block")
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; connect-src 'self'")
+			"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';")
 
 		next.ServeHTTP(w, r)
 	})
@@ -204,6 +204,34 @@ func Logging(log *slog.Logger) Middleware {
 				"request_id", GetRequestID(r.Context()),
 				"client_ip", GetClientIP(r.Context()),
 			)
+		})
+	}
+}
+
+// MetricsMiddleware records Prometheus metrics for all requests.
+func MetricsMiddleware(metrics *Metrics) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			// Wrap response writer to capture status
+			wrapped := &responseWriter{ResponseWriter: w}
+
+			next.ServeHTTP(wrapped, r)
+
+			// Record request metrics if metrics is available
+			if metrics != nil {
+				duration := time.Since(start).Seconds()
+				method := r.Method
+				path := r.URL.Path
+				status := wrapped.status
+
+				if status == 0 {
+					status = http.StatusOK // Default if no WriteHeader was called
+				}
+
+				metrics.RecordRequest(method, path, status, duration)
+			}
 		})
 	}
 }

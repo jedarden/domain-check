@@ -15,16 +15,13 @@ Authoritative domain availability checker powered by RDAP — the ICANN-mandated
 ```
 cmd/domain-check/main.go          # Entry point
 internal/
-  domain/     # Input validation, IDN, TLD extraction via publicsuffix
-  bootstrap/  # IANA RDAP bootstrap loader + 24h cache refresh
-  rdap/       # RDAP client, response parser, per-registry rate limiting
-  whois/      # WHOIS fallback for ccTLDs without RDAP
-  cache/      # In-memory LRU with per-status TTLs
-  httpclient/ # SSRF-safe HTTP client (private IP blocking)
-  ratelimit/  # Per-IP rate limiter middleware
-  server/     # HTTP server, router, middleware, API handlers
-  web/        # HTML templates, static assets, template handlers
-  cli/        # CLI subcommands (check, bulk)
+  checker/   # Core RDAP client, bootstrap, cache, SSRF-safe HTTP client, WHOIS fallback
+  domain/    # Input validation, IDN, TLD extraction via publicsuffix
+  ratelimit/ # Per-IP rate limiter middleware
+  server/    # HTTP server, router, middleware, API handlers
+  cli/       # CLI subcommands (check, bulk)
+  config/    # Configuration loading from flags/env/file
+web/            # HTML templates, static assets (embedded via go:embed)
 ```
 
 ## Development
@@ -35,6 +32,20 @@ go test ./...
 go test -fuzz=. -fuzztime=30s ./internal/domain/
 golangci-lint run
 ```
+
+### Long-Running Tests
+
+Memory growth tests (> 30s) and sustained load benchmarks require explicit opt-in via `DOMCHECK_RUN_LONG_TESTS=1` to prevent `go test ./...` from timing out:
+
+```bash
+# Run memory growth tests (30s, 2m, 10m variants)
+DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestMemoryGrowthUnderLoad ./internal/server/
+
+# Run sustained load benchmarks (10s, 30s, 5s variants)
+DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestBenchmark_SustainedLoadP99 ./internal/server/
+```
+
+Without the environment variable, these tests are skipped by default. See `docs/benchmarks/README.md` for full details.
 
 ## Key Docs
 

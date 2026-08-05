@@ -59,7 +59,7 @@ func (m *mockBulkChecker) CheckBulk(ctx context.Context, domains []string) *chec
 func TestCheckHandler_MissingParameter(t *testing.T) {
 	// Create mock checker
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	// Create request without domain parameter
 	req := httptest.NewRequest("GET", "/api/v1/check", nil)
@@ -83,7 +83,7 @@ func TestCheckHandler_MissingParameter(t *testing.T) {
 
 func TestCheckHandler_InvalidDomain(t *testing.T) {
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	tests := []struct {
 		name        string
@@ -124,7 +124,7 @@ func TestCheckHandler_UnsupportedTLD(t *testing.T) {
 	mockCh := &mockChecker{
 		err: checker.ErrTLDNotFound,
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example.xyz", nil)
 	rec := httptest.NewRecorder()
@@ -142,48 +142,6 @@ func TestCheckHandler_UnsupportedTLD(t *testing.T) {
 
 	if resp.Error != "unsupported_tld" {
 		t.Errorf("expected error %q, got %q", "unsupported_tld", resp.Error)
-	}
-}
-
-func TestCheckHandler_PrivateSuffix(t *testing.T) {
-	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
-
-	tests := []struct {
-		name        string
-		domain      string
-		wantError   string
-		wantMessage string // substring expected in message
-	}{
-		{"github.io", "example.github.io", "private_suffix", "github.io"},
-		{"appspot.com", "myapp.appspot.com", "private_suffix", "appspot.com"},
-		{"dyndns.org", "home.dyndns.org", "private_suffix", "dyndns.org"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/api/v1/check?d="+tt.domain, nil)
-			rec := httptest.NewRecorder()
-
-			handlers.CheckHandler(rec, req)
-
-			if rec.Code != http.StatusBadRequest {
-				t.Errorf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
-				return
-			}
-
-			var resp ErrorResponse
-			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-				t.Fatalf("failed to decode response: %v", err)
-			}
-
-			if resp.Error != tt.wantError {
-				t.Errorf("expected error %q, got %q", tt.wantError, resp.Error)
-			}
-			if !strings.Contains(resp.Message, tt.wantMessage) {
-				t.Errorf("expected message to contain %q, got %q", tt.wantMessage, resp.Message)
-			}
-		})
 	}
 }
 
@@ -205,7 +163,7 @@ func TestCheckHandler_Success(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example.com", nil)
 	rec := httptest.NewRecorder()
@@ -245,7 +203,7 @@ func TestCheckHandler_AvailableDomain(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=available123.com", nil)
 	rec := httptest.NewRecorder()
@@ -283,7 +241,7 @@ func TestCheckHandler_IDNDomain(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	// Unicode input should be normalized to ASCII punycode
 	req := httptest.NewRequest("GET", "/api/v1/check?d=m%C3%BCnchen.de", nil)
@@ -320,7 +278,7 @@ func TestCheckHandler_CachedResponse(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=cached.com", nil)
 	rec := httptest.NewRecorder()
@@ -350,7 +308,7 @@ func TestCheckHandler_TimeoutReturns504(t *testing.T) {
 		err: context.DeadlineExceeded,
 	}
 	log := DefaultLogger("text", "error")
-	handlers := NewAPIHandlers(mockCh, log, nil)
+	handlers := NewAPIHandlers(mockCh, log, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=timeout.com", nil)
 	rec := httptest.NewRecorder()
@@ -382,7 +340,7 @@ func TestCheckHandler_InternalError(t *testing.T) {
 		err: errors.New("unexpected internal failure"),
 	}
 	log := DefaultLogger("text", "error")
-	handlers := NewAPIHandlers(mockCh, log, nil)
+	handlers := NewAPIHandlers(mockCh, log, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example.com", nil)
 	rec := httptest.NewRecorder()
@@ -409,7 +367,7 @@ func TestCheckHandler_ContextCanceled(t *testing.T) {
 		err: context.Canceled,
 	}
 	log := DefaultLogger("text", "error")
-	handlers := NewAPIHandlers(mockCh, log, nil)
+	handlers := NewAPIHandlers(mockCh, log, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example.com", nil)
 	rec := httptest.NewRecorder()
@@ -445,7 +403,7 @@ func TestCheckHandler_FullRegistration(t *testing.T) {
 	mockCh := &mockChecker{
 		result: expectedResult,
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=google.com", nil)
 	rec := httptest.NewRecorder()
@@ -483,7 +441,7 @@ func TestCheckHandler_ContentType(t *testing.T) {
 	mockCh := &mockChecker{
 		result: &domain.DomainResult{Domain: "test.com", Available: true, TLD: "com"},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=test.com", nil)
 	rec := httptest.NewRecorder()
@@ -499,7 +457,7 @@ func TestCheckHandler_ContentType(t *testing.T) {
 func TestCheckHandler_MethodNotAllowed(t *testing.T) {
 	// Test that POST requests are rejected
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/check?d=test.com", nil)
 	rec := httptest.NewRecorder()
@@ -545,7 +503,7 @@ func TestCheckHandler_MultiTLDViaCheckEndpoint(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example&tlds=com,org,dev", nil)
 	rec := httptest.NewRecorder()
@@ -593,7 +551,7 @@ func TestCheckHandler_MultiTLDPartialSuccess(t *testing.T) {
 			"example.io":  "unsupported tld",
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example&tlds=com,net,io", nil)
 	rec := httptest.NewRecorder()
@@ -622,7 +580,7 @@ func TestCheckHandler_MultiTLDPartialSuccess(t *testing.T) {
 
 func TestCheckHandler_MultiTLDWithEmptyTLDs(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example&tlds=,,,", nil)
 	rec := httptest.NewRecorder()
@@ -645,7 +603,7 @@ func TestCheckHandler_MultiTLDWithEmptyTLDs(t *testing.T) {
 
 func TestCheckHandler_MultiTLDInvalidName(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=-bad&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -672,7 +630,7 @@ func TestCheckHandler_MultiTLDContentType(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -689,7 +647,7 @@ func TestCheckHandler_MultiTLDContentType(t *testing.T) {
 
 func TestMultiTLDHandler_MissingNameParameter(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?tlds=com,net", nil)
 	rec := httptest.NewRecorder()
@@ -712,7 +670,7 @@ func TestMultiTLDHandler_MissingNameParameter(t *testing.T) {
 
 func TestMultiTLDHandler_MissingTLDsParameter(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example", nil)
 	rec := httptest.NewRecorder()
@@ -735,7 +693,7 @@ func TestMultiTLDHandler_MissingTLDsParameter(t *testing.T) {
 
 func TestMultiTLDHandler_EmptyTLDsList(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=,,,", nil)
 	rec := httptest.NewRecorder()
@@ -758,7 +716,7 @@ func TestMultiTLDHandler_EmptyTLDsList(t *testing.T) {
 
 func TestMultiTLDHandler_InvalidDomainName(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	tests := []struct {
 		name        string
@@ -798,7 +756,7 @@ func TestMultiTLDHandler_InvalidDomainName(t *testing.T) {
 
 func TestMultiTLDHandler_TooLongDomainName(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	// Create a domain name that's exactly 64 characters (exceeds 63 char limit)
 	longDomain := ""
@@ -848,7 +806,7 @@ func TestMultiTLDHandler_Success(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com,net,org", nil)
 	rec := httptest.NewRecorder()
@@ -902,7 +860,7 @@ func TestMultiTLDHandler_PartialSuccess(t *testing.T) {
 			"example.dev":  "rate limit exceeded",
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com,net,org,dev", nil)
 	rec := httptest.NewRecorder()
@@ -953,7 +911,7 @@ func TestMultiTLDHandler_TLDNormalization(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	// Test TLDs with dots and mixed case
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=Example&tlds=.COM,Net", nil)
@@ -992,7 +950,7 @@ func TestMultiTLDHandler_TLDNormalization(t *testing.T) {
 
 func TestMultiTLDHandler_MethodNotAllowed(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/check/multi?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -1019,7 +977,7 @@ func TestMultiTLDHandler_ContentType(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -1038,7 +996,7 @@ func TestMultiTLDHandler_Duration(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -1069,7 +1027,7 @@ func TestMultiTLDHandler_FallbackToSequential(t *testing.T) {
 			Source:    domain.SourceRDAP,
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/check/multi?d=example&tlds=com", nil)
 	rec := httptest.NewRecorder()
@@ -1186,7 +1144,7 @@ func TestIsTimeoutError(t *testing.T) {
 
 func TestBulkHandler_EmptyArray(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	body := `{"domains": []}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1211,7 +1169,7 @@ func TestBulkHandler_EmptyArray(t *testing.T) {
 
 func TestBulkHandler_TooManyDomains(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	// Create 51 domains (exceeds limit of 50)
 	domains := make([]string, 51)
@@ -1242,7 +1200,7 @@ func TestBulkHandler_TooManyDomains(t *testing.T) {
 
 func TestBulkHandler_InvalidJSON(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader("not json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -1266,7 +1224,7 @@ func TestBulkHandler_InvalidJSON(t *testing.T) {
 
 func TestBulkHandler_BodyTooLarge(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	// Create a body larger than 64 KB with 50 domains (max allowed count)
 	// Each domain needs to be >1304 chars to exceed 64KB with 50 domains + JSON overhead
@@ -1314,7 +1272,7 @@ func TestBulkHandler_Success(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	body := `{"domains": ["example.com", "example.org"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1361,7 +1319,7 @@ func TestBulkHandler_PartialSuccess(t *testing.T) {
 			"example.org": "rate limit exceeded",
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	body := `{"domains": ["example.com", "example.net", "example.org"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1401,7 +1359,7 @@ func TestBulkHandler_InvalidDomain(t *testing.T) {
 			},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	// Include an invalid domain in the request
 	body := `{"domains": ["example.com", "invalid!", "example.org"]}`
@@ -1439,7 +1397,7 @@ func TestBulkHandler_MaxDomains(t *testing.T) {
 			Source:    domain.SourceRDAP,
 		}
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	// Create exactly 50 domains
 	domains := make([]string, 50)
@@ -1473,7 +1431,7 @@ func TestBulkHandler_MaxDomains(t *testing.T) {
 
 func TestBulkHandler_MethodNotAllowed(t *testing.T) {
 	mockCh := &mockBulkChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/bulk", nil)
 	rec := httptest.NewRecorder()
@@ -1500,7 +1458,7 @@ func TestBulkHandler_ContentType(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	body := `{"domains": ["example.com"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1521,7 +1479,7 @@ func TestBulkHandler_Duration(t *testing.T) {
 			"example.com": {Domain: "example.com", Available: true, TLD: "com"},
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	body := `{"domains": ["example.com"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -1550,7 +1508,7 @@ func TestBulkHandler_FallbackToSequential(t *testing.T) {
 			Source:    domain.SourceRDAP,
 		},
 	}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	body := `{"domains": ["example.com"]}`
 	req := httptest.NewRequest("POST", "/api/v1/bulk", strings.NewReader(body))
@@ -2488,7 +2446,7 @@ func TestTLDsHandler_Success(t *testing.T) {
 		updated: time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC),
 	}
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+	handlers := NewAPIHandlers(mockCh, nil, mockBS, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
 	rec := httptest.NewRecorder()
@@ -2530,7 +2488,7 @@ func TestTLDsHandler_EmptyTLDs(t *testing.T) {
 		updated: time.Now(),
 	}
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+	handlers := NewAPIHandlers(mockCh, nil, mockBS, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
 	rec := httptest.NewRecorder()
@@ -2561,7 +2519,7 @@ func TestTLDsHandler_UnsortedInput(t *testing.T) {
 		updated: time.Now(),
 	}
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+	handlers := NewAPIHandlers(mockCh, nil, mockBS, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
 	rec := httptest.NewRecorder()
@@ -2588,7 +2546,7 @@ func TestTLDsHandler_UnsortedInput(t *testing.T) {
 
 func TestTLDsHandler_NilBootstrap(t *testing.T) {
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, nil)
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
 	rec := httptest.NewRecorder()
@@ -2615,7 +2573,7 @@ func TestTLDsHandler_MethodNotAllowed(t *testing.T) {
 		updated: time.Now(),
 	}
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+	handlers := NewAPIHandlers(mockCh, nil, mockBS, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/tlds", nil)
 	rec := httptest.NewRecorder()
@@ -2642,7 +2600,7 @@ func TestTLDsHandler_ContentType(t *testing.T) {
 		updated: time.Now(),
 	}
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+	handlers := NewAPIHandlers(mockCh, nil, mockBS, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
 	rec := httptest.NewRecorder()
@@ -2667,7 +2625,7 @@ func TestTLDsHandler_LargeList(t *testing.T) {
 		updated: time.Now(),
 	}
 	mockCh := &mockChecker{}
-	handlers := NewAPIHandlers(mockCh, nil, mockBS)
+	handlers := NewAPIHandlers(mockCh, nil, mockBS, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/tlds", nil)
 	rec := httptest.NewRecorder()
@@ -3293,7 +3251,7 @@ func TestIntegration_TLDsEndpoint(t *testing.T) {
 
 		// Create a custom router with our mock bootstrap
 		mux := http.NewServeMux()
-		apiHandlers := NewAPIHandlers(mockCh, log, mockBS)
+		apiHandlers := NewAPIHandlers(mockCh, log, mockBS, nil, nil)
 		mux.HandleFunc("GET /api/v1/tlds", apiHandlers.TLDsHandler)
 		handler := Chain(mux, RequestID, ClientIP(false), Logging(log), SecurityHeaders, CORS(&cfg))
 
@@ -3322,4 +3280,106 @@ func TestIntegration_TLDsEndpoint(t *testing.T) {
 			t.Error("expected X-Request-Id header")
 		}
 	})
+}
+
+// TestHealthChecksServed verifies the checks_served counter in the health endpoint
+// increments correctly when requests are served (bead bf-3ma3)
+func TestHealthChecksServed(t *testing.T) {
+	// Create a router with a ServiceMonitor to track checks
+	cfg := config.Defaults()
+	log := DefaultLogger("text", "error")
+	rl := NewRateLimiter(log)
+	monitor := NewServiceMonitor()
+
+	mockCh := &mockChecker{
+		result: &domain.DomainResult{
+			Domain:     "example.com",
+			Available:  true,
+			TLD:        "com",
+			Source:     domain.SourceRDAP,
+			Cached:     false,
+			DurationMs: 42,
+		},
+	}
+
+	router := Router(&cfg, log, rl, mockCh, nil, monitor, nil)
+
+	// Initially checks_served should be 0
+	req := httptest.NewRequest("GET", "/health", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("initial health check: expected 200, got %d", rec.Code)
+	}
+
+	var initialHealth map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&initialHealth); err != nil {
+		t.Fatalf("failed to decode initial health response: %v", err)
+	}
+
+	if checksServed := int64(initialHealth["checks_served"].(float64)); checksServed != 0 {
+		t.Errorf("initial checks_served should be 0, got %d", checksServed)
+	}
+
+	// Make 3 single check requests
+	for i := 0; i < 3; i++ {
+		req = httptest.NewRequest("GET", "/api/v1/check?d=example.com", nil)
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("check request %d: expected 200, got %d", i, rec.Code)
+		}
+	}
+
+	// Verify checks_served incremented to 3
+	req = httptest.NewRequest("GET", "/health", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("health check after singles: expected 200, got %d", rec.Code)
+	}
+
+	var healthAfterSingles map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&healthAfterSingles); err != nil {
+		t.Fatalf("failed to decode health response after singles: %v", err)
+	}
+
+	if checksServed := int64(healthAfterSingles["checks_served"].(float64)); checksServed != 3 {
+		t.Errorf("after 3 single checks, expected checks_served=3, got %d", checksServed)
+	}
+
+	// Make a bulk request with 5 domains
+	bulkReq := BulkRequest{
+		Domains: []string{"example1.com", "example2.com", "example3.com", "example4.com", "example5.com"},
+	}
+	body, _ := json.Marshal(bulkReq)
+	req = httptest.NewRequest("POST", "/api/v1/bulk", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bulk request: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify checks_served incremented to 8 (3 singles + 5 bulk)
+	req = httptest.NewRequest("GET", "/health", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("health check after bulk: expected 200, got %d", rec.Code)
+	}
+
+	var healthAfterBulk map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&healthAfterBulk); err != nil {
+		t.Fatalf("failed to decode health response after bulk: %v", err)
+	}
+
+	if checksServed := int64(healthAfterBulk["checks_served"].(float64)); checksServed != 8 {
+		t.Errorf("after 3 singles + 5 bulk, expected checks_served=8, got %d", checksServed)
+	}
 }

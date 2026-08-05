@@ -8,7 +8,13 @@ function $$(s,p){return(p||document).querySelectorAll(s)}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function db(fn,ms){var t;return function(){var a=arguments,c=this;clearTimeout(t);t=setTimeout(function(){fn.apply(c,a)},ms)}}
 function ld(){try{return JSON.parse(localStorage.getItem(K))||[]}catch(e){return[]}}
-function sv(o){var h=ld().filter(function(e){return e.d!==o.d});h.unshift(o);h.length>M&&(h.length=M);try{localStorage.setItem(K,JSON.stringify(h))}catch(e){}}
+function sv(o){var h=ld().filter(function(e){return e.d!==o.d});h.unshift(o);h.length>M&&(h.length=M);try{localStorage.setItem(K,JSON.stringify(h))}catch(e){}renderHistory()}
+
+// Toast notification system
+function showToast(message,type){type=type||'info';var c=$('.toast-container');if(!c){c=document.createElement('div');c.className='toast-container';document.body.appendChild(c)}var t=document.createElement('div');t.className='toast '+type;t.textContent=message;c.appendChild(t);setTimeout(function(){t.classList.add('show')},10);setTimeout(function(){t.classList.remove('show');setTimeout(function(){c.removeChild(t)},300)},2000)}
+
+function renderHistory(){var h=ld(),s=$('#recent-checks'),l=$('#recent-checks-list');if(!s||!l)return;if(!h.length){s.style.display='none';return}s.style.display='block';var html='';h.forEach(function(e){var statusClass=e.a?'available':'taken';var statusText=e.a?'Available':'Taken';html+='<li class="recent-check-item '+statusClass+'"><a href="/check?d='+encodeURIComponent(e.d)+'" class="recent-check-domain">'+esc(e.d)+'</a><span class="recent-check-status">'+statusText+'</span></li>'});l.innerHTML=html;setupClearHistory()}
+function setupClearHistory(){var clearBtn=$('#clear-history');if(clearBtn){clearBtn.onclick=function(e){e.preventDefault();try{localStorage.removeItem(K);showToast('History cleared','success')}catch(e){showToast('Failed to clear history','info')}renderHistory()}}}
 function gc(){var s=$('.result-section');if(s)s.remove();s=document.createElement('section');s.className='result-section';$('main').appendChild(s);return s}
 function card(r){var a=r.available,v=a?'available':'taken';sv({d:r.domain,a:a});
 var h='<div class="result-card '+v+'"><h2 class="domain-name">'+esc(r.domain)+'</h2><p class="status '+v+'">'+(a?'Available':'Taken')+'</p><p class="meta">Checked via '+esc(r.source||'?')+', '+(r.duration_ms||'?')+'ms'+(r.cached?' (cached)':'')+'</p>';
@@ -34,4 +40,4 @@ if(inp&&frm){
 frm.addEventListener('submit',function(e){e.preventDefault();var v=inp.value.trim();if(!v)return;var t=gT();if(t.length){var p=parse(v);mChk(p&&p.tld?p.name:v.split('.')[0],t)}else chk(v)});
 inp.addEventListener('input',db(function(){var p=parse(inp.value);if(!p||p.name.length<3||!p.tld)return;chk(p.name+'.'+p.tld)},300));
 inp.addEventListener('keydown',function(e){if(e.key==='Tab'&&!e.shiftKey&&inp.value.trim()){var cs=$$('.tld-options input[type="checkbox"]');if(!cs.length)return;e.preventDefault();var u=[];cs.forEach(function(c){if(!c.checked)u.push(c)});if(u.length)u[0].checked=true;else cs.forEach(function(c){c.checked=false})}});
-}bC();})();
+}bC();renderHistory();})();

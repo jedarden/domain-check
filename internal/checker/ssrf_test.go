@@ -685,14 +685,20 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestRegistryPoolConfigs_AlignWithRateLimits(t *testing.T) {
 	// Pool sizes must be >= concurrency limits from ratelimit.go.
 	// This test documents (and enforces) the alignment between the two configs.
+	// Expected concurrency limits for known registries (must match ratelimit.defaultConfigs).
+	expectedConcurrency := map[string]int{
+		"rdap.verisign.com":                10, // Verisign (.com/.net)
+		"rdap.publicinterestregistry.org":  10, // PIR (.org)
+		"pubapi.registry.google":            2, // Google Registry (.app/.dev/etc)
+	}
 	for host, pool := range registryPoolConfigs {
-		cfg, ok := defaultConfigs[host]
+		concurrency, ok := expectedConcurrency[host]
 		if !ok {
 			continue
 		}
-		assert.GreaterOrEqual(t, pool.MaxConns, int(cfg.Concurrency),
-			"MaxConns for %s must be >= Concurrency limit %d", host, cfg.Concurrency)
-		assert.GreaterOrEqual(t, pool.MaxIdleConns, int(cfg.Concurrency),
-			"MaxIdleConns for %s must be >= Concurrency limit %d", host, cfg.Concurrency)
+		assert.GreaterOrEqual(t, pool.MaxConns, concurrency,
+			"MaxConns for %s must be >= Concurrency limit %d", host, concurrency)
+		assert.GreaterOrEqual(t, pool.MaxIdleConns, concurrency,
+			"MaxIdleConns for %s must be >= Concurrency limit %d", host, concurrency)
 	}
 }

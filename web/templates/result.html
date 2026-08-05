@@ -32,7 +32,7 @@
 {{else if .Results}}
 {{/* Multi-TLD results */}}
 <section class="result-section">
-    <h2 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--color-text-secondary);">Results for "{{.Domain}}"</h2>
+    <h2 class="results-heading">Results for "{{.Domain}}"</h2>
     <div class="multi-tld-results">
         {{range .Results}}
         <div class="result-card {{if .Error}}error{{else if .Available}}available{{else}}taken{{end}}">
@@ -47,7 +47,7 @@
             {{end}}
 
             {{if and (not .Available) (not .Error) .Registration}}
-            <div class="registration-details" style="margin-top: 1rem;">
+            <div class="registration-details">
                 <dl>
                     {{if .Registration.Registrar}}<dt>Registrar</dt><dd>{{.Registration.Registrar}}</dd>{{end}}
                     {{if .Registration.Created}}<dt>Registered</dt><dd>{{.Registration.Created}}</dd>{{end}}
