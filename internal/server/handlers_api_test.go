@@ -145,6 +145,75 @@ func TestCheckHandler_UnsupportedTLD(t *testing.T) {
 	}
 }
 
+func TestCheckHandler_PrivateSuffix(t *testing.T) {
+	mockCh := &mockChecker{}
+	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
+
+	tests := []struct {
+		name        string
+		domain      string
+		expectError string
+	}{
+		// Domains under PSL private suffixes that parse successfully but have no RDAP/WHOIS support
+		// These flow through to unsupported_tld error at check time, not parse-time rejection
+		{"github.io subdomain", "example.github.io", "unsupported_tld"},
+		{"herokuapp.com subdomain", "myapp.herokuapp.com", "unsupported_tld"},
+		{"cloudfront.net subdomain", "d123.cloudfront.net", "unsupported_tld"},
+
+		// Domains rejected at parse time (e.g., single label, no registrable domain)
+		{"single label no TLD", "example", "invalid_domain"},
+		{"localhost", "localhost", "invalid_domain"},
+		{"just TLD", "com", "invalid_domain"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req *http.Request
+			if tt.expectError == "unsupported_tld" {
+				// For domains that parse successfully but have no RDAP support
+				mockCh := &mockChecker{
+					err: checker.ErrTLDNotFound,
+				}
+				handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
+				req = httptest.NewRequest("GET", "/api/v1/check?d="+tt.domain, nil)
+				rec := httptest.NewRecorder()
+				handlers.CheckHandler(rec, req)
+
+				if rec.Code != http.StatusBadRequest {
+					t.Errorf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+				}
+
+				var resp ErrorResponse
+				if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+					t.Fatalf("failed to decode response: %v", err)
+				}
+
+				if resp.Error != tt.expectError {
+					t.Errorf("expected error %q, got %q", tt.expectError, resp.Error)
+				}
+			} else {
+				// For domains rejected at parse time
+				req = httptest.NewRequest("GET", "/api/v1/check?d="+tt.domain, nil)
+				rec := httptest.NewRecorder()
+				handlers.CheckHandler(rec, req)
+
+				if rec.Code != http.StatusBadRequest {
+					t.Errorf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+				}
+
+				var resp ErrorResponse
+				if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+					t.Fatalf("failed to decode response: %v", err)
+				}
+
+				if resp.Error != tt.expectError {
+					t.Errorf("expected error %q, got %q", tt.expectError, resp.Error)
+				}
+			}
+		})
+	}
+}
+
 func TestCheckHandler_Success(t *testing.T) {
 	expectedResult := &domain.DomainResult{
 		Domain:     "example.com",

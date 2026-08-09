@@ -1786,3 +1786,6 @@
 {"bead":"bf-2snn","duration_ms":432649,"event":"complete","exit_code":0,"outcome":"success","strand":"auto","ts":"2026-08-09T14:52:50.940571278+00:00","worker":"lab-domain-check"}
 {"bead":"bf-rh4l","event":"claim","strand":"auto","ts":"2026-08-09T14:52:50.982049304+00:00","worker":"lab-domain-check"}
 {"adapter":"claude-code-glm-4.7","bead":"bf-rh4l","event":"dispatch","model":"glm-4.7","strand":"auto","ts":"2026-08-09T14:52:50.985284479+00:00","worker":"lab-domain-check"}
+{"bead":"bf-rh4l","duration_ms":474262,"event":"complete","exit_code":0,"outcome":"success","strand":"auto","ts":"2026-08-09T15:00:45.248790782+00:00","worker":"lab-domain-check"}
+{"bead":"bf-7504","event":"claim","strand":"auto","ts":"2026-08-09T15:00:45.289519319+00:00","worker":"lab-domain-check"}
+{"adapter":"claude-code-glm-4.7","bead":"bf-7504","event":"dispatch","model":"glm-4.7","strand":"auto","ts":"2026-08-09T15:00:45.292756861+00:00","worker":"lab-domain-check"}
