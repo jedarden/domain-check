@@ -1780,3 +1780,6 @@
 {"bead":"bf-4vqc","duration_ms":391053,"event":"complete","exit_code":0,"outcome":"success","strand":"auto","ts":"2026-08-09T14:37:56.303330570+00:00","worker":"lab-domain-check"}
 {"bead":"bf-2snn","event":"claim","strand":"auto","ts":"2026-08-09T14:37:56.346127740+00:00","worker":"lab-domain-check"}
 {"adapter":"claude-code-glm-4.7","bead":"bf-2snn","event":"dispatch","model":"glm-4.7","strand":"auto","ts":"2026-08-09T14:37:56.350573049+00:00","worker":"lab-domain-check"}
+{"bead":"bf-2snn","duration_ms":461893,"event":"fail","exit_code":1,"outcome":"failure","strand":"auto","ts":"2026-08-09T14:45:38.246207592+00:00","worker":"lab-domain-check"}
+{"bead":"bf-2snn","event":"claim","strand":"auto","ts":"2026-08-09T14:45:38.285834976+00:00","worker":"lab-domain-check"}
+{"adapter":"claude-code-glm-4.7","bead":"bf-2snn","event":"dispatch","model":"glm-4.7","strand":"auto","ts":"2026-08-09T14:45:38.289437545+00:00","worker":"lab-domain-check"}
