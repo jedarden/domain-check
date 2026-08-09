@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/domain"
 	"github.com/jedarden/domain-check/internal/ratelimit"
@@ -330,7 +331,7 @@ func TestBulk_WithMockRDAP(t *testing.T) {
 	}
 
 	// Create a minimal bootstrap with our mock server.
-	bootstrap, err := checker.NewBootstrapManager(context.Background(), "")
+	bootstrap, err := bootstrap.NewManager(context.Background(), "")
 	if err != nil {
 		t.Skipf("skipping test: failed to create bootstrap: %v", err)
 	}

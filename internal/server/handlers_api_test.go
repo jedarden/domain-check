@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/config"
 	"github.com/jedarden/domain-check/internal/domain"
@@ -122,7 +123,7 @@ func TestCheckHandler_InvalidDomain(t *testing.T) {
 
 func TestCheckHandler_UnsupportedTLD(t *testing.T) {
 	mockCh := &mockChecker{
-		err: checker.ErrTLDNotFound,
+		err: bootstrap.ErrTLDNotFound,
 	}
 	handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 
@@ -172,7 +173,7 @@ func TestCheckHandler_PrivateSuffix(t *testing.T) {
 			if tt.expectError == "unsupported_tld" {
 				// For domains that parse successfully but have no RDAP support
 				mockCh := &mockChecker{
-					err: checker.ErrTLDNotFound,
+					err: bootstrap.ErrTLDNotFound,
 				}
 				handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
 				req = httptest.NewRequest("GET", "/api/v1/check?d="+tt.domain, nil)
@@ -375,6 +376,41 @@ func TestCheckHandler_TimeoutReturns504(t *testing.T) {
 	// Test that context.DeadlineExceeded returns 504 with Retry-After header
 	mockCh := &mockChecker{
 		err: context.DeadlineExceeded,
+	}
+	log := DefaultLogger("text", "error")
+	handlers := NewAPIHandlers(mockCh, log, nil, nil, nil)
+
+	req := httptest.NewRequest("GET", "/api/v1/check?d=timeout.com", nil)
+	rec := httptest.NewRecorder()
+
+	handlers.CheckHandler(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Errorf("expected status %d, got %d", http.StatusGatewayTimeout, rec.Code)
+	}
+
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "upstream_timeout" {
+		t.Errorf("expected error %q, got %q", "upstream_timeout", resp.Error)
+	}
+
+	retryAfter := rec.Header().Get("Retry-After")
+	if retryAfter == "" {
+		t.Error("expected Retry-After header to be set")
+	}
+}
+
+func TestCheckHandler_StringMatchedTimeoutReturns504(t *testing.T) {
+	// Test that non-unwrappable timeout errors (matched by string) return 504 with Retry-After header.
+	// This complements TestCheckHandler_TimeoutReturns504 which tests context.DeadlineExceeded directly.
+	// Here we test the isTimeoutError() fallback path for errors whose text contains timeout keywords
+	// but are NOT context.DeadlineExceeded via errors.Is (e.g. custom-wrapped errors, third-party types).
+	mockCh := &mockChecker{
+		err: errors.New("request timeout while waiting for registry response"),
 	}
 	log := DefaultLogger("text", "error")
 	handlers := NewAPIHandlers(mockCh, log, nil, nil, nil)
@@ -1757,7 +1793,7 @@ func TestIntegration_SingleCheck(t *testing.T) {
 
 	t.Run("05-unsupported TLD", func(t *testing.T) {
 		mockCh := &mockChecker{
-			err: checker.ErrTLDNotFound,
+			err: bootstrap.ErrTLDNotFound,
 		}
 		router := setupIntegrationRouter(mockCh)
 
@@ -2860,7 +2896,7 @@ func (w *whoisMockChecker) Check(_ context.Context, normalizedDomain string) (*d
 	if res, ok := w.fixtureResults[normalizedDomain]; ok {
 		return res, nil
 	}
-	return nil, checker.ErrTLDNotFound
+	return nil, bootstrap.ErrTLDNotFound
 }
 
 func (w *whoisMockChecker) CheckBulk(_ context.Context, domains []string) *checker.BulkResult {

@@ -1,4 +1,4 @@
-package checker
+package bootstrap
 
 import (
 	"context"
@@ -84,14 +84,14 @@ func TestParseBootstrap_ShortEntries(t *testing.T) {
 	assert.Empty(t, servers)
 }
 
-func TestBootstrapManager_Lookup(t *testing.T) {
+func TestManager_Lookup(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(sampleBootstrap))
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -104,14 +104,14 @@ func TestBootstrapManager_Lookup(t *testing.T) {
 	assert.Equal(t, "https://pubapi.registry.google/rdap/", url)
 }
 
-func TestBootstrapManager_LookupNotFound(t *testing.T) {
+func TestManager_LookupNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(sampleBootstrap))
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -119,14 +119,14 @@ func TestBootstrapManager_LookupNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTLDNotFound)
 }
 
-func TestBootstrapManager_FallbackOnFetchFailure(t *testing.T) {
+func TestManager_FallbackOnFetchFailure(t *testing.T) {
 	// Server that always fails.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -144,8 +144,8 @@ func TestBootstrapManager_FallbackOnFetchFailure(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTLDNotFound)
 }
 
-func TestBootstrapManager_FallbackOnNetworkError(t *testing.T) {
-	b, err := NewBootstrapManager(context.Background(), "http://127.0.0.1:1")
+func TestManager_FallbackOnNetworkError(t *testing.T) {
+	b, err := NewManager(context.Background(), "http://127.0.0.1:1")
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -154,14 +154,14 @@ func TestBootstrapManager_FallbackOnNetworkError(t *testing.T) {
 	assert.Equal(t, "https://rdap.verisign.com/net/v1/", url)
 }
 
-func TestBootstrapManager_FallbackOnMalformedJSON(t *testing.T) {
+func TestManager_FallbackOnMalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"version": "1.0", "services": "oops"}`))
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -170,7 +170,7 @@ func TestBootstrapManager_FallbackOnMalformedJSON(t *testing.T) {
 	assert.Equal(t, "https://rdap.verisign.com/com/v1/", url)
 }
 
-func TestBootstrapManager_Updated(t *testing.T) {
+func TestManager_Updated(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(sampleBootstrap))
@@ -178,21 +178,21 @@ func TestBootstrapManager_Updated(t *testing.T) {
 	defer srv.Close()
 
 	before := time.Now()
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
 	assert.False(t, b.Updated().Before(before))
 }
 
-func TestBootstrapManager_ServerCount(t *testing.T) {
+func TestManager_ServerCount(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(sampleBootstrap))
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -200,7 +200,7 @@ func TestBootstrapManager_ServerCount(t *testing.T) {
 	assert.Equal(t, 8, b.ServerCount())
 }
 
-func TestBootstrapManager_RefreshReplacesData(t *testing.T) {
+func TestManager_RefreshReplacesData(t *testing.T) {
 	var count int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count++
@@ -218,7 +218,7 @@ func TestBootstrapManager_RefreshReplacesData(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -237,22 +237,22 @@ func TestBootstrapManager_RefreshReplacesData(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTLDNotFound)
 }
 
-func TestBootstrapManager_ContextCancellation(t *testing.T) {
+func TestManager_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately.
 
-	_, err := NewBootstrapManager(ctx, "http://127.0.0.1:1")
+	_, err := NewManager(ctx, "http://127.0.0.1:1")
 	require.NoError(t, err) // Should fall back gracefully.
 }
 
-func TestBootstrapManager_ConcurrentReads(t *testing.T) {
+func TestManager_ConcurrentReads(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(sampleBootstrap))
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -274,14 +274,14 @@ func TestBootstrapManager_ConcurrentReads(t *testing.T) {
 	wg.Wait()
 }
 
-func TestBootstrapManager_ConcurrentReadWrite(t *testing.T) {
+func TestManager_ConcurrentReadWrite(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(sampleBootstrap))
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -310,14 +310,14 @@ func TestBootstrapManager_ConcurrentReadWrite(t *testing.T) {
 	wg.Wait()
 }
 
-func TestBootstrapManager_Stop(t *testing.T) {
+func TestManager_Stop(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(sampleBootstrap))
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 
 	// Stop should not block.
@@ -334,7 +334,7 @@ func TestBootstrapManager_Stop(t *testing.T) {
 	}
 }
 
-func TestBootstrapManager_HTTPErrors(t *testing.T) {
+func TestManager_HTTPErrors(t *testing.T) {
 	tests := []struct {
 		name       string
 		statusCode int
@@ -351,7 +351,7 @@ func TestBootstrapManager_HTTPErrors(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			b, err := NewBootstrapManager(context.Background(), srv.URL)
+			b, err := NewManager(context.Background(), srv.URL)
 			require.NoError(t, err) // Falls back.
 			defer b.Stop()
 
@@ -363,14 +363,14 @@ func TestBootstrapManager_HTTPErrors(t *testing.T) {
 	}
 }
 
-func TestBootstrapManager_RefreshLoopStopsOnContextCancel(t *testing.T) {
+func TestManager_RefreshLoopStopsOnContextCancel(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(sampleBootstrap))
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 
 	// Verify the manager is running.
@@ -385,7 +385,7 @@ func TestBootstrapManager_RefreshLoopStopsOnContextCancel(t *testing.T) {
 	assert.Less(t, elapsed, 100*time.Millisecond)
 }
 
-func TestBootstrapManager_RefreshOnErrorKeepsOldData(t *testing.T) {
+func TestManager_RefreshOnErrorKeepsOldData(t *testing.T) {
 	var callCount int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if atomic.AddInt32(&callCount, 1) == 1 {
@@ -397,7 +397,7 @@ func TestBootstrapManager_RefreshOnErrorKeepsOldData(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -497,7 +497,7 @@ func TestParseBootstrap_EdgeCases(t *testing.T) {
 	}
 }
 
-func TestBootstrapManager_LargeBootstrap(t *testing.T) {
+func TestManager_LargeBootstrap(t *testing.T) {
 	// Generate a large bootstrap file to test size limits.
 	var services []string
 	for i := 0; i < 1000; i++ {
@@ -515,7 +515,7 @@ func TestBootstrapManager_LargeBootstrap(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err)
 	defer b.Stop()
 
@@ -526,14 +526,14 @@ func TestBootstrapManager_LargeBootstrap(t *testing.T) {
 	assert.Equal(t, "https://registry500.example/", url)
 }
 
-func TestBootstrapManager_ContextTimeoutDuringRefresh(t *testing.T) {
+func TestManager_ContextTimeoutDuringRefresh(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond) // Slow response
 		w.Write([]byte(sampleBootstrap))
 	}))
 	defer srv.Close()
 
-	b, err := NewBootstrapManager(context.Background(), srv.URL)
+	b, err := NewManager(context.Background(), srv.URL)
 	require.NoError(t, err) // Initial fetch succeeds (30s timeout)
 	defer b.Stop()
 

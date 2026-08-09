@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/domain"
 	"github.com/jedarden/domain-check/internal/ratelimit"
 )
@@ -26,7 +27,7 @@ var (
 // RDAPClient queries RDAP registry servers for domain availability.
 type RDAPClient struct {
 	httpClient *http.Client
-	bootstrap  *BootstrapManager
+	bootstrap  *bootstrap.Manager
 	ratelimit  *ratelimit.RateLimiter
 	allowlist  *AllowList
 	userAgent  string
@@ -36,7 +37,7 @@ type RDAPClient struct {
 // RDAPClientConfig holds configuration for the RDAP client.
 type RDAPClientConfig struct {
 	HTTPClient *http.Client
-	Bootstrap  *BootstrapManager
+	Bootstrap  *bootstrap.Manager
 	RateLimit  *ratelimit.RateLimiter
 	AllowList  *AllowList
 	UserAgent  string

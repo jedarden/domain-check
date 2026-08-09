@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/domain"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
@@ -54,7 +55,7 @@ type Checker struct {
 	whois      *WHOISClient
 	dns        *DNSPreFilter
 	cache      *ResultCache
-	bootstrap  *BootstrapManager
+	bootstrap  *bootstrap.Manager
 	useDNSPrefilter bool
 	bulkConfig BulkCheckConfig
 	activeMetrics  ActiveCheckMetrics
@@ -70,7 +71,7 @@ type CheckerConfig struct {
 	WHOISClient     *WHOISClient
 	DNSPreFilter    *DNSPreFilter
 	Cache           *ResultCache
-	Bootstrap       *BootstrapManager
+	Bootstrap       *bootstrap.Manager
 	UseDNSPrefilter bool
 	BulkConfig      BulkCheckConfig
 	ActiveMetrics   ActiveCheckMetrics

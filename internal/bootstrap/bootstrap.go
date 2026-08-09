@@ -1,4 +1,5 @@
-package checker
+// Package bootstrap loads, caches, and refreshes the IANA RDAP bootstrap file.
+package bootstrap
 
 import (
 	"context"
@@ -27,8 +28,8 @@ var fallbackServers = map[string]string{
 // ErrTLDNotFound is returned when no RDAP server is known for a TLD.
 var ErrTLDNotFound = errors.New("no RDAP server found for TLD")
 
-// BootstrapManager loads, caches, and refreshes the IANA RDAP bootstrap file.
-type BootstrapManager struct {
+// Manager loads, caches, and refreshes the IANA RDAP bootstrap file.
+type Manager struct {
 	mu      sync.RWMutex
 	servers map[string]string // TLD → RDAP server base URL
 	updated time.Time
@@ -38,15 +39,15 @@ type BootstrapManager struct {
 	stopped chan struct{}
 }
 
-// NewBootstrapManager creates a BootstrapManager that fetches the IANA bootstrap
+// NewManager creates a Manager that fetches the IANA bootstrap
 // file from the given URL. If url is empty, the default IANA URL is used.
 // It performs an initial fetch synchronously and starts a background refresh goroutine.
-func NewBootstrapManager(ctx context.Context, url string) (*BootstrapManager, error) {
+func NewManager(ctx context.Context, url string) (*Manager, error) {
 	if url == "" {
 		url = defaultBootstrapURL
 	}
 
-	b := &BootstrapManager{
+	b := &Manager{
 		servers: make(map[string]string),
 		url:     url,
 		client:  &http.Client{Timeout: 30 * time.Second},
@@ -65,7 +66,7 @@ func NewBootstrapManager(ctx context.Context, url string) (*BootstrapManager, er
 }
 
 // Refresh fetches and parses the IANA bootstrap file, updating the TLD→URL map.
-func (b *BootstrapManager) Refresh(ctx context.Context) error {
+func (b *Manager) Refresh(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.url, nil)
 	if err != nil {
 		return fmt.Errorf("create bootstrap request: %w", err)
@@ -101,7 +102,7 @@ func (b *BootstrapManager) Refresh(ctx context.Context) error {
 
 // Lookup returns the RDAP server base URL for the given TLD.
 // It returns ErrTLDNotFound if no server is known for the TLD.
-func (b *BootstrapManager) Lookup(tld string) (string, error) {
+func (b *Manager) Lookup(tld string) (string, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -113,14 +114,14 @@ func (b *BootstrapManager) Lookup(tld string) (string, error) {
 }
 
 // Updated returns the time of the last successful bootstrap refresh.
-func (b *BootstrapManager) Updated() time.Time {
+func (b *Manager) Updated() time.Time {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.updated
 }
 
 // ServerCount returns the number of TLDs currently mapped.
-func (b *BootstrapManager) ServerCount() int {
+func (b *Manager) ServerCount() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return len(b.servers)
@@ -128,7 +129,7 @@ func (b *BootstrapManager) ServerCount() int {
 
 // URLs returns all RDAP server base URLs currently mapped.
 // The returned slice is a copy and is safe for the caller to modify.
-func (b *BootstrapManager) URLs() []string {
+func (b *Manager) URLs() []string {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -146,7 +147,7 @@ func (b *BootstrapManager) URLs() []string {
 
 // TLDs returns all TLDs currently mapped.
 // The returned slice is a copy and is safe for the caller to modify.
-func (b *BootstrapManager) TLDs() []string {
+func (b *Manager) TLDs() []string {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -158,20 +159,20 @@ func (b *BootstrapManager) TLDs() []string {
 }
 
 // InjectServers replaces the server map; intended for testing only.
-func (b *BootstrapManager) InjectServers(servers map[string]string) {
+func (b *Manager) InjectServers(servers map[string]string) {
 	b.mu.Lock()
 	b.servers = servers
 	b.mu.Unlock()
 }
 
 // Stop terminates the background refresh goroutine.
-func (b *BootstrapManager) Stop() {
+func (b *Manager) Stop() {
 	close(b.stopCh)
 	<-b.stopped
 }
 
 // refreshLoop periodically refreshes the bootstrap file until Stop is called.
-func (b *BootstrapManager) refreshLoop() {
+func (b *Manager) refreshLoop() {
 	defer close(b.stopped)
 
 	ticker := time.NewTicker(defaultRefreshInterval)
@@ -190,7 +191,7 @@ func (b *BootstrapManager) refreshLoop() {
 }
 
 // loadFallbacks populates the server map with hardcoded fallback entries.
-func (b *BootstrapManager) loadFallbacks() {
+func (b *Manager) loadFallbacks() {
 	b.mu.Lock()
 	for tld, url := range fallbackServers {
 		b.servers[tld] = url

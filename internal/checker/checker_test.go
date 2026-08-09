@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/domain"
 	"github.com/jedarden/domain-check/internal/ratelimit"
 )
@@ -106,11 +107,16 @@ func TestCheckBulk_SingleDomain(t *testing.T) {
 	defer server.Close()
 
 	// Create bootstrap manager with mock server
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
-			"com": server.URL + "/",
-		},
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
 	}
+
+	bootstrapMgr.InjectServers(map[string]string{
+			"com": server.URL + "/",
+		})
+
+	defer bootstrapMgr.Stop()
 
 	// Create allowlist (for validation, but we use testHTTPClient)
 	allowlist := NewAllowList([]string{server.URL})
@@ -177,11 +183,15 @@ func TestCheckBulk_MultipleDomains(t *testing.T) {
 	})
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -232,11 +242,15 @@ func TestCheckBulk_CacheHit(t *testing.T) {
 	})
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -292,11 +306,15 @@ func TestCheckBulk_Timeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	// Create HTTP client with short timeout
@@ -372,11 +390,15 @@ func TestCheckBulk_ConcurrencyLimit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -427,11 +449,15 @@ func TestCheckBulk_PartialResults(t *testing.T) {
 	})
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -487,12 +513,16 @@ func TestCheckBulk_RegistryGrouping(t *testing.T) {
 	})
 	defer orgServer.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": comServer.URL + "/",
 			"org": orgServer.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{comServer.URL, orgServer.URL})
 	httpClient := testHTTPClient()
@@ -537,11 +567,15 @@ func TestCheck_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	// Create HTTP client with short timeout
@@ -597,11 +631,15 @@ func TestCheckBulk_MaxDomains(t *testing.T) {
 	server := mockRDAPServer(t, nil)
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -634,13 +672,15 @@ func TestCheckBulk_MaxDomains(t *testing.T) {
 }
 
 func TestGroupByRegistry(t *testing.T) {
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+	bootstrap.InjectServers(map[string]string{
 			"com": "https://rdap.verisign.com/com/v1/",
 			"net": "https://rdap.verisign.com/net/v1/",
 			"org": "https://rdap.publicinterestregistry.org/rdap/",
-		},
-	}
+		})
+
+	defer bootstrap.Stop()
 
 	checker := &Checker{
 		bootstrap: bootstrap,
@@ -665,11 +705,13 @@ func TestGroupByRegistry(t *testing.T) {
 }
 
 func TestGetRegistryForDomain(t *testing.T) {
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+	bootstrap.InjectServers(map[string]string{
 			"com": "https://rdap.verisign.com/com/v1/",
-		},
-	}
+		})
+
+	defer bootstrap.Stop()
 
 	checker := &Checker{
 		bootstrap: bootstrap,
@@ -700,11 +742,15 @@ func BenchmarkCheckBulk_10Domains(b *testing.B) {
 	}))
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -738,11 +784,15 @@ func BenchmarkCheckBulk_50Domains(b *testing.B) {
 	}))
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -814,12 +864,16 @@ func TestCheckBulk_PerRegistrySemaphore(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
 			"org": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -929,12 +983,16 @@ func TestCheckBulk_MixedRegistries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
+	bootstrap := bootstrap.NewManager(context.Background(), "")
+
+
+	bootstrap.InjectServers(map[string]string{
 			"com": server.URL + "/",
 			"org": server.URL + "/",
-		},
-	}
+		})
+
+
+	defer bootstrap.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()

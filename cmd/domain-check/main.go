@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/cli"
 	"github.com/jedarden/domain-check/internal/config"
@@ -405,16 +406,16 @@ func runServer(args []string) {
 
 // setupDomainChecker creates and initializes a fully configured domain checker.
 // It returns the checker, bootstrap manager, and any error.
-func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logger, metrics *server.Metrics) (*checker.Checker, *checker.BootstrapManager, error) {
+func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logger, metrics *server.Metrics) (*checker.Checker, *bootstrap.Manager, error) {
 	// Create bootstrap manager for IANA RDAP bootstrap.
-	bootstrap, err := checker.NewBootstrapManager(ctx, "")
+	bs, err := bootstrap.NewManager(ctx, "")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create bootstrap manager: %w", err)
 	}
 
 	// Create allowlist for RDAP servers (populated from bootstrap).
 	// Get the current bootstrap URLs to seed the allowlist.
-	bootstrapURLs := bootstrap.URLs()
+	bootstrapURLs := bs.URLs()
 	allowlist := checker.NewAllowList(bootstrapURLs)
 
 	// Create safe HTTP client with SSRF protection and per-registry connection pools.
@@ -431,12 +432,12 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 		for {
 			select {
 			case <-ticker.C:
-				if err := bootstrap.Refresh(ctx); err != nil {
+				if err := bs.Refresh(ctx); err != nil {
 					log.Warn("bootstrap refresh failed", "error", err)
 					continue
 				}
 				// Update allowlist with new URLs.
-				urls := bootstrap.URLs()
+				urls := bs.URLs()
 				for _, u := range urls {
 					allowlist.Allow(u)
 				}
@@ -453,7 +454,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	// Create RDAP client.
 	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
 		HTTPClient: safeClient,
-		Bootstrap:  bootstrap,
+		Bootstrap: bs,
 		RateLimit:  registryRateLimit,
 		AllowList:  allowlist,
 		UserAgent:  "domain-check/1.0",
@@ -481,11 +482,11 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 		WHOISClient:     whoisClient,
 		DNSPreFilter:    dnsPreFilter,
 		Cache:           cache,
-		Bootstrap:       bootstrap,
+		Bootstrap: bs,
 		UseDNSPrefilter: false, // Disabled by default - can be enabled via config
 		BulkConfig:      checker.DefaultBulkCheckConfig(),
 		ActiveMetrics:   metrics,
 	})
 
-	return domainChecker, bootstrap, nil
+	return domainChecker, bs, nil
 }

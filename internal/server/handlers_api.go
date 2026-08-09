@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/domain"
 )
@@ -112,7 +113,7 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 	result, err := h.checker.Check(r.Context(), parsed.Domain)
 	if err != nil {
 		// Check for unsupported TLD error.
-		if errors.Is(err, checker.ErrTLDNotFound) {
+		if errors.Is(err, bootstrap.ErrTLDNotFound) {
 			writeAPIError(w, http.StatusBadRequest, "unsupported_tld", "No RDAP or WHOIS support for TLD: "+parsed.TLD)
 			return
 		}

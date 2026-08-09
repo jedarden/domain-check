@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/domain"
 	"github.com/jedarden/domain-check/internal/ratelimit"
@@ -67,7 +68,7 @@ func Check(ctx context.Context, cfg CheckConfig) int {
 	}
 
 	// Initialize the checker components.
-	bootstrap, err := checker.NewBootstrapManager(ctx, "")
+	bootstrap, err := bootstrap.NewManager(ctx, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: failed to initialize bootstrap: %v\n", err)
 		return ExitError

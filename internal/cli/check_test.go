@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/ratelimit"
 )
@@ -620,7 +621,7 @@ func TestCheck_WithMockRDAPIntegration(t *testing.T) {
 	defer server.Close()
 
 	// Create a minimal bootstrap with our mock server.
-	bootstrap, err := checker.NewBootstrapManager(context.Background(), "")
+	bootstrap, err := bootstrap.NewManager(context.Background(), "")
 	if err != nil {
 		t.Skipf("skipping test: failed to create bootstrap: %v", err)
 	}
@@ -706,7 +707,7 @@ func TestCheck_MultiTLDWithMockRDAP(t *testing.T) {
 	defer server.Close()
 
 	// Create a minimal bootstrap.
-	bootstrap, err := checker.NewBootstrapManager(context.Background(), "")
+	bootstrap, err := bootstrap.NewManager(context.Background(), "")
 	if err != nil {
 		t.Skipf("skipping test: failed to create bootstrap: %v", err)
 	}
