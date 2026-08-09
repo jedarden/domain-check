@@ -130,7 +130,7 @@ func TestCheckBulk_SingleDomain(t *testing.T) {
 	// Create RDAP client
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
@@ -142,7 +142,7 @@ func TestCheckBulk_SingleDomain(t *testing.T) {
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
 		Cache:      cache,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 	})
 
 	// Test single domain
@@ -183,15 +183,17 @@ func TestCheckBulk_MultipleDomains(t *testing.T) {
 	})
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -199,7 +201,7 @@ func TestCheckBulk_MultipleDomains(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
@@ -209,7 +211,7 @@ func TestCheckBulk_MultipleDomains(t *testing.T) {
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
 		Cache:      cache,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 	})
 
 	result := checker.CheckBulk(context.Background(), []string{
@@ -242,15 +244,17 @@ func TestCheckBulk_CacheHit(t *testing.T) {
 	})
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -258,7 +262,7 @@ func TestCheckBulk_CacheHit(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
@@ -279,7 +283,7 @@ func TestCheckBulk_CacheHit(t *testing.T) {
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
 		Cache:      cache,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 	})
 
 	result := checker.CheckBulk(context.Background(), []string{"cached.com"})
@@ -306,15 +310,17 @@ func TestCheckBulk_Timeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	// Create HTTP client with short timeout
@@ -336,14 +342,14 @@ func TestCheckBulk_Timeout(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		BulkConfig: BulkCheckConfig{
 			GlobalConcurrency: 50,
 			TotalTimeout:      100 * time.Millisecond, // Very short timeout
@@ -390,15 +396,17 @@ func TestCheckBulk_ConcurrencyLimit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -406,7 +414,7 @@ func TestCheckBulk_ConcurrencyLimit(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
@@ -414,7 +422,7 @@ func TestCheckBulk_ConcurrencyLimit(t *testing.T) {
 	// Create checker with low concurrency limit
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		BulkConfig: BulkCheckConfig{
 			GlobalConcurrency: 5,
 			TotalTimeout:      30 * time.Second,
@@ -449,15 +457,17 @@ func TestCheckBulk_PartialResults(t *testing.T) {
 	})
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -465,7 +475,7 @@ func TestCheckBulk_PartialResults(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
@@ -473,7 +483,7 @@ func TestCheckBulk_PartialResults(t *testing.T) {
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
 		Cache:      NewResultCache(DefaultTTLs(), 100, nil),
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 	})
 
 	result := checker.CheckBulk(context.Background(), []string{
@@ -513,16 +523,18 @@ func TestCheckBulk_RegistryGrouping(t *testing.T) {
 	})
 	defer orgServer.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": comServer.URL + "/",
 			"org": orgServer.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{comServer.URL, orgServer.URL})
 	httpClient := testHTTPClient()
@@ -530,7 +542,7 @@ func TestCheckBulk_RegistryGrouping(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
@@ -538,7 +550,7 @@ func TestCheckBulk_RegistryGrouping(t *testing.T) {
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
 		Cache:      NewResultCache(DefaultTTLs(), 100, nil),
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 	})
 
 	result := checker.CheckBulk(context.Background(), []string{
@@ -567,15 +579,17 @@ func TestCheck_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	// Create HTTP client with short timeout
@@ -597,14 +611,14 @@ func TestCheck_ContextCancellation(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		BulkConfig: BulkCheckConfig{
 			GlobalConcurrency: 50,
 			TotalTimeout:      5 * time.Second,
@@ -631,15 +645,17 @@ func TestCheckBulk_MaxDomains(t *testing.T) {
 	server := mockRDAPServer(t, nil)
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -647,14 +663,14 @@ func TestCheckBulk_MaxDomains(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 	})
 
 	// Create 50 domains (max allowed per API spec)
@@ -672,18 +688,21 @@ func TestCheckBulk_MaxDomains(t *testing.T) {
 }
 
 func TestGroupByRegistry(t *testing.T) {
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": "https://rdap.verisign.com/com/v1/",
 			"net": "https://rdap.verisign.com/net/v1/",
 			"org": "https://rdap.publicinterestregistry.org/rdap/",
 		})
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	checker := &Checker{
-		bootstrap: bootstrap,
+		bootstrap: bootstrapMgr,
 	}
 
 	groups := checker.groupByRegistry([]string{
@@ -705,16 +724,19 @@ func TestGroupByRegistry(t *testing.T) {
 }
 
 func TestGetRegistryForDomain(t *testing.T) {
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": "https://rdap.verisign.com/com/v1/",
 		})
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	checker := &Checker{
-		bootstrap: bootstrap,
+		bootstrap: bootstrapMgr,
 	}
 
 	tests := []struct {
@@ -742,15 +764,17 @@ func BenchmarkCheckBulk_10Domains(b *testing.B) {
 	}))
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		b.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -758,14 +782,14 @@ func BenchmarkCheckBulk_10Domains(b *testing.B) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 	})
 
 	domains := []string{"a.com", "b.com", "c.com", "d.com", "e.com",
@@ -784,15 +808,17 @@ func BenchmarkCheckBulk_50Domains(b *testing.B) {
 	}))
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		b.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -800,14 +826,14 @@ func BenchmarkCheckBulk_50Domains(b *testing.B) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 	})
 
 	domains := make([]string, 50)
@@ -864,16 +890,18 @@ func TestCheckBulk_PerRegistrySemaphore(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 			"org": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -881,14 +909,14 @@ func TestCheckBulk_PerRegistrySemaphore(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		BulkConfig: BulkCheckConfig{
 			GlobalConcurrency: 50,
 			TotalTimeout:      30 * time.Second,
@@ -983,16 +1011,18 @@ func TestCheckBulk_MixedRegistries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrap := bootstrap.NewManager(context.Background(), "")
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		t.Fatalf("failed to create bootstrap manager: %v", err)
+	}
 
-
-	bootstrap.InjectServers(map[string]string{
+	bootstrapMgr.InjectServers(map[string]string{
 			"com": server.URL + "/",
 			"org": server.URL + "/",
 		})
 
 
-	defer bootstrap.Stop()
+	defer bootstrapMgr.Stop()
 
 	allowlist := NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
@@ -1000,14 +1030,14 @@ func TestCheckBulk_MixedRegistries(t *testing.T) {
 
 	rdapClient := NewRDAPClient(RDAPClientConfig{
 		HTTPClient: httpClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 	})
 
 	// Mix of .com and .org domains

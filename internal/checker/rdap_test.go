@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/domain"
 	"github.com/jedarden/domain-check/internal/ratelimit"
 )
@@ -843,18 +843,20 @@ func TestRDAPClientCheck(t *testing.T) {
 // newTestRDAPClient creates an RDAPClient configured for testing with a mock server.
 func newTestRDAPClient(server *httptest.Server) *RDAPClient {
 	// Create bootstrap that points to test server
-	bootstrap := &BootstrapManager{
-		servers: map[string]string{
-			"com": server.URL + "/",
-		},
-		updated: time.Now(),
+	bootstrapMgr, err := bootstrap.NewManager(context.Background(), "")
+	if err != nil {
+		panic(err) // In tests, panic is acceptable for setup failures
 	}
+
+	bootstrapMgr.InjectServers(map[string]string{
+		"com": server.URL + "/",
+	})
 
 	allowlist := NewAllowList([]string{server.URL})
 
 	return NewRDAPClient(RDAPClientConfig{
 		HTTPClient: server.Client(),
-		Bootstrap:  bootstrap,
+		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit.NewRateLimiter(),
 		AllowList:  allowlist,
 		UserAgent:  "domain-check-test/1.0",
