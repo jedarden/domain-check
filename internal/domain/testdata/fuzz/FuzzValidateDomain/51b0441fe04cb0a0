@@ -1,0 +1,2 @@
+go test fuzz v1
+string("000\x840.0000\x84000000")

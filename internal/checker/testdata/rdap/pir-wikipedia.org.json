@@ -1,0 +1,67 @@
+{
+  "rdapConformance": [
+    "rdap_level_0",
+    "icann_rdap_response_profile_0",
+    "icann_rdap_technical_implementation_guide_0"
+  ],
+  "objectClassName": "domain",
+  "handle": "D33882-LROR",
+  "ldhName": "WIKIPEDIA.ORG",
+  "unicodeName": "wikipedia.org",
+  "status": [
+    "client delete prohibited",
+    "client transfer prohibited"
+  ],
+  "entities": [
+    {
+      "handle": "146",
+      "ldhName": "MarkMonitor Inc.",
+      "roles": ["registrar"],
+      "publicIds": [
+        {
+          "type": "IANA Registrar ID",
+          "identifier": "146"
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "eventAction": "registration",
+      "eventDate": "2001-01-13T00:00:00.000Z"
+    },
+    {
+      "eventAction": "expiration",
+      "eventDate": "2025-01-13T00:00:00.000Z"
+    },
+    {
+      "eventAction": "last changed",
+      "eventDate": "2024-01-14T12:00:00.000Z"
+    }
+  ],
+  "nameservers": [
+    {
+      "ldhName": "NS0.WIKIMEDIA.ORG."
+    },
+    {
+      "ldhName": "NS1.WIKIMEDIA.ORG."
+    },
+    {
+      "ldhName": "NS2.WIKIMEDIA.ORG."
+    }
+  ],
+  "secureDNS": {
+    "delegationSigned": false
+  },
+  "redacted": [
+    {
+      "name": "Registry Registrant ID",
+      "description": "Registry Registrant ID is redacted"
+    },
+    {
+      "name": "Registry Admin ID",
+      "description": "Registry Admin ID is redacted"
+    }
+  ],
+  "port43": "whois.pir.org"
+}

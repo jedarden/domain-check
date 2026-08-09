@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\xe40.\xe5.\u0600\xdb.0\xc6.\xc6.\xe4")

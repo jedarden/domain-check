@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"entities\":[{}],\"events\":[{\"eventACtion\":\"registrAtion\",\"eventDAte\":\"0\"},{},{}],\"nAmeservers\":[{},{},{},{}],\"seCureDNS\":{}}")
