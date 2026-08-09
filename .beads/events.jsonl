@@ -1745,3 +1745,14 @@
 {"bead":"bf-36cjf","event":"claim","strand":"explore","ts":"2026-08-03T18:50:28.204351874+00:00","worker":"test-worker"}
 {"adapter":"echo-test","bead":"bf-36cjf","event":"dispatch","model":null,"strand":"explore","ts":"2026-08-03T18:50:28.369777861+00:00","worker":"test-worker"}
 {"bead":"bf-36cjf","duration_ms":199,"event":"complete","exit_code":0,"outcome":"success","strand":"explore","ts":"2026-08-03T18:50:28.582452343+00:00","worker":"test-worker"}
+{"bead":"bf-2099","event":"claim","strand":"auto","ts":"2026-08-09T13:59:52.058722178+00:00","worker":"lab-domain-check"}
+{"adapter":"claude-code-glm-4.7","bead":"bf-2099","event":"dispatch","model":"glm-4.7","strand":"auto","ts":"2026-08-09T13:59:52.062425659+00:00","worker":"lab-domain-check"}
+{"bead":"bf-2099","duration_ms":182760,"event":"fail","exit_code":1,"outcome":"failure","strand":"auto","ts":"2026-08-09T14:02:54.824308864+00:00","worker":"lab-domain-check"}
+{"bead":"bf-2l7y","event":"claim","strand":"auto","ts":"2026-08-09T14:02:54.862504025+00:00","worker":"lab-domain-check"}
+{"adapter":"claude-code-glm-4.7","bead":"bf-2l7y","event":"dispatch","model":"glm-4.7","strand":"auto","ts":"2026-08-09T14:02:54.865727067+00:00","worker":"lab-domain-check"}
+{"bead":"bf-2l7y","duration_ms":182288,"event":"fail","exit_code":1,"outcome":"failure","strand":"auto","ts":"2026-08-09T14:05:57.155527078+00:00","worker":"lab-domain-check"}
+{"bead":"bf-2l7y","event":"claim","strand":"auto","ts":"2026-08-09T14:05:57.193306720+00:00","worker":"lab-domain-check"}
+{"adapter":"claude-code-glm-4.7","bead":"bf-2l7y","event":"dispatch","model":"glm-4.7","strand":"auto","ts":"2026-08-09T14:05:57.196998163+00:00","worker":"lab-domain-check"}
+{"bead":"bf-2l7y","duration_ms":185529,"event":"fail","exit_code":1,"outcome":"failure","strand":"auto","ts":"2026-08-09T14:09:02.728143511+00:00","worker":"lab-domain-check"}
+{"bead":"bf-2l7y","event":"claim","strand":"auto","ts":"2026-08-09T14:09:09.647792553+00:00","worker":"lab-domain-check"}
+{"adapter":"claude-code-glm-4.7","bead":"bf-2l7y","event":"dispatch","model":"glm-4.7","strand":"auto","ts":"2026-08-09T14:09:09.651389546+00:00","worker":"lab-domain-check"}
