@@ -48,7 +48,14 @@ test.describe('WHOIS ccTLD API (.de and .jp)', () => {
     const data = await response.json();
     expect(data.available).toBe(false);
     expect(data.registration).toBeDefined();
-    expect(data.registration.registrar).toBeTruthy();
+    // WHOIS data varies by registrar - check that some registration data is present
+    // (registrar, nameservers, status, dates, etc.)
+    const hasRegData = data.registration.registrar ||
+                      data.registration.nameservers ||
+                      data.registration.status ||
+                      data.registration.created ||
+                      data.registration.expires;
+    expect(hasRegData).toBeTruthy();
   });
 
   /**
@@ -102,7 +109,14 @@ test.describe('WHOIS ccTLD API (.de and .jp)', () => {
     const data = await response.json();
     expect(data.available).toBe(false);
     expect(data.registration).toBeDefined();
-    expect(data.registration.registrar).toBeTruthy();
+    // WHOIS data varies by registrar - check that some registration data is present
+    // (registrar, nameservers, status, dates, etc.)
+    const hasRegData = data.registration.registrar ||
+                      data.registration.nameservers ||
+                      data.registration.status ||
+                      data.registration.created ||
+                      data.registration.expires;
+    expect(hasRegData).toBeTruthy();
   });
 
   /**
