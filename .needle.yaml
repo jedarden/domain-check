@@ -5,6 +5,9 @@ agent:
   default: glm
   timeout: 600
 
+bead_cli:
+  backend: bead-rs
+
 strands:
   pluck:
     enabled: true
@@ -76,9 +79,9 @@ prompt:
       Steps:
       1. Read the task description and context below
       2. Implement the required changes in {workspace_path}
-      3. Commit your work: `git commit -am "brief description of what was done"`
+      3. Stage only the changed paths and commit with a brief descriptive message
       4. Push: `git push`
-      5. Close the bead: `br close {bead_id} --body "brief summary of what was implemented"`
+      5. Close the bead: `bead close {bead_id} --reason "brief summary of what was implemented"`
 
       If you cannot complete the task — do NOT close the bead. It will be retried automatically.
 
@@ -97,4 +100,3 @@ prompt:
       {context_file_contents}
 
       Bead ID: {bead_id}
-
