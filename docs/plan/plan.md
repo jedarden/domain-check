@@ -1087,6 +1087,18 @@ EOF
 - Go tests run locally with cgroup-limited resources or submitted remotely
 - Fuzz tests run for 30s per target (`go test -fuzz=... -fuzztime=30s`)
 
+#### CI Status (2026-08-10)
+
+**Current Status:** ❌ BLOCKED by expired iad-ci cluster credentials
+
+The workflow submission has been blocked since August 10, 2026 due to an expired ServiceAccount token for the iad-ci cluster. Local quality gate tests all pass successfully (`go vet`, `go test -race`, fuzz tests), indicating that the workflow should complete successfully once credentials are refreshed.
+
+**Workflow Structure:**
+- **build entrypoint:** build-quality-gate → resolve-version → docker-build
+- **release entrypoint:** quality-gate → goreleaser-release (for GitHub releases)
+
+The `goreleaser-release` step exists and is properly configured, but has not been tested due to the credential blocking issue. See `docs/notes/release-workflow-status-2026-08-10.md` for complete details and expected workflow behavior.
+
 ### Regression Process
 
 When a bug is found:

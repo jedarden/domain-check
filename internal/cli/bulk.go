@@ -18,6 +18,7 @@ import (
 	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/rdap"
 	"github.com/jedarden/domain-check/internal/ratelimit"
 )
 
@@ -135,7 +136,7 @@ func Bulk(ctx context.Context, cfg BulkConfig) int {
 
 	rateLimiter := ratelimit.NewRateLimiter()
 
-	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrap,
 		RateLimit:  rateLimiter,

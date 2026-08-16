@@ -1,0 +1,11 @@
+{
+  "analysis_date": "2026-08-13T15:19:18Z",
+  "common_ancestor": "63ba02474c9b6bc339388adb3a44542e10755a10",
+  "forgejo_branch": "origin/main",
+  "forgejo_tip": "63ba02474c9b6bc339388adb3a44542e10755a10",
+  "github_branch": "github/main",
+  "github_tip": "63ba02474c9b6bc339388adb3a44542e10755a10",
+  "github_specific_commits": [],
+  "github_specific_count": 0,
+  "summary": "Branches are identical - no GitHub-specific commits exist"
+}

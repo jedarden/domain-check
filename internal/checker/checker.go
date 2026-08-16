@@ -8,7 +8,11 @@ import (
 	"time"
 
 	"github.com/jedarden/domain-check/internal/bootstrap"
+	"github.com/jedarden/domain-check/internal/cache"
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/httpclient"
+	"github.com/jedarden/domain-check/internal/rdap"
+	"github.com/jedarden/domain-check/internal/whois"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
@@ -51,10 +55,10 @@ var registryConcurrencyConfig = map[string]int64{
 
 // Checker orchestrates domain availability checks using RDAP, WHOIS, and DNS.
 type Checker struct {
-	rdap       *RDAPClient
-	whois      *WHOISClient
+	rdap       *rdap.RDAPClient
+	whois      *whois.WHOISClient
 	dns        *DNSPreFilter
-	cache      *ResultCache
+	cache      *cache.ResultCache
 	bootstrap  *bootstrap.Manager
 	useDNSPrefilter bool
 	bulkConfig BulkCheckConfig
@@ -67,10 +71,10 @@ type Checker struct {
 
 // CheckerConfig holds configuration for creating a Checker.
 type CheckerConfig struct {
-	RDAPClient      *RDAPClient
-	WHOISClient     *WHOISClient
+	RDAPClient      *rdap.RDAPClient
+	WHOISClient     *whois.WHOISClient
 	DNSPreFilter    *DNSPreFilter
-	Cache           *ResultCache
+	Cache           *cache.ResultCache
 	Bootstrap       *bootstrap.Manager
 	UseDNSPrefilter bool
 	BulkConfig      BulkCheckConfig
@@ -134,7 +138,7 @@ func (c *Checker) Check(ctx context.Context, normalizedDomain string) (*domain.D
 	start := time.Now()
 
 	// Sanitize domain input.
-	if err := SanitizeDomain(normalizedDomain); err != nil {
+	if err := httpclient.SanitizeDomain(normalizedDomain); err != nil {
 		return nil, err
 	}
 
@@ -169,7 +173,7 @@ func (c *Checker) Check(ctx context.Context, normalizedDomain string) (*domain.D
 	var result *domain.DomainResult
 	var err error
 
-	if NeedsWHOIS(tld) && c.whois != nil {
+	if whois.NeedsWHOIS(tld) && c.whois != nil {
 		result, err = c.whois.Check(ctx, normalizedDomain)
 	} else if c.rdap != nil {
 		result, err = c.rdap.Check(ctx, normalizedDomain)
@@ -326,7 +330,7 @@ func (c *Checker) checkWithContext(ctx context.Context, normalizedDomain, regist
 	defer sem.Release(1)
 
 	// Sanitize domain input.
-	if err := SanitizeDomain(normalizedDomain); err != nil {
+	if err := httpclient.SanitizeDomain(normalizedDomain); err != nil {
 		return nil, err
 	}
 
@@ -352,7 +356,7 @@ func (c *Checker) checkWithContext(ctx context.Context, normalizedDomain, regist
 	var result *domain.DomainResult
 	var err error
 
-	if NeedsWHOIS(tld) && c.whois != nil {
+	if whois.NeedsWHOIS(tld) && c.whois != nil {
 		result, err = c.whois.Check(ctx, normalizedDomain)
 	} else if c.rdap != nil {
 		result, err = c.rdap.Check(ctx, normalizedDomain)
@@ -400,15 +404,15 @@ func (c *Checker) getRegistryForDomain(normalizedDomain string) string {
 	tld := parts[len(parts)-1]
 
 	// Check if we need WHOIS for this TLD.
-	if NeedsWHOIS(tld) {
-		return whoisServerForTLD(tld)
+	if whois.NeedsWHOIS(tld) {
+		return whois.WhoisServerForTLD(tld)
 	}
 
 	// Look up RDAP server from bootstrap.
 	if c.bootstrap != nil {
 		rdapURL, err := c.bootstrap.Lookup(tld)
 		if err == nil {
-			return extractRegistryHost(rdapURL)
+			return rdap.ExtractRegistryHost(rdapURL)
 		}
 	}
 

@@ -1,0 +1,21 @@
+# Test 1: Build Workflow (Default Entry Point)
+# Submission: kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig create -f workflow-build-test.yaml -n argo-workflows
+#
+# Expected behavior:
+# - Uses default 'build' entrypoint
+# - Runs: build-quality-gate → resolve-version → docker-build
+# - Does NOT run goreleaser-release
+# - Final: Docker image pushed to ronaldraygun/domain-check:{version}
+
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: domain-check-build-manual-
+  namespace: argo-workflows
+  annotations:
+    description: "Test default build entrypoint - should NOT run goreleaser"
+spec:
+  workflowTemplateRef:
+    name: domain-check-build
+  # No entrypoint specified - uses default 'build'
+  # No arguments specified - uses defaults (branch=main, tag="")

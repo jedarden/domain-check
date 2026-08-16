@@ -153,7 +153,7 @@ func setupMetricsTestRouter(checker DomainChecker) (*Metrics, http.Handler) {
 	rl := NewRateLimiter(log)
 	metrics := GetMetrics()
 
-	router := Router(&cfg, log, rl, checker, nil, nil, metrics)
+	router := Router(&cfg, log, rl, checker, nil, nil, metrics, nil)
 	return metrics, router
 }
 

@@ -120,6 +120,8 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		// Transient timeout — the upstream registry was too slow to respond.
 		// Check both errors.Is (for properly wrapped errors) and string matching
 		// as a fallback for errors wrapped in types without Unwrap().
+		// This must be checked before context.Canceled since canceled contexts
+		// can also have deadline exceeded messages.
 		if errors.Is(err, context.DeadlineExceeded) || isTimeoutError(err) {
 			h.log.Warn("domain check timed out", "domain", parsed.Domain, "error", err)
 			w.Header().Set("Retry-After", "30")
@@ -130,7 +132,8 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, context.Canceled) {
 			return
 		}
-		// Other errors.
+		// Other errors (e.g., SSRF violations, invalid input). These are genuine
+		// failures, not transient network issues, so log at ERROR level.
 		h.log.Error("domain check failed", "domain", parsed.Domain, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "check_failed", "Domain availability check failed")
 		return
@@ -364,14 +367,36 @@ func isLDH(c rune) bool {
 // timeout messages that appear in errors wrapped in types without Unwrap() support
 // (e.g. net/url.Error, custom RDAP client wrappers). It also walks the error chain
 // via Unwrap() so that wrapped errors are still detected by their inner message.
+//
+// This function also checks for temporary network errors that should be treated as
+// timeouts for the purposes of domain availability checking, such as connection
+// timeouts and temporary DNS failures.
 func isTimeoutError(err error) bool {
 	if err == nil {
 		return false
+	}
+	// First check if this is a context.DeadlineExceeded error type.
+	// This handles cases where the error is context.DeadlineExceeded itself
+	// or wraps it, ensuring consistent timeout detection.
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
 	}
 	for e := err; e != nil; {
 		msg := strings.ToLower(e.Error())
 		for _, substr := range timeoutStrings {
 			if strings.Contains(msg, substr) {
+				return true
+			}
+		}
+		// Check for temporary network errors (connection timeout, etc.)
+		if netErr, ok := e.(interface{ Temporary() bool }); ok {
+			if netErr.Temporary() {
+				return true
+			}
+		}
+		// Check for timeout errors specifically
+		if netErr, ok := e.(interface{ Timeout() bool }); ok {
+			if netErr.Timeout() {
 				return true
 			}
 		}

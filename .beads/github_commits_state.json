@@ -1,0 +1,10 @@
+{
+  "analysis_type": "github_specific_commits",
+  "common_ancestor": "63ba02474c9b6bc339388adb3a44542e10755a10",
+  "github_branch": "github/main",
+  "forgejo_branch": "origin/main",
+  "github_commit_count": 0,
+  "github_commits": [],
+  "analysis_date": "2026-08-13T14:30:00Z",
+  "note": "GitHub and Forgejo branches are identical - no divergence detected"
+}

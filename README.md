@@ -10,6 +10,7 @@ Authoritative domain availability checker powered by [RDAP](https://about.rdap.o
 - **CLI** — check domains from the terminal
 - **Bulk checking** — check up to 50 domains in a single request
 - **Multi-TLD** — check a name across multiple TLDs at once
+- **Domain Watch** — webhook notifications when domains become available (see below)
 - **Self-hostable** — single Go binary or Docker container
 - **Zero tracking** — no analytics, no cookies, no data retention
 
@@ -166,6 +167,86 @@ curl -s http://localhost:8080/health
 | Bulk (`/api/v1/bulk`) | 5 req/min per IP |
 
 Rate-limited responses return `429 Too Many Requests` with a `Retry-After` header.
+
+### Domain Watch (Webhook Notifications)
+
+Get notified instantly when a domain becomes available. The Domain Watch feature polls watched domains periodically and sends a webhook notification when a domain transitions from registered to available.
+
+**Enable the feature:**
+
+```bash
+./domain-check serve --enable-watch
+```
+
+**Register a watch:**
+
+```bash
+curl -s -X POST 'http://localhost:8080/api/v1/watch' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "domain": "example.com",
+    "webhook_url": "https://your-server.com/webhook"
+  }' | jq
+```
+
+Response:
+
+```json
+{
+  "id": "a1b2c3d4e5f6",
+  "domain": "example.com",
+  "webhook_url": "https://your-server.com/webhook",
+  "secret": "your-hmac-secret",
+  "created_at": "2026-08-16T10:00:00Z",
+  "expires_at": "2026-11-14T10:00:00Z"
+}
+```
+
+**Webhook payload (when domain becomes available):**
+
+```json
+{
+  "domain": "example.com",
+  "available": true,
+  "checked_at": "2026-08-16T12:30:00Z"
+}
+```
+
+The webhook includes an `X-DomainCheck-Signature` header with HMAC-SHA256 signature: `sha256=<signature>`. Verify it using the secret returned at registration.
+
+**Cancel a watch:**
+
+```bash
+curl -s -X DELETE 'http://localhost:8080/api/v1/watch/a1b2c3d4e5f6?secret=your-hmac-secret'
+```
+
+**Limits & security:**
+
+- **Per-IP limit:** 10 watches per 24 hours
+- **TTL:** 90 days (auto-expires)
+- **Single-fire:** Delivers once when domain becomes available, then stops
+- **SSRF protection:** Private IPs blocked, DNS rebinding prevented
+- **No PII:** Only stores domain + webhook URL (no email, no account)
+- **Polling interval:** Every 15 minutes (configurable)
+
+**Verification:**
+
+```go
+// Verify webhook signature
+func VerifySignature(payload []byte, secret string, signatureHeader string) bool {
+    sigPrefix := "sha256="
+    if !strings.HasPrefix(signatureHeader, sigPrefix) {
+        return false
+    }
+    signature := signatureHeader[len(sigPrefix):]
+    
+    mac := hmac.New(sha256.New, []byte(secret))
+    mac.Write(payload)
+    expected := hex.EncodeToString(mac.Sum(nil))
+    
+    return hmac.Equal([]byte(signature), []byte(expected))
+}
+```
 
 ## CLI Usage
 

@@ -11,6 +11,12 @@ import (
 	"github.com/jedarden/domain-check/web"
 )
 
+// WatchHandlerInterface defines the interface for watch handlers (to avoid circular dependency).
+type WatchHandlerInterface interface {
+	RegisterWatch(http.ResponseWriter, *http.Request)
+	CancelWatch(http.ResponseWriter, *http.Request)
+}
+
 // Router creates and returns the main HTTP handler with all routes and middleware.
 // The middleware chain is applied in order:
 // 1. Request ID - add/generate unique request ID
@@ -20,17 +26,17 @@ import (
 // 5. Rate Limit - per-IP rate limiting
 // 6. CORS - cross-origin support for API
 // 7. Handler - the actual route handler
-func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker, bootstrap BootstrapProvider, monitor *ServiceMonitor, metrics *Metrics) http.Handler {
+func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker, bootstrap BootstrapProvider, monitor *ServiceMonitor, metrics *Metrics, watchHandler WatchHandlerInterface) http.Handler {
 	mux := http.NewServeMux()
 
 	// Register routes.
-	registerRoutes(mux, cfg, log, rateLimiter, ch, bootstrap, monitor, metrics)
+	registerRoutes(mux, cfg, log, rateLimiter, ch, bootstrap, monitor, metrics, watchHandler)
 
 	// Build middleware chain (applied in reverse order).
 	// Outer to inner: RequestID -> ClientIP -> Logging -> Metrics -> SecurityHeaders -> RateLimit -> CORS -> Handler
 	handler := Chain(mux,
 		RequestID,
-		ClientIP(cfg.TrustProxy),
+		ClientIP(cfg.TrustProxy()),
 		Logging(log),
 		MetricsMiddleware(metrics),
 		SecurityHeaders,
@@ -42,7 +48,7 @@ func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch D
 }
 
 // registerRoutes adds all routes to the mux.
-func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker, bootstrap BootstrapProvider, monitor *ServiceMonitor, metrics *Metrics) {
+func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker, bootstrap BootstrapProvider, monitor *ServiceMonitor, metrics *Metrics, watchHandler WatchHandlerInterface) {
 	// Create handlers
 	apiHandlers := NewAPIHandlers(ch, log, bootstrap, metrics, monitor)
 	webHandlers := NewWebHandlers(ch, log)
@@ -66,8 +72,14 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, ra
 	// TLD list endpoint
 	mux.Handle("GET /api/v1/tlds", rateLimiter.APIRateLimit(http.HandlerFunc(apiHandlers.TLDsHandler)))
 
+	// Watch endpoints (if enabled)
+	if cfg.EnableWatch() && watchHandler != nil {
+		mux.Handle("POST /api/v1/watch", rateLimiter.APIRateLimit(http.HandlerFunc(watchHandler.RegisterWatch)))
+		mux.Handle("DELETE /api/v1/watch/", rateLimiter.APIRateLimit(http.HandlerFunc(watchHandler.CancelWatch)))
+	}
+
 	// Metrics endpoint (if enabled).
-	if cfg.Metrics && metrics != nil {
+	if cfg.Metrics() && metrics != nil {
 		mux.Handle("GET /metrics", metrics.Handler())
 	}
 

@@ -1,0 +1,25 @@
+{
+  "analysis_type": "github_specific_commits",
+  "generated_at": "2026-08-16T17:15:00-04:00",
+  "common_ancestor": {
+    "sha": "63ba02474c9b6bc339388adb3a44542e10755a10",
+    "author": "jedarden",
+    "date": "2026-08-09T13:00:56-04:00",
+    "title": "fix: remove unused time import and update bootstrap test initialization"
+  },
+  "forgejo_branch": "origin/main",
+  "github_branch": "github-mirror/main",
+  "github_specific_commits": [
+    {
+      "sha": "61d27ac2f996cc7723f87ac473a9f041ca735c51",
+      "short_sha": "61d27ac",
+      "author": "jedarden",
+      "email": "github@jedarden.com",
+      "date": "2026-08-15 09:56:53 -0400",
+      "message": "migrate: rehydrate the bead workspace from bead-forge to bead-rs",
+      "body": "Recreated 184 issues and 157 dependency edges through public bead commands. Cleared three stale glm-bravo assignments because bead-forge still treated those open issues as ready while bead-rs excludes assigned work; this preserves the 12-item ready frontier. Verified mapped fields, graph direction, clean checkpoint restore, bead doctor, NEEDLE backend discovery, claim/release behavior, and a redacted gitleaks scan. The source store is retained under /home/coding/scratch/domain-check-beadforge-final-20260815."
+    }
+  ],
+  "total_count": 1,
+  "note": "Found 1 commit unique to GitHub: a bead workspace migration from bead-forge to bead-rs committed on 2026-08-15. This commit exists on the GitHub mirror but not on Forgejo origin."
+}

@@ -1,0 +1,77 @@
+# Manual Workflow Submissions for domain-check-build Testing
+# These test both entrypoints (build and release) to verify the workflow logic
+
+---
+# Test 1: Build Entrypoint (default)
+# Expected: Runs build-quality-gate → resolve-version → docker-build
+# Should NOT run goreleaser-release
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: domain-check-build-manual-
+  namespace: argo-workflows
+spec:
+  workflowTemplateRef:
+    name: domain-check-build
+  # No entrypoint specified - uses default "build"
+  # No tag parameter - uses default empty string
+
+---
+# Test 2: Release Entrypoint (override)
+# Expected: Runs quality-gate → goreleaser-release
+# Should fail gracefully on goreleaser (v0.0.0-test tag doesn't exist on remote)
+# But should REACH the goreleaser step, proving entrypoint routing works
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: domain-check-release-manual-
+  namespace: argo-workflows
+spec:
+  entrypoint: release  # Override default entrypoint
+  arguments:
+    parameters:
+      - name: tag
+        value: "v0.0.0-test"  # Test tag that won't exist on remote
+  workflowTemplateRef:
+    name: domain-check-build
+
+---
+# Submission Commands (for iad-ci cluster):
+#
+# Submit build workflow:
+# kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig create -f - <<EOF
+# apiVersion: argoproj.io/v1alpha1
+# kind: Workflow
+# metadata:
+#   generateName: domain-check-build-manual-
+#   namespace: argo-workflows
+# spec:
+#   workflowTemplateRef:
+#     name: domain-check-build
+# EOF
+#
+# Submit release workflow:
+# kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig create -f - <<EOF
+# apiVersion: argoproj.io/v1alpha1
+# kind: Workflow
+# metadata:
+#   generateName: domain-check-release-manual-
+#   namespace: argo-workflows
+# spec:
+#   entrypoint: release
+#   arguments:
+#     parameters:
+#       - name: tag
+#         value: "v0.0.0-test"
+#   workflowTemplateRef:
+#     name: domain-check-build
+# EOF
+#
+# Monitor workflows:
+# kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig get workflows -n argo-workflows --sort-by=.metadata.creationTimestamp | tail -20
+#
+# Get workflow details:
+# kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig get workflow <name> -n argo-workflows -o yaml
+#
+# Stream logs from running pod:
+# kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig logs -n argo-workflows <pod-name> -c main -f
