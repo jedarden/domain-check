@@ -1,0 +1,13 @@
+{
+  "analysis_type": "github_specific_commits",
+  "timestamp": "2026-08-16T22:35:00Z",
+  "common_ancestor": "fd4ddd416c736e640c4e3cd8ae38b254cf40594c",
+  "github_branch": "github-mirror/main",
+  "forgejo_branch": "origin/main",
+  "github_specific_count": 0,
+  "github_specific_commits": [],
+  "forgejo_specific_count": 0,
+  "forgejo_specific_commits": [],
+  "conclusion": "repositories_are_synchronized",
+  "notes": "Both Forgejo (origin) and GitHub (github-mirror) main branches are at identical commit state. No commits exist on GitHub that are not present on Forgejo."
+}
