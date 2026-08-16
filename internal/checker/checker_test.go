@@ -6,14 +6,18 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jedarden/domain-check/internal/bootstrap"
+	"github.com/jedarden/domain-check/internal/cache"
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/httpclient"
 	"github.com/jedarden/domain-check/internal/ratelimit"
+	"github.com/jedarden/domain-check/internal/rdap"
 )
 
 // mockRDAPServer creates a test HTTP server that responds to RDAP queries.
@@ -81,7 +85,7 @@ func testHTTPClient() *http.Client {
 }
 
 func TestCheckBulk_Empty(t *testing.T) {
-	cache := NewResultCache(DefaultTTLs(), 100, nil)
+	cache := cache.NewResultCache(cache.DefaultTTLs(), 100, nil)
 	checker := NewChecker(CheckerConfig{
 		Cache: cache,
 	})
@@ -119,7 +123,7 @@ func TestCheckBulk_SingleDomain(t *testing.T) {
 	defer bootstrapMgr.Stop()
 
 	// Create allowlist (for validation, but we use testHTTPClient)
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 
 	// Create test HTTP client (allows localhost for testing)
 	httpClient := testHTTPClient()
@@ -128,7 +132,7 @@ func TestCheckBulk_SingleDomain(t *testing.T) {
 	ratelimit := ratelimit.NewRateLimiter()
 
 	// Create RDAP client
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -136,7 +140,7 @@ func TestCheckBulk_SingleDomain(t *testing.T) {
 	})
 
 	// Create cache
-	cache := NewResultCache(DefaultTTLs(), 100, nil)
+	cache := cache.NewResultCache(cache.DefaultTTLs(), 100, nil)
 
 	// Create checker
 	checker := NewChecker(CheckerConfig{
@@ -195,18 +199,18 @@ func TestCheckBulk_MultipleDomains(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
 
-	cache := NewResultCache(DefaultTTLs(), 100, nil)
+	cache := cache.NewResultCache(cache.DefaultTTLs(), 100, nil)
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
@@ -256,18 +260,18 @@ func TestCheckBulk_CacheHit(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
 		AllowList:  allowlist,
 	})
 
-	cache := NewResultCache(DefaultTTLs(), 100, nil)
+	cache := cache.NewResultCache(cache.DefaultTTLs(), 100, nil)
 
 	// Pre-populate cache
 	now := time.Now()
@@ -322,7 +326,7 @@ func TestCheckBulk_Timeout(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	// Create HTTP client with short timeout
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -340,7 +344,7 @@ func TestCheckBulk_Timeout(t *testing.T) {
 	}
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -408,11 +412,11 @@ func TestCheckBulk_ConcurrencyLimit(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -469,11 +473,11 @@ func TestCheckBulk_PartialResults(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -482,7 +486,7 @@ func TestCheckBulk_PartialResults(t *testing.T) {
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Cache:      NewResultCache(DefaultTTLs(), 100, nil),
+		Cache:      cache.NewResultCache(cache.DefaultTTLs(), 100, nil),
 		Bootstrap:  bootstrapMgr,
 	})
 
@@ -536,11 +540,11 @@ func TestCheckBulk_RegistryGrouping(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{comServer.URL, orgServer.URL})
+	allowlist := httpclient.NewAllowList([]string{comServer.URL, orgServer.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -549,7 +553,7 @@ func TestCheckBulk_RegistryGrouping(t *testing.T) {
 
 	checker := NewChecker(CheckerConfig{
 		RDAPClient: rdapClient,
-		Cache:      NewResultCache(DefaultTTLs(), 100, nil),
+		Cache:      cache.NewResultCache(cache.DefaultTTLs(), 100, nil),
 		Bootstrap:  bootstrapMgr,
 	})
 
@@ -591,7 +595,7 @@ func TestCheck_ContextCancellation(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	// Create HTTP client with short timeout
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -609,7 +613,7 @@ func TestCheck_ContextCancellation(t *testing.T) {
 	}
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -641,6 +645,12 @@ func TestCheck_ContextCancellation(t *testing.T) {
 }
 
 func TestCheckBulk_MaxDomains(t *testing.T) {
+	// Skip this test in normal test runs - it's a performance/load test that can take >30s
+	// Run with: DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestCheckBulk_MaxDomains ./internal/checker/
+	if testing.Short() || os.Getenv("DOMCHECK_RUN_LONG_TESTS") != "1" {
+		t.Skip("skipping max domains test (set DOMCHECK_RUN_LONG_TESTS=1 to run)")
+	}
+
 	// Create server
 	server := mockRDAPServer(t, nil)
 	defer server.Close()
@@ -657,11 +667,11 @@ func TestCheckBulk_MaxDomains(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -776,11 +786,11 @@ func BenchmarkCheckBulk_10Domains(b *testing.B) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -820,11 +830,11 @@ func BenchmarkCheckBulk_50Domains(b *testing.B) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -848,6 +858,12 @@ func BenchmarkCheckBulk_50Domains(b *testing.B) {
 }
 
 func TestCheckBulk_PerRegistrySemaphore(t *testing.T) {
+	// Skip this test in normal test runs - it's a concurrency test with intentional delays that can take >30s
+	// Run with: DOMCHECK_RUN_LONG_TESTS=1 go test -v -run TestCheckBulk_PerRegistrySemaphore ./internal/checker/
+	if testing.Short() || os.Getenv("DOMCHECK_RUN_LONG_TESTS") != "1" {
+		t.Skip("skipping per-registry semaphore test (set DOMCHECK_RUN_LONG_TESTS=1 to run)")
+	}
+
 	// This test verifies that per-registry semaphores limit concurrent
 	// requests to each registry while allowing full concurrency across registries.
 
@@ -903,11 +919,11 @@ func TestCheckBulk_PerRegistrySemaphore(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,
@@ -1024,11 +1040,11 @@ func TestCheckBulk_MixedRegistries(t *testing.T) {
 
 	defer bootstrapMgr.Stop()
 
-	allowlist := NewAllowList([]string{server.URL})
+	allowlist := httpclient.NewAllowList([]string{server.URL})
 	httpClient := testHTTPClient()
 	ratelimit := ratelimit.NewRateLimiter()
 
-	rdapClient := NewRDAPClient(RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrapMgr,
 		RateLimit:  ratelimit,

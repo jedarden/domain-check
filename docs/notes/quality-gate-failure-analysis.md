@@ -2,7 +2,11 @@
 
 **Bead:** bf-29a0
 **Date:** 2026-07-03
-**Status:** Root cause identified
+**Status:** ✅ RESOLVED — See `quality-gate-fix-2026-08-10.md` for solution
+
+---
+
+*This document is retained for historical context. The quality-gate issue was resolved on 2026-08-10.*
 
 ## Summary
 

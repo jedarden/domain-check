@@ -19,9 +19,9 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, cfg.CacheTTLAvailable)
 	assert.Equal(t, 1*time.Hour, cfg.CacheTTLRegistered)
 	assert.Equal(t, 24*time.Hour, cfg.BootstrapRefresh)
-	assert.False(t, cfg.TrustProxy)
+	assert.False(t, cfg.TrustProxy())
 	assert.Equal(t, "*", cfg.CorsOrigins)
-	assert.True(t, cfg.Metrics)
+	assert.True(t, cfg.Metrics())
 	assert.Equal(t, "json", cfg.LogFormat)
 	assert.Equal(t, "info", cfg.LogLevel)
 }
@@ -36,9 +36,9 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, cfg.CacheTTLAvailable)
 	assert.Equal(t, 1*time.Hour, cfg.CacheTTLRegistered)
 	assert.Equal(t, 24*time.Hour, cfg.BootstrapRefresh)
-	assert.False(t, cfg.TrustProxy)
+	assert.False(t, cfg.TrustProxy())
 	assert.Equal(t, "*", cfg.CorsOrigins)
-	assert.True(t, cfg.Metrics)
+	assert.True(t, cfg.Metrics())
 	assert.Equal(t, "json", cfg.LogFormat)
 	assert.Equal(t, "info", cfg.LogLevel)
 }
@@ -63,9 +63,9 @@ func TestLoad_CLIOverrides(t *testing.T) {
 	assert.Equal(t, 10*time.Minute, cfg.CacheTTLAvailable)
 	assert.Equal(t, 2*time.Hour, cfg.CacheTTLRegistered)
 	assert.Equal(t, 12*time.Hour, cfg.BootstrapRefresh)
-	assert.True(t, cfg.TrustProxy)
+	assert.True(t, cfg.TrustProxy())
 	assert.Equal(t, "https://example.com", cfg.CorsOrigins)
-	assert.False(t, cfg.Metrics)
+	assert.False(t, cfg.Metrics())
 	assert.Equal(t, "text", cfg.LogFormat)
 	assert.Equal(t, "debug", cfg.LogLevel)
 }
@@ -82,7 +82,7 @@ func TestLoad_EnvVarOverrides(t *testing.T) {
 
 	assert.Equal(t, ":7070", cfg.Addr)
 	assert.Equal(t, 2000, cfg.CacheSize)
-	assert.True(t, cfg.TrustProxy)
+	assert.True(t, cfg.TrustProxy(), "TrustProxy should be true from env var")
 	assert.Equal(t, "text", cfg.LogFormat)
 	assert.Equal(t, "warn", cfg.LogLevel)
 }
@@ -123,9 +123,9 @@ log-level: debug
 	assert.Equal(t, 10*time.Minute, cfg.CacheTTLAvailable)
 	assert.Equal(t, 2*time.Hour, cfg.CacheTTLRegistered)
 	assert.Equal(t, 12*time.Hour, cfg.BootstrapRefresh)
-	assert.True(t, cfg.TrustProxy)
+	assert.True(t, cfg.TrustProxy(), "TrustProxy should be true from config file")
 	assert.Equal(t, "https://example.com", cfg.CorsOrigins)
-	assert.False(t, cfg.Metrics)
+	assert.False(t, cfg.Metrics(), "Metrics should be false from config file")
 	assert.Equal(t, "text", cfg.LogFormat)
 	assert.Equal(t, "debug", cfg.LogLevel)
 }
@@ -228,15 +228,15 @@ func TestLoad_BoolFlags(t *testing.T) {
 	// Test --trust-proxy sets to true
 	cfg, err := Load([]string{"--trust-proxy"})
 	require.NoError(t, err)
-	assert.True(t, cfg.TrustProxy)
+	assert.True(t, cfg.TrustProxy())
 
 	// Test --metrics=false sets to false
 	cfg, err = Load([]string{"--metrics=false"})
 	require.NoError(t, err)
-	assert.False(t, cfg.Metrics)
+	assert.False(t, cfg.Metrics())
 
 	// Test --metrics=true explicit
 	cfg, err = Load([]string{"--metrics=true"})
 	require.NoError(t, err)
-	assert.True(t, cfg.Metrics)
+	assert.True(t, cfg.Metrics())
 }

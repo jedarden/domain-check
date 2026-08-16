@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/cache"
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/domain"
 )
@@ -67,7 +68,7 @@ func countIPLimiters(rl *RateLimiter) int {
 	return webCount + apiCount + bulkCount
 }
 
-func takeSnapshot(t *testing.T, rl *RateLimiter, cache *checker.ResultCache) memSnapshot {
+func takeSnapshot(t *testing.T, rl *RateLimiter, cache *cache.ResultCache) memSnapshot {
 	t.Helper()
 	var m runtime.MemStats
 	runtime.GC()
@@ -178,7 +179,7 @@ func runMemoryGrowthTest(t *testing.T, duration time.Duration) {
 	t.Logf("GOMAXPROCS: %d", runtime.GOMAXPROCS(0))
 
 	// Create components.
-	cache := checker.NewResultCache(checker.DefaultTTLs(), 10000, nil)
+	cache := cache.NewResultCache(cache.DefaultTTLs(), 10000, nil)
 	rateLimiter := NewRateLimiter(testLogger(t))
 
 	// Start periodic cleanup (same as production, every 10 minutes).

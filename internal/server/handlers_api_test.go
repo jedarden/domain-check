@@ -19,6 +19,7 @@ import (
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/config"
 	"github.com/jedarden/domain-check/internal/domain"
+	"github.com/jedarden/domain-check/internal/whois"
 )
 
 // mockChecker is a mock checker for testing.
@@ -1233,6 +1234,10 @@ func TestIsTimeoutError(t *testing.T) {
 		{"rate limit error", errors.New("429 rate limit exceeded"), false},
 		{"DNS error", errors.New("lookup rdap.example.com: no such host"), false},
 		{"connection refused", errors.New("dial tcp 192.0.2.1:443: connection refused"), false},
+		{"temporary network error", &mockTemporaryError{temporary: true}, true},
+		{"non-temporary error", &mockTemporaryError{temporary: false}, false},
+		{"timeout network error", &mockTimeoutError{timeout: true}, true},
+		{"non-timeout network error", &mockTimeoutError{timeout: false, msg: "connection reset"}, false},
 	}
 
 	for _, tt := range tests {
@@ -1243,6 +1248,40 @@ func TestIsTimeoutError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// mockTemporaryError implements an error with Temporary() method (like net.OpError)
+type mockTemporaryError struct {
+	temporary bool
+	msg       string
+}
+
+func (e *mockTemporaryError) Error() string {
+	if e.msg != "" {
+		return e.msg
+	}
+	return "temporary network error"
+}
+
+func (e *mockTemporaryError) Temporary() bool {
+	return e.temporary
+}
+
+// mockTimeoutError implements an error with Timeout() method (like net.OpError)
+type mockTimeoutError struct {
+	timeout bool
+	msg     string
+}
+
+func (e *mockTimeoutError) Error() string {
+	if e.msg != "" {
+		return e.msg
+	}
+	return "network operation failed"
+}
+
+func (e *mockTimeoutError) Timeout() bool {
+	return e.timeout
 }
 
 // Bulk Handler Tests
@@ -1650,7 +1689,7 @@ func setupIntegrationRouter(ch DomainChecker) http.Handler {
 	cfg := config.Defaults()
 	log := DefaultLogger("text", "error")
 	rl := NewRateLimiter(log)
-	return Router(&cfg, log, rl, ch, nil, nil, nil)
+	return Router(&cfg, log, rl, ch, nil, nil, nil, nil)
 }
 
 // --- Scenarios 1-7: Single Check (GET /api/v1/check) ---
@@ -2783,7 +2822,7 @@ func loadWHOISFixture(t *testing.T, fixtureFile, domainName, tld string) *domain
 	}
 
 	raw := string(data)
-	available := checker.IsAvailableFromRaw(raw, tld)
+	available := whois.IsAvailableFromRaw(raw, tld)
 
 	result := &domain.DomainResult{
 		Domain:     domainName,
@@ -3407,7 +3446,7 @@ func TestHealthChecksServed(t *testing.T) {
 		},
 	}
 
-	router := Router(&cfg, log, rl, mockCh, nil, monitor, nil)
+	router := Router(&cfg, log, rl, mockCh, nil, monitor, nil, nil)
 
 	// Initially checks_served should be 0
 	req := httptest.NewRequest("GET", "/health", nil)

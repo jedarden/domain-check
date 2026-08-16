@@ -1,0 +1,52 @@
+#!/bin/bash
+# Pre-commit hook to prevent large file commits
+# Blocks commits that would add files > 10MB or cause repository bloat
+
+set -e
+
+MAX_FILE_SIZE_MB=10
+MAX_REPO_SIZE_MB=500
+
+# Convert to bytes
+MAX_FILE_SIZE=$((MAX_FILE_SIZE_MB * 1024 * 1024))
+MAX_REPO_SIZE=$((MAX_REPO_SIZE_MB * 1024 * 1024))
+
+echo "🔍 Checking for large files..."
+
+# Check staged files
+staged_files=$(git diff --cached --name-only --diff-filter=AC)
+large_files_found=false
+
+for file in $staged_files; do
+    if [ -f "$file" ]; then
+        file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo 0)
+
+        if [ "$file_size" -gt "$MAX_FILE_SIZE" ]; then
+            size_mb=$((file_size / 1024 / 1024))
+            echo "❌  ERROR: Large file detected: $file ($size_mb MB)"
+            echo "   Maximum allowed: $MAX_FILE_SIZE_MB MB"
+            large_files_found=true
+        fi
+    fi
+done
+
+if [ "$large_files_found" = true ]; then
+    echo ""
+    echo "💡 Tip: Add large files to .gitignore or use Git LFS for binary assets"
+    echo "❌ Commit blocked - large files would cause repository bloat"
+    exit 1
+fi
+
+# Warn if repository is getting large
+repo_size=$(du -sk .git 2>/dev/null | cut -f1)
+if [ -n "$repo_size" ]; then
+    repo_size_mb=$((repo_size / 1024))
+
+    if [ "$repo_size_mb" -gt "$MAX_REPO_SIZE_MB" ]; then
+        echo "⚠️  WARNING: Repository size is ${repo_size_mb}MB (exceeds ${MAX_REPO_SIZE_MB}MB)"
+        echo "   Consider running: git gc --aggressive"
+    fi
+fi
+
+echo "✅ Pre-commit check passed"
+exit 0

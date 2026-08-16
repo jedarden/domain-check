@@ -1,6 +1,8 @@
 # GoReleaser configuration for domain-check
 # Builds multi-platform binaries for GitHub releases
 
+version: 2
+
 project_name: domain-check
 
 before:
@@ -37,8 +39,7 @@ builds:
     main: ./cmd/domain-check
 
 archives:
-  - format: tar.gz
-    name_template: >-
+  - name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
@@ -46,9 +47,12 @@ archives:
       {{- else if eq .Arch "arm" }}armv{{ .Arm }}
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
+    formats:
+      - tar.gz
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - LICENSE
       - README.md
@@ -67,6 +71,10 @@ changelog:
       - '^build:'
 
 release:
+  github:
+    owner: jedarden
+    name: domain-check
   draft: false
   prerelease: auto
   mode: replace
+  name_template: '{{.Tag}}'

@@ -1,0 +1,75 @@
+#!/bin/bash
+# Git pre-commit hook to prevent large file additions
+# Maximum file size: 10MB
+# Maximum total commit size: 50MB
+
+MAX_FILE_SIZE=10485760  # 10MB in bytes
+MAX_COMMIT_SIZE=52428800  # 50MB in bytes
+
+# Get list of staged files
+staged_files=$(git diff --cached --name-only --diff-filter=ACR)
+
+total_size=0
+large_files=()
+
+for file in $staged_files; do
+    if [ -f "$file" ]; then
+        size=$(stat -c%s "$file" 2>/dev/null || echo 0)
+        total_size=$((total_size + size))
+
+        if [ $size -gt $MAX_FILE_SIZE ]; then
+            large_files+=("$file ($(($size / 1048576))MB)")
+        fi
+    fi
+done
+
+# Check individual file sizes
+if [ ${#large_files[@]} -gt 0 ]; then
+    echo "❌ ERROR: Large files detected in commit:"
+    printf '   - %s\n' "${large_files[@]}"
+    echo ""
+    echo "Maximum file size: $(($MAX_FILE_SIZE / 1048576))MB"
+    echo ""
+    echo "Solutions:"
+    echo "1. Add these files to .gitignore"
+    echo "2. Use git-lfs for large binary files"
+    echo "3. Compress or reduce file sizes"
+    exit 1
+fi
+
+# Check total commit size
+if [ $total_size -gt $MAX_COMMIT_SIZE ]; then
+    echo "❌ ERROR: Total commit size exceeds limit:"
+    echo "   Current: $(($total_size / 1048576))MB"
+    echo "   Maximum: $(($MAX_COMMIT_SIZE / 1048576))MB"
+    echo ""
+    echo "Please break this commit into smaller parts."
+    exit 1
+fi
+
+# Check for specific problematic patterns
+problematic_patterns=(
+    "*.jsonl"
+    "*.db"
+    "*.db.backup*"
+)
+
+for pattern in "${problematic_patterns[@]}"; do
+    matching_files=$(git diff --cached --name-only --diff-filter=ACR | grep -E "$pattern" || true)
+    if [ -n "$matching_files" ]; then
+        echo "⚠️  WARNING: Potentially large files detected:"
+        echo "$matching_files" | sed 's/^/   - /'
+        echo ""
+        echo "These file types are commonly associated with large database files."
+        echo "Consider adding them to .gitignore if they shouldn't be tracked."
+        echo ""
+        echo "To proceed anyway, use: git commit --no-verify"
+        read -p "Continue? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+done
+
+exit 0

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jedarden/domain-check/internal/bootstrap"
 	"github.com/jedarden/domain-check/internal/checker"
+	"github.com/jedarden/domain-check/internal/rdap"
 	"github.com/jedarden/domain-check/internal/ratelimit"
 )
 
@@ -638,7 +639,7 @@ func TestCheck_WithMockRDAPIntegration(t *testing.T) {
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 	rateLimiter := ratelimit.NewRateLimiter()
 
-	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrap,
 		RateLimit:  rateLimiter,
@@ -723,7 +724,7 @@ func TestCheck_MultiTLDWithMockRDAP(t *testing.T) {
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 	rateLimiter := ratelimit.NewRateLimiter()
 
-	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: httpClient,
 		Bootstrap:  bootstrap,
 		RateLimit:  rateLimiter,

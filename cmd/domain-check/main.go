@@ -8,11 +8,23 @@ import (
 	"time"
 
 	"github.com/jedarden/domain-check/internal/bootstrap"
+	"github.com/jedarden/domain-check/internal/cache"
 	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/cli"
 	"github.com/jedarden/domain-check/internal/config"
+	"github.com/jedarden/domain-check/internal/httpclient"
+	"github.com/jedarden/domain-check/internal/rdap"
 	"github.com/jedarden/domain-check/internal/ratelimit"
 	"github.com/jedarden/domain-check/internal/server"
+	"github.com/jedarden/domain-check/internal/watch"
+	"github.com/jedarden/domain-check/internal/whois"
+)
+
+// Build information set by goreleaser during release.
+var (
+	version = "1.78.0-goreleaser-e2e-test-2026-08-11"
+	commit  = "unknown"
+	date    = "unknown"
 )
 
 func main() {
@@ -66,6 +78,11 @@ Serve flags:
   --metrics               Enable /metrics Prometheus endpoint (default true)
   --log-format string     Log output format: json or text (default "json")
   --log-level string      Minimum log level: debug, info, warn, error (default "info")
+  --enable-watch          Enable watch feature (webhook notifications for domain availability changes)
+  --watch-db-path string  Path to watch database (default "data/watches.db")
+  --watch-poll-interval   Poll interval for watched domains (default 15m)
+  --watch-max-ttl         Maximum TTL for a watch (default 2160h = 90 days)
+  --watch-max-per-ip      Maximum watches per IP per 24h (default 10)
 
 Check flags:
   <domain>                Domain name to check
@@ -87,6 +104,7 @@ Exit codes (check/bulk):
 
 Examples:
   domain-check serve --addr :3000
+  domain-check serve --enable-watch
   domain-check check example.com
   domain-check check example --tlds com,org,dev --format json
   domain-check bulk domains.txt --concurrency 30 --format csv
@@ -375,8 +393,28 @@ func runServer(args []string) {
 	// Create service monitor for uptime and check counting.
 	monitor := server.NewServiceMonitor()
 
+	// Initialize watch manager if enabled.
+	var watchHandler server.WatchHandlerInterface
+	var watchManager *watch.Manager
+	if cfg.EnableWatch() {
+		watchManager, err = setupWatchManager(ctx, cfg, domainChecker, log)
+		if err != nil {
+			log.Error("failed to initialize watch manager", "error", err)
+			os.Exit(1)
+		}
+
+		// Start the watch manager in background.
+		if err := watchManager.Start(ctx); err != nil {
+			log.Error("failed to start watch manager", "error", err)
+			os.Exit(1)
+		}
+
+		watchHandler = server.NewWatchHandler(watchManager, log)
+		log.Info("watch feature enabled", "db_path", cfg.WatchDBPath, "poll_interval", cfg.WatchPollInterval)
+	}
+
 	// Create router with all routes and middleware.
-	handler := server.Router(cfg, log, rateLimiter, domainChecker, bootstrap, monitor, metrics)
+	handler := server.Router(cfg, log, rateLimiter, domainChecker, bootstrap, monitor, metrics, watchHandler)
 
 	// Start periodic metrics update (bootstrap age every minute).
 	go func() {
@@ -416,13 +454,13 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	// Create allowlist for RDAP servers (populated from bootstrap).
 	// Get the current bootstrap URLs to seed the allowlist.
 	bootstrapURLs := bs.URLs()
-	allowlist := checker.NewAllowList(bootstrapURLs)
+	allowlist := httpclient.NewAllowList(bootstrapURLs)
 
 	// Create safe HTTP client with SSRF protection and per-registry connection pools.
-	safeClient := checker.NewSafeClient(checker.ClientConfig{
+	safeClient := httpclient.NewSafeClient(httpclient.ClientConfig{
 		AllowList: allowlist,
 		UserAgent: "domain-check/1.0",
-		Transport: checker.NewPerRegistryRoundTripper(),
+		Transport: httpclient.NewPerRegistryRoundTripper(),
 	})
 
 	// Start background bootstrap refresh and allowlist update.
@@ -452,7 +490,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	registryRateLimit := ratelimit.NewRateLimiter()
 
 	// Create RDAP client.
-	rdapClient := checker.NewRDAPClient(checker.RDAPClientConfig{
+	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: safeClient,
 		Bootstrap: bs,
 		RateLimit:  registryRateLimit,
@@ -462,7 +500,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	})
 
 	// Create WHOIS client for ccTLD fallback.
-	whoisClient := checker.NewWHOISClient(checker.WHOISClientConfig{
+	whoisClient := whois.NewWHOISClient(whois.WHOISClientConfig{
 		UserAgent: "domain-check/1.0",
 	})
 
@@ -470,7 +508,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	dnsPreFilter := checker.NewDNSPreFilter()
 
 	// Create result cache with configured TTLs.
-	cache := checker.NewResultCache(checker.CacheTTLs{
+	resultCache := cache.NewResultCache(cache.CacheTTLs{
 		Available:  cfg.CacheTTLAvailable,
 		Registered: cfg.CacheTTLRegistered,
 		Error:      30 * time.Second,
@@ -481,7 +519,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 		RDAPClient:      rdapClient,
 		WHOISClient:     whoisClient,
 		DNSPreFilter:    dnsPreFilter,
-		Cache:           cache,
+		Cache:           resultCache,
 		Bootstrap: bs,
 		UseDNSPrefilter: false, // Disabled by default - can be enabled via config
 		BulkConfig:      checker.DefaultBulkCheckConfig(),
@@ -489,4 +527,32 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	})
 
 	return domainChecker, bs, nil
+}
+
+// setupWatchManager creates and initializes a fully configured watch manager.
+func setupWatchManager(ctx context.Context, cfg *config.Config, domainChecker *checker.Checker, log *slog.Logger) (*watch.Manager, error) {
+	// Create watch store.
+	store, err := watch.NewStore(cfg.WatchDBPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create watch store: %w", err)
+	}
+
+	// Create webhook client.
+	webhookClient := watch.NewWebhookClient()
+
+	// Create watch manager configuration.
+	watchCfg := watch.ManagerConfig{
+		Store:           store,
+		WebhookClient:   webhookClient,
+		Checker:         domainChecker,
+		PollInterval:    cfg.WatchPollInterval,
+		MaxTTL:          cfg.WatchMaxTTL,
+		MaxWatchesPerIP: cfg.WatchMaxPerIP,
+		Logger:          log,
+	}
+
+	// Create watch manager.
+	watchManager := watch.NewManager(watchCfg)
+
+	return watchManager, nil
 }
