@@ -1,0 +1,30 @@
+{
+  "analysis_timestamp": "2026-08-16T18:47:57-04:00",
+  "branch1": "github-mirror/main",
+  "branch2": "origin/main",
+  "common_ancestor": "9656fc492909242da043cd912bdf7c3fab31d824",
+  "common_ancestor_date": "2026-08-16T18:42:11-04:00",
+  "time_since_divergence": "5m46.217317942s",
+  "branch1_stats": {
+    "branch": "github-mirror/main",
+    "total_commits": 7,
+    "unique_commits": 0,
+    "last_commit": "9656fc492909242da043cd912bdf7c3fab31d824",
+    "last_commit_date": "2026-08-16T18:42:11-04:00"
+  },
+  "branch2_stats": {
+    "branch": "origin/main",
+    "total_commits": 8,
+    "unique_commits": 1,
+    "last_commit": "c356c41a7faa3df5f0591a4cae68032665d330d6",
+    "last_commit_date": "2026-08-16T18:45:14-04:00",
+    "top_authors": [
+      {
+        "author": "jedarden",
+        "commits": 1
+      }
+    ]
+  },
+  "total_unique_commits": 1,
+  "divergence_type": "branch2_ahead"
+}
