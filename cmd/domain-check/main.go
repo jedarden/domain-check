@@ -436,6 +436,11 @@ func runServer(args []string) {
 	// Create and run the HTTP server.
 	srv := server.New(cfg, handler, log)
 
+	// Defer watch manager cleanup
+	if watchManager != nil {
+		defer watchManager.Stop()
+	}
+
 	if err := srv.Run(ctx); err != nil {
 		log.Error("server error", "error", err)
 		os.Exit(1)
