@@ -63,17 +63,8 @@ dist/
 
 # Beads tracking system (prevent large JSONL file commits)
 # bead-rs: checkpoint files are tracked internally but should not be committed to prevent repository bloat
-.beads/checkpoint/
-.beads/*.db
-.beads/*.db-shm
-.beads/*.db-wal
-.beads/receipts/
+.beads/
 # Beads database files (prevent SQLite database commits)
 *.db
 *.db.backup.*
 *.jsonl
-# Beads history and recovery directories
-.beads/.bf_history/
-.beads/.br_recovery/
-.beads/traces/
-.beads/tmp/
