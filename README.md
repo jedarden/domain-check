@@ -394,6 +394,11 @@ Load it with `--config config.yaml` or `DOMCHECK_CONFIG=config.yaml`.
 | `--metrics` | `DOMCHECK_METRICS` | `true` | Enable `/metrics` Prometheus endpoint |
 | `--log-format` | `DOMCHECK_LOG_FORMAT` | `json` | Log format: `json` or `text` |
 | `--log-level` | `DOMCHECK_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `--enable-watch` | `DOMCHECK_ENABLE_WATCH` | `false` | Enable Domain Watch feature (webhook notifications) |
+| `--watch-db-path` | `DOMCHECK_WATCH_DB_PATH` | `data/watches.db` | Path to watch database |
+| `--watch-poll-interval` | `DOMCHECK_WATCH_POLL_INTERVAL` | `15m` | Poll interval for watched domains |
+| `--watch-max-ttl` | `DOMCHECK_WATCH_MAX_TTL` | `2160h` (90 days) | Maximum TTL for a watch |
+| `--watch-max-per-ip` | `DOMCHECK_WATCH_MAX_PER_IP` | `10` | Maximum watches per IP per 24h |
 
 ## Architecture
 
