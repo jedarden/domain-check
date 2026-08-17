@@ -46,7 +46,7 @@ func NewStore(path string) (*Store, error) {
 
 	// Open database (creates if doesn't exist)
 	db, err := bbolt.Open(path, 0600, &bbolt.Options{
-		Timeout: 1 * time.Second,
+		Timeout: 10 * time.Second,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open watch db: %w", err)
