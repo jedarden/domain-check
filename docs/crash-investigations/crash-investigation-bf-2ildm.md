@@ -95,8 +95,9 @@ Both contribute to resource exhaustion that triggers signal -1 crashes.
 - **System memory**: 43Gi available (current state healthy, but crash occurred under load)
 
 ### Bead Status
-- `bf-2ildm`: **Open** (released for retry after crash)
-- `bf-saupc`: **In Progress** (this bead - crash alert investigation)
+- `bf-2ildm`: **Closed** ✅ (work recovered successfully after crash - 2026-08-16)
+- `bf-saupc`: **Closed** ✅ (crash investigation completed - 2026-08-16)
+- `bf-1wkda`: **In Progress** (original crash alert bead - tracking closure)
 
 ### Pattern Recognition
 
