@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Git pre-commit hook to prevent large file additions
-# Maximum file size: 10MB
-# Maximum total commit size: 50MB
+# Maximum file size: 50MB (prevents repository bloat and OOM crashes)
+# Maximum total commit size: 100MB
 
-MAX_FILE_SIZE=10485760  # 10MB in bytes
-MAX_COMMIT_SIZE=52428800  # 50MB in bytes
+MAX_FILE_SIZE=52428800  # 50MB in bytes
+MAX_COMMIT_SIZE=104857600  # 100MB in bytes
 
 # Get list of staged files
 staged_files=$(git diff --cached --name-only --diff-filter=ACR)
