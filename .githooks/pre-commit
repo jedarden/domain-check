@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Git pre-commit hook to prevent large file additions
 # Maximum file size: 10MB
 # Maximum total commit size: 50MB
