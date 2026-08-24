@@ -30,7 +30,7 @@ In testing, `whois` reported a registered domain as available. RDAP was 100% acc
 
 ### Binary (Linux/macOS)
 
-Download the latest release, then run:
+Build the binary (see [From Source](#from-source)), then run:
 
 ```bash
 ./domain-check serve
@@ -483,3 +483,9 @@ Please ensure all tests pass and the code is properly formatted before submittin
 ## License
 
 MIT
+
+---
+
+Part of [jedarden.com](https://jedarden.com)
+
+*This GitHub repo is a read-only mirror of git.ardenone.com/jedarden/domain-check — issues and PRs are welcome here either way.*
