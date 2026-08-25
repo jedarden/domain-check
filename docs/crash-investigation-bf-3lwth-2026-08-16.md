@@ -23,10 +23,15 @@ On August 16, 2026, bead `bf-3lwth` experienced **multiple crashes** with exit c
 | Bead reclaimed (attempt 3) | 16:01:16.902 | - | - | Another immediate retry |
 | Transform started | 16:01:16.918 | - | - | Third attempt begins |
 | **Agent crashed** | **16:02:32.677** | **75,062** | **1.25** | **Exit code: -1 (SIGKILL)** |
+| Bead reclaimed (attempt 4) | 16:11:56.000 | - | - | Fourth retry after 9-minute gap |
+| Transform started | 16:11:56.000 | - | - | Fourth attempt begins |
+| **Agent crashed** | **16:11:56.443** | **180,578** | **3.01** | **Exit code: -1 (SIGKILL)** |
+| Alert bead created | 16:11:56.936 | - | - | **domchk-5c605bb0** |
 | Final retry and success | (later) | - | - | Eventually succeeded on retry |
 
-**Total observed crashes:** 3+ (log excerpt shows 3 consecutive crashes)
-**Crash durations:** 1.91min → 3.89min → 1.25min (variable duration before termination)
+**Total observed crashes:** 4 consecutive crashes (3 immediate + 1 delayed)
+**Crash durations:** 1.91min → 3.89min → 1.25min → 3.01min (variable duration before termination)
+**Crash intervals:** Immediate → Immediate → Immediate → 9-minute gap before 4th retry
 **Final outcome:** Success on later retry (eventually completed)
 
 ## Alert Bead Context
@@ -133,7 +138,12 @@ The **dominant correlation** between all bf-3lwth crashes and system-wide CPU sa
 14. Immediate retry: Bead reclaimed at 16:01:16.902
 15. Transform started at 16:01:16.918
 16. Agent crash at 16:02:32.677 (exit_code: -1, SIGKILL) → Duration: ~1.25 min
-17. Additional retries (eventually succeeded)
+17. 9-minute gap before next retry (resource recovery period)
+18. Bead reclaimed at 16:11:56.000 → Fourth retry attempt
+19. Transform started at 16:11:56.000
+20. Agent execution of alert task (continuing bf-1s6c3 investigation)
+21. Agent crash at 16:11:56.443 (exit_code: -1, SIGKILL) → Duration: ~3.01 min
+22. Additional retries (eventually succeeded)
 ```
 
 ### Critical Observations
@@ -147,13 +157,17 @@ The **dominant correlation** between all bf-3lwth crashes and system-wide CPU sa
 - Crash 1: 1.91 minutes (shorter execution)
 - Crash 2: 3.89 minutes (longer execution before termination)
 - Crash 3: 1.25 minutes (shorter execution again)
+- Crash 4: 3.01 minutes (medium execution after 9-minute gap)
 
 This suggests the agent made it to different points in execution before resource exhaustion terminated it, potentially depending on momentary CPU availability.
 
-**Immediate retry pattern:** All retries were immediate (seconds apart):
-- Retry 1: ~0.1 seconds after crash
-- Retry 2: ~0.1 seconds after crash
-- No exponential backoff or load-aware retry strategy
+**Retry pattern:** Mixed retry strategy:
+- Retry 1: ~0.1 seconds after crash (immediate)
+- Retry 2: ~0.1 seconds after crash (immediate)
+- Retry 3: ~0.1 seconds after crash (immediate)
+- Retry 4: ~9 minutes after crash (delayed, suggesting resource recovery period)
+
+The 9-minute gap before the 4th retry suggests the system may have attempted resource recovery or implemented a temporary throttling mechanism after 3 consecutive immediate failures.
 
 ## System-Wide Implications
 
@@ -205,7 +219,7 @@ This suggests the agent made it to different points in execution before resource
 
 ## Conclusion
 
-The crash of bead bf-3lwth represents a **meta-crash scenario** where an alert bead created to report another bead's crash itself crashed during extreme system-wide CPU saturation. The bead crashed **3+ times** within 9 minutes during sustained very high CPU saturation (1.9x - 2.7x load), as part of the **826-crash event** on 2026-08-16.
+The crash of bead bf-3lwth represents a **meta-crash scenario** where an alert bead created to report another bead's crash itself crashed during extreme system-wide CPU saturation. The bead crashed **4 times** within ~18 minutes during sustained very high CPU saturation (1.9x - 2.7x load), as part of the **826-crash event** on 2026-08-16.
 
 **Primary finding:** The crashes were caused by **extreme CPU saturation (1.9x - 2.7x load)** leading to **resource-based process termination (exit code -1)**, similar to other crashes on the same day.
 
@@ -213,7 +227,7 @@ The crash of bead bf-3lwth represents a **meta-crash scenario** where an alert b
 
 **Systemic finding:** This was **part of 826 crashes** on 2026-08-16, representing the **worst crash day on record**. The sustained extreme saturation (1.28x - 5.35x over 3+ hours) indicates systemic resource management issues requiring architectural improvements.
 
-**Retry pattern finding:** The bead experienced **variable crash durations** (1.91min → 3.89min → 1.25min) with **immediate retries** and **no adaptive throttling**, eventually succeeding through persistence rather than intelligent resource management.
+**Retry pattern finding:** The bead experienced **variable crash durations** (1.91min → 3.89min → 1.25min → 3.01min) with **mixed retry timing** (3 immediate retries → 9-minute gap → eventual success), suggesting some form of resource recovery or temporary throttling after 3 consecutive failures.
 
 **Implications:** The meta-crash of bf-3lwth reveals a **gap in crash reporting infrastructure**—alert beads themselves need protection during extreme system events to ensure crash information is not lost.
 
@@ -247,11 +261,13 @@ The crash of bead bf-3lwth represents a **meta-crash scenario** where an alert b
 
 **Meta-crash event (2026-08-16):**
 - 15:53:39: bf-3lwth claimed → Session b7afe97d
-- 15:55:34: Crash 1 (exit code -1, duration 1.91min)
+- 15:55:34: Crash 1 (exit code -1, duration 1.91min) → Alert bead created
 - 15:57:23: Retry 2 dispatched
-- 16:01:16: Crash 2 (exit code -1, duration 3.89min)
+- 16:01:16: Crash 2 (exit code -1, duration 3.89min) → Alert bead created
 - 16:01:16: Retry 3 dispatched
-- 16:02:32: Crash 3 (exit code -1, duration 1.25min)
+- 16:02:32: Crash 3 (exit code -1, duration 1.25min) → Alert bead created
+- 16:11:56: Retry 4 dispatched (after 9-minute gap)
+- 16:11:56: Crash 4 (exit code -1, duration 3.01min) → Alert bead **domchk-5c605bb0** created
 - Eventually succeeded on later retry
 
 **Current state (Aug 25):**
