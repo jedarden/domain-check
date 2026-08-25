@@ -77,6 +77,8 @@ type ErrorResponse struct {
 // It performs a domain availability check and returns the result as JSON.
 // When the "tlds" query parameter is present (e.g. ?d=example&tlds=com,org,dev),
 // it checks the same domain name across multiple TLDs in parallel.
+// When the "suggest" query parameter is true (e.g. ?d=example.com&suggest=true),
+// it returns alternative domain suggestions if the requested domain is unavailable.
 func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 	// Only accept GET requests.
 	if r.Method != http.MethodGet {
@@ -108,6 +110,9 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "invalid_domain", err.Error())
 		return
 	}
+
+	// Check if suggestions are enabled.
+	suggestEnabled := r.URL.Query().Get("suggest") == "true"
 
 	// Perform the domain check.
 	result, err := h.checker.Check(r.Context(), parsed.Domain)
@@ -148,6 +153,12 @@ func (h *APIHandlers) CheckHandler(w http.ResponseWriter, r *http.Request) {
 	// Increment the service monitor counter (count all served requests, including errors).
 	if h.monitor != nil {
 		h.monitor.IncrementCheck()
+	}
+
+	// If suggestions are enabled and the domain is unavailable, generate and check suggestions.
+	if suggestEnabled && !result.Available {
+		h.handleSuggestions(w, r, result)
+		return
 	}
 
 	// Return the result as JSON.
@@ -620,6 +631,81 @@ func writeAPIError(w http.ResponseWriter, status int, errorCode, message string)
 		Message: message,
 	}
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// handleSuggestions processes domain suggestions when the original domain is unavailable.
+// It generates candidates, checks them in parallel via bulk checker, and returns only available suggestions.
+func (h *APIHandlers) handleSuggestions(w http.ResponseWriter, r *http.Request, result *domain.DomainResult) {
+	// Generate suggestion candidates based on the original domain.
+	candidates := domain.GenerateSuggestions(result.Domain)
+	if len(candidates) == 0 {
+		// No suggestions generated, return original result without suggestions.
+		writeJSONResponse(w, http.StatusOK, result)
+		return
+	}
+
+	// Extract domain names from candidates for bulk checking.
+	var suggestionDomains []string
+	for _, candidate := range candidates {
+		suggestionDomains = append(suggestionDomains, candidate.Domain)
+	}
+
+	// Check if we have a bulk checker available.
+	bulkChecker, ok := h.checker.(BulkChecker)
+	if !ok {
+		// No bulk checker available - return result without suggestions.
+		h.log.Warn("bulk checker not available for suggestions", "domain", result.Domain)
+		writeJSONResponse(w, http.StatusOK, result)
+		return
+	}
+
+	// Perform bulk check on all suggestion candidates.
+	bulkResult := bulkChecker.CheckBulk(r.Context(), suggestionDomains)
+
+	// Filter to only available suggestions and populate their results.
+	var availableSuggestions []domain.Suggestion
+	for _, candidate := range candidates {
+		// Check if there was an error checking this suggestion.
+		if errMsg, hasErr := bulkResult.Errors[candidate.Domain]; hasErr {
+			h.log.Debug("suggestion check failed", "domain", candidate.Domain, "error", errMsg)
+			continue
+		}
+
+		// Get the result for this suggestion.
+		suggestionResult, ok := bulkResult.Results[candidate.Domain]
+		if !ok || suggestionResult == nil {
+			continue
+		}
+
+		// Only include available suggestions.
+		if !suggestionResult.Available {
+			continue
+		}
+
+		// Populate the suggestion with its result.
+		candidate.Available = true
+		candidate.Result = suggestionResult
+		availableSuggestions = append(availableSuggestions, candidate)
+	}
+
+	// Record metrics for the suggestion checks.
+	if h.metrics != nil {
+		h.metrics.RecordBulkCheck(len(suggestionDomains))
+		h.metrics.AddChecksServed(len(bulkResult.Results))
+	}
+
+	// Increment the service monitor counter for the suggestion checks.
+	if h.monitor != nil {
+		h.monitor.AddChecks(len(suggestionDomains))
+	}
+
+	// Build and return the suggestion response.
+	suggestionResponse := domain.SuggestionResponse{
+		Result:      result,
+		Suggestions: availableSuggestions,
+	}
+
+	writeJSONResponse(w, http.StatusOK, suggestionResponse)
 }
 
 // TLDsResponse represents the response for the TLD list endpoint.
