@@ -463,6 +463,14 @@ go test -fuzz=. -fuzztime=30s ./internal/domain/
 golangci-lint run
 ```
 
+### Repository Maintenance
+
+This repository uses aggressive automatic git garbage collection to prevent bloat:
+- `gc.auto=100` — triggers GC when ≥100 loose objects exist (more aggressive than default 256)
+- `gc.autoPackLimit=10` — triggers GC when ≥10 pack files exist
+
+See [docs/git-gc-config.md](docs/git-gc-config.md) for details and verification commands.
+
 ## Documentation
 
 - [docs/research/](docs/research/) — Research on domain checking methods, RDAP protocol, rate limits, accuracy testing
