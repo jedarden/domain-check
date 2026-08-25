@@ -20,11 +20,14 @@ import (
 
 // CheckConfig holds configuration for the check subcommand.
 type CheckConfig struct {
-	Domain    string        // Domain to check
-	TLDs      []string      // TLDs to expand to (if empty, just check the input domain)
-	Format    string        // Output format: text, json, csv
-	Timeout   time.Duration // HTTP timeout for RDAP queries
-	UserAgent string        // User-Agent header for RDAP requests
+	Domain       string        // Domain to check
+	TLDs         []string      // TLDs to expand to (if empty, just check the input domain)
+	Format       string        // Output format: text, json, csv
+	Timeout      time.Duration // HTTP timeout for RDAP queries
+	UserAgent    string        // User-Agent header for RDAP requests
+	Watch        bool          // Watch mode: poll until domain becomes available
+	WatchForever bool          // Continue watching even after domain becomes available
+	WatchInterval time.Duration // Polling interval for watch mode (default 5m)
 }
 
 // Exit codes for the check subcommand.
@@ -88,7 +91,48 @@ func Check(ctx context.Context, cfg CheckConfig) int {
 		UserAgent:  cfg.UserAgent,
 	})
 
-	// Check all domains.
+	// If not in watch mode, run a single check and exit.
+	if !cfg.Watch {
+		return checkOnce(ctx, rdapClient, domains, cfg.Format)
+	}
+
+	// Watch mode: poll until all domains become available (or forever if --forever is set).
+	interval := cfg.WatchInterval
+	if interval == 0 {
+		interval = 5 * time.Minute // Default interval
+	}
+
+	fmt.Fprintf(os.Stderr, "Watching %d domain(s), checking every %v...\n", len(domains), interval)
+	fmt.Fprintf(os.Stderr, "Press Ctrl+C to stop.\n\n")
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Run initial check immediately.
+	if results := checkAndReport(ctx, rdapClient, domains, cfg.Format); results != nil {
+		if shouldExitWatch(results, cfg.WatchForever) {
+			return ExitAvailable
+		}
+	}
+
+	// Poll periodically.
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Fprintf(os.Stderr, "\nWatch interrupted.\n")
+			return ExitError
+		case <-ticker.C:
+			if results := checkAndReport(ctx, rdapClient, domains, cfg.Format); results != nil {
+				if shouldExitWatch(results, cfg.WatchForever) {
+					return ExitAvailable
+				}
+			}
+		}
+	}
+}
+
+// checkOnce performs a single check and returns the exit code.
+func checkOnce(ctx context.Context, rdapClient *rdap.RDAPClient, domains []string, format string) int {
 	results := make([]CheckResult, len(domains))
 	for i, d := range domains {
 		result, err := rdapClient.Check(ctx, d)
@@ -108,16 +152,65 @@ func Check(ctx context.Context, cfg CheckConfig) int {
 	}
 
 	// Output results in the requested format.
-	if err := outputResults(os.Stdout, results, cfg.Format); err != nil {
+	if err := outputResults(os.Stdout, results, format); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return ExitError
 	}
 
 	// Determine exit code.
-	// If any domain has an error, return error.
-	// If all domains are available, return available.
-	// If any domain is taken, return taken.
 	return determineExitCode(results)
+}
+
+// checkAndReport performs a check, prints results with timestamp, and returns the results.
+// Returns nil if an error occurred during output.
+func checkAndReport(ctx context.Context, rdapClient *rdap.RDAPClient, domains []string, format string) []CheckResult {
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	fmt.Fprintf(os.Stderr, "[%s] Checking...\n", timestamp)
+
+	results := make([]CheckResult, len(domains))
+	for i, d := range domains {
+		result, err := rdapClient.Check(ctx, d)
+		if err != nil {
+			results[i] = CheckResult{
+				Domain: d,
+				Error:  err.Error(),
+			}
+			continue
+		}
+		results[i] = CheckResult{
+			Domain:    result.Domain,
+			Available: result.Available,
+			TLD:       result.TLD,
+			Error:     result.Error,
+		}
+	}
+
+	// Output results in the requested format.
+	if err := outputResults(os.Stdout, results, format); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return nil
+	}
+
+	return results
+}
+
+// shouldExitWatch determines if the watch should exit with success.
+// Exits if all domains are available and --forever is not set.
+func shouldExitWatch(results []CheckResult, watchForever bool) bool {
+	if watchForever {
+		return false
+	}
+
+	// Check if all domains are available with no errors.
+	for _, r := range results {
+		if r.Error != "" || !r.Available {
+			return false
+		}
+	}
+
+	// All domains are available!
+	fmt.Fprintf(os.Stderr, "\n✓ All domain(s) are now available!\n")
+	return true
 }
 
 // validateSLD validates a second-level domain label.

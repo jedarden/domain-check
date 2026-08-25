@@ -89,6 +89,9 @@ Check flags:
   --tlds string           Comma-separated list of TLDs to expand (e.g., "com,org,dev")
   --format string         Output format: text, json, csv (default "text")
   --timeout duration      HTTP timeout for RDAP queries (default 30s)
+  --watch                 Watch mode: poll until domain becomes available (exit 0)
+  --forever               Continue watching even after domain becomes available
+  --interval duration     Polling interval for watch mode (default 5m)
 
 Bulk flags:
   <file>                  Path to file containing domains (one per line)
@@ -107,6 +110,9 @@ Examples:
   domain-check serve --enable-watch
   domain-check check example.com
   domain-check check example --tlds com,org,dev --format json
+  domain-check check example.com --watch --interval 2m
+  domain-check check mybrand.dev --watch --interval 1m
+  domain-check check premium.com --watch --forever --interval 5m
   domain-check bulk domains.txt --concurrency 30 --format csv
   domain-check bulk domains.txt --progress
 `)
@@ -154,6 +160,26 @@ func runCheck(args []string) {
 			}
 			cfg.Timeout = d
 			i++
+		case "--watch":
+			cfg.Watch = true
+		case "--forever":
+			cfg.WatchForever = true
+		case "--interval":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "error: --interval requires a value")
+				os.Exit(2)
+			}
+			d, err := time.ParseDuration(args[i+1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: invalid interval: %v\n", err)
+				os.Exit(2)
+			}
+			if d <= 0 {
+				fmt.Fprintln(os.Stderr, "error: interval must be positive")
+				os.Exit(2)
+			}
+			cfg.WatchInterval = d
+			i++
 		case "-h", "--help":
 			printUsage()
 			os.Exit(0)
@@ -189,6 +215,12 @@ func runCheck(args []string) {
 		// Valid.
 	default:
 		fmt.Fprintf(os.Stderr, "error: invalid format: %s (must be text, json, or csv)\n", cfg.Format)
+		os.Exit(2)
+	}
+
+	// Validate watch flags.
+	if cfg.WatchForever && !cfg.Watch {
+		fmt.Fprintln(os.Stderr, "error: --forever requires --watch")
 		os.Exit(2)
 	}
 
