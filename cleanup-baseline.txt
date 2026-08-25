@@ -1,0 +1,9 @@
+449M	.git
+count: 533
+size: 2244
+in-pack: 8384
+packs: 2
+size-pack: 455047
+prune-packable: 0
+garbage: 0
+size-garbage: 0
