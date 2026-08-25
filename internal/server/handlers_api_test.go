@@ -156,11 +156,11 @@ func TestCheckHandler_PrivateSuffix(t *testing.T) {
 		domain      string
 		expectError string
 	}{
-		// Domains under PSL private suffixes that parse successfully but have no RDAP/WHOIS support
-		// These flow through to unsupported_tld error at check time, not parse-time rejection
-		{"github.io subdomain", "example.github.io", "unsupported_tld"},
-		{"herokuapp.com subdomain", "myapp.herokuapp.com", "unsupported_tld"},
-		{"cloudfront.net subdomain", "d123.cloudfront.net", "unsupported_tld"},
+		// Domains under PSL private suffixes are now rejected at parse time
+		// with invalid_domain error, not unsupported_tld at check time
+		{"github.io subdomain", "example.github.io", "invalid_domain"},
+		{"herokuapp.com subdomain", "myapp.herokuapp.com", "invalid_domain"},
+		{"cloudfront.net subdomain", "d123.cloudfront.net", "invalid_domain"},
 
 		// Domains rejected at parse time (e.g., single label, no registrable domain)
 		{"single label no TLD", "example", "invalid_domain"},
@@ -170,46 +170,28 @@ func TestCheckHandler_PrivateSuffix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var req *http.Request
-			if tt.expectError == "unsupported_tld" {
-				// For domains that parse successfully but have no RDAP support
-				mockCh := &mockChecker{
-					err: bootstrap.ErrTLDNotFound,
-				}
-				handlers := NewAPIHandlers(mockCh, nil, nil, nil, nil)
-				req = httptest.NewRequest("GET", "/api/v1/check?d="+tt.domain, nil)
-				rec := httptest.NewRecorder()
-				handlers.CheckHandler(rec, req)
+			// All these cases are now rejected at parse time
+			req := httptest.NewRequest("GET", "/api/v1/check?d="+tt.domain, nil)
+			rec := httptest.NewRecorder()
+			handlers.CheckHandler(rec, req)
 
-				if rec.Code != http.StatusBadRequest {
-					t.Errorf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
-				}
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+			}
 
-				var resp ErrorResponse
-				if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-					t.Fatalf("failed to decode response: %v", err)
-				}
+			var resp ErrorResponse
+			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
 
-				if resp.Error != tt.expectError {
-					t.Errorf("expected error %q, got %q", tt.expectError, resp.Error)
-				}
-			} else {
-				// For domains rejected at parse time
-				req = httptest.NewRequest("GET", "/api/v1/check?d="+tt.domain, nil)
-				rec := httptest.NewRecorder()
-				handlers.CheckHandler(rec, req)
+			if resp.Error != tt.expectError {
+				t.Errorf("expected error %q, got %q", tt.expectError, resp.Error)
+			}
 
-				if rec.Code != http.StatusBadRequest {
-					t.Errorf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
-				}
-
-				var resp ErrorResponse
-				if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-					t.Fatalf("failed to decode response: %v", err)
-				}
-
-				if resp.Error != tt.expectError {
-					t.Errorf("expected error %q, got %q", tt.expectError, resp.Error)
+			// For private suffix rejection, verify the message contains the expected text
+			if strings.Contains(tt.domain, "github.io") || strings.Contains(tt.domain, "herokuapp") || strings.Contains(tt.domain, "cloudfront.net") {
+				if !strings.Contains(resp.Message, "private suffix") {
+					t.Errorf("expected message to contain 'private suffix', got %q", resp.Message)
 				}
 			}
 		})
