@@ -99,6 +99,66 @@ func Parse(input string) (*ParsedDomain, error) {
 		return nil, &ParseError{Input: original, Phase: "etld1", Err: err.Error()}
 	}
 
+	// Step 7: Reject domains under known PSL private suffixes.
+	// These are domains delegated by platforms (GitHub Pages, Heroku, etc.)
+	// where users can register subdomains but the base domain itself is not
+	// a registrable TLD. We cannot check availability for such domains.
+	//
+	// We maintain a list of known private suffixes rather than rejecting all
+	// non-ICANN domains because some test cases and edge cases use non-ICANN
+	// domains that should still pass validation (e.g., test IDN TLDs).
+	var knownPrivateSuffixes = map[string]bool{
+		"github.io":       true,
+		"githubusercontent.com": true,
+		"appspot.com":     true,
+		"herokuapp.com":   true,
+		"herokussl.com":   true,
+		"readthedocs.io":  true,
+		"readthedocs.com": true,
+		"blogspot.com":    true,
+		"cloudfront.net":  true,
+		"cloudfunctions.net": true,
+		"firebaseapp.com": true,
+		"firebaseio.com":  true,
+		"pagertree.com":   true,
+		"r.jina.ai":       true,
+		"bitbucket.io":    true,
+		"surge.sh":        true,
+		"webflow.io":      true,
+		"wixstatic.com":   true,
+		"ghost.io":        true,
+		"myst.website":    true,
+		"shopify.com":     true,
+		"myshopify.com":   true,
+		"square.site":     true,
+		"squarespace.com": true,
+		"wordpress.com":   true,
+		"wpengine.com":    true,
+		"vercel.app":      true,
+		"now.sh":          true,
+		"netlify.app":     true,
+		"deno.dev":        true,
+		"railway.app":     true,
+		"render.com":      true,
+		"fly.dev":         true,
+		"workers.dev":     true,
+		"pages.dev":       true,
+		"digitalocean.app": true,
+		"ondigitalocean.app": true,
+		"elasticbeanstalk.com": true,
+		"azurewebsites.net": true,
+		"cloudapp.net":    true,
+		"app.cloud.gov":   true,
+	}
+
+	if knownPrivateSuffixes[tld] {
+		return nil, &ParseError{
+			Input: original,
+			Phase: "private-suffix",
+			Err:   fmt.Sprintf("cannot check availability under private suffix %q", tld),
+		}
+	}
+
 	return &ParsedDomain{
 		Original: original,
 		Domain:   etld1,
