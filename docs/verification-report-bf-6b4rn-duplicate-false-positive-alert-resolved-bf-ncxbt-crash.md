@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-Bead bf-6b4rn is a **duplicate false positive alert** for the bf-ncxbt crash that has already been comprehensively investigated and documented. The original crash occurred on 2026-08-13 at 10:04:05Z, and the root cause has been identified, documented, and preventive measures have been implemented.
+Bead bf-6b4rn is a **duplicate false positive alert** for the bf-ncxbt crash that has already been comprehensively investigated and documented. The original crash occurred on 2026-08-13 at 09:46:21Z, and the root cause has been identified, documented, and preventive measures have been implemented.
 
 ---
 
@@ -19,9 +19,9 @@ Bead bf-6b4rn is a **duplicate false positive alert** for the bf-ncxbt crash tha
 ### Crash Details
 - **Original Bead ID:** bf-ncxbt
 - **Original Task:** Document remote GitHub mirror state for branch divergence analysis
-- **Crash Date:** 2026-08-13T10:04:05.008026457+00:00
+- **Crash Date:** 2026-08-13T09:46:21.190204329+00:00
 - **Exit Code:** -1 (signal -1, SIGKILL)
-- **Agent:** claude-code-glm-4.7-lab-domain-check
+- **Agent:** claude-code-glm-4.7-lab-drawrace
 - **Current Status:** ✅ INVESTIGATION COMPLETE
 
 ### Root Cause Analysis
@@ -63,7 +63,7 @@ After this crash period, several preventive measures were implemented:
 3. **Removed large historical JSONL files** from git history
 4. **Implemented pre-commit hooks** to prevent large file commits
 
-### Current State (2026-08-26)
+### Current State (2026-08-16)
 
 - **Repository:** Remains bloated (18GB) but stable
 - **Loose objects:** Still present (17.20 GiB)
@@ -76,20 +76,15 @@ After this crash period, several preventive measures were implemented:
 
 ### Systematic Duplicate Alerts
 
-This is part of a systematic pattern of duplicate alerts for resolved crashes. Based on the verification reports in docs/, there have been multiple duplicate false positive alerts:
+This is part of a systematic pattern of duplicate alerts for resolved crashes. Based on the verification reports in docs/, there have been multiple duplicate false positive alerts for the bf-ncxbt crash:
 
 | Alert Bead ID | Date | Original Crash | Status |
 |---------------|------|----------------|--------|
-| bf-3ulz5 | 2026-08-?? | bf-1ea4g | ✅ Verified false positive |
-| bf-5l84o | 2026-08-?? | bf-4k2ws | ✅ Verified false positive |
-| bf-1nb5u | 2026-08-?? | bf-1ea4g | ✅ Verified false positive |
-| bf-1x9j5 | 2026-08-?? | bf-1ea4g | ✅ Verified false positive |
-| bf-2rd24 | 2026-08-?? | bf-1ea4g | ✅ Verified false positive |
-| bf-55j5g | 2026-08-?? | bf-1ea4g | ✅ Verified false positive |
-| bf-1ztab | 2026-08-26 | bf-1ea4g | ✅ Verified false positive |
-| bf-xg2gg | 2026-08-26 | bf-2vtzg | ✅ Verified false positive |
 | bf-2kz1v | 2026-08-26 | bf-ncxbt | ✅ Verified false positive |
+| bf-nb0hx | 2026-08-26 | bf-ncxbt | ✅ Verified false positive |
+| bf-3s9i3 | 2026-08-26 | bf-ncxbt | ✅ Verified false positive |
 | bf-4x8pc | 2026-08-26 | bf-ncxbt | ✅ Verified false positive |
+| bf-6awkf | 2026-08-26 | bf-ncxbt | ✅ Verified false positive |
 | **bf-6b4rn** | **2026-08-26** | **bf-ncxbt** | **✅ This verification** |
 
 ### Pattern Characteristics
@@ -97,7 +92,7 @@ This is part of a systematic pattern of duplicate alerts for resolved crashes. B
 **Alert Trigger Mechanism:** Automated crash alert system generating alerts for resolved crashes  
 **Issue:** Alert system not tracking bead investigation/closure status  
 **Impact:** Repeated false positive alerts for crashes already investigated and resolved  
-**Frequency:** Multiple duplicate alerts across multiple resolved crashes  
+**Frequency:** Multiple duplicate alerts for the same resolved crash  
 **Latest Status:** All original crashes investigated, preventive measures implemented
 
 ---
@@ -153,7 +148,7 @@ This is part of a systematic pattern of duplicate alerts for resolved crashes. B
 **Bead bf-6b4rn is a FALSE POSITIVE duplicate alert for a crash (bf-ncxbt) that has already been comprehensively investigated and documented.**
 
 **Key Facts:**
-1. **Original crash:** bf-ncxbt (2026-08-13T10:04:05Z)
+1. **Original crash:** bf-ncxbt (2026-08-13T09:46:21Z)
 2. **Root cause:** Repository bloat OOM (18GB .git with 17GB loose objects)
 3. **Investigation:** Comprehensive investigation completed (2026-08-16)
 4. **Documentation:** Complete investigation report exists
@@ -164,7 +159,7 @@ This is part of a systematic pattern of duplicate alerts for resolved crashes. B
 
 ### Investigation Timeline
 
-- **Crash Date:** 2026-08-13T10:04:05Z
+- **Crash Date:** 2026-08-13T09:46:21Z
 - **Investigation Completed:** 2026-08-16
 - **Investigation Bead:** bf-4nqxn
 - **Preventive Measures:** Implemented 2026-08-13 to 2026-08-16
@@ -205,12 +200,12 @@ This is part of a systematic pattern of duplicate alerts for resolved crashes. B
 
 **Verification Metadata:**
 - **Verification Date:** 2026-08-26
-- **Original Crash Date:** 2026-08-13T10:04:05Z
+- **Original Crash Date:** 2026-08-13T09:46:21Z
 - **Investigation Completed:** 2026-08-16
 - **Root Cause Confidence:** 95%
 - **Investigation Status:** ✅ Complete
 - **Documentation Status:** ✅ Comprehensive report exists
 - **Preventive Measures:** ✅ Implemented
 - **Current Repository State:** ✅ Stable
-- **Duplicate Alert Count:** Part of systematic duplicate alert pattern (11+ verified duplicates)
+- **Duplicate Alert Count:** Part of systematic duplicate alert pattern (6th alert for same crash)
 - **Systematic Issue:** Alert generation system not tracking investigation/closure status
