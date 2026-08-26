@@ -4,6 +4,7 @@
 **Bead ID:** bf-2gli1  
 **Issue:** ALERT: Agent crash on bead bf-4k2ws  
 **Status:** DUPLICATE ALERT - RESOLVED CRASH
+**Instance:** 15th+ duplicate alert verification for this resolved crash
 
 ## Investigation Summary
 
