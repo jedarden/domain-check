@@ -52,6 +52,19 @@ type ManagerConfig struct {
 	Logger          *slog.Logger
 }
 
+const (
+	maxDeliveryFailures = 10
+)
+
+// failureBackoffIntervals defines exponential backoff intervals for webhook retries.
+// After N failures, retry at these intervals: 1h, 6h, 24h, 72h, then daily.
+var failureBackoffIntervals = []time.Duration{
+	1 * time.Hour,   // After 1st failure
+	6 * time.Hour,   // After 2nd failure
+	24 * time.Hour,  // After 3rd failure
+	72 * time.Hour,  // After 4th failure
+}
+
 // DefaultManagerConfig returns default manager configuration.
 func DefaultManagerConfig() ManagerConfig {
 	return ManagerConfig{
@@ -185,6 +198,26 @@ func (m *Manager) pollWatches(ctx context.Context) {
 
 // checkWatch checks a single watch and delivers webhook if status changed.
 func (m *Manager) checkWatch(ctx context.Context, watch *WatchData) {
+	// Skip dead watches
+	if watch.Dead {
+		return
+	}
+
+	// Skip already delivered watches (single-fire)
+	if watch.Delivered {
+		return
+	}
+
+	// Check if this watch has failed webhook delivery that should be retried
+	if watch.DeliveryFailures > 0 && m.shouldRetryWebhook(watch) {
+		m.logger.Debug("retrying failed webhook delivery",
+			"domain", watch.Domain,
+			"watch_id", watch.ID,
+			"failure_count", watch.DeliveryFailures)
+		m.retryWebhookDelivery(ctx, watch)
+		return
+	}
+
 	// Check domain availability
 	result, err := m.checker.Check(ctx, watch.Domain)
 	if err != nil {
@@ -211,6 +244,9 @@ func (m *Manager) checkWatch(ctx context.Context, watch *WatchData) {
 			"watch_id", watch.ID,
 			"webhook_url", watch.WebhookURL)
 
+		// Track first delivery attempt
+		watch.LastDeliveryAttempt = time.Now()
+
 		// Deliver webhook with retries
 		if err := m.deliverWebhookWithRetry(ctx, watch, result); err == nil {
 			// Mark as delivered (single-fire)
@@ -219,10 +255,23 @@ func (m *Manager) checkWatch(ctx context.Context, watch *WatchData) {
 				"domain", watch.Domain,
 				"watch_id", watch.ID)
 		} else {
-			m.logger.Error("webhook delivery failed after retries",
+			// Track failure for retry logic
+			watch.DeliveryFailures++
+			m.logger.Error("webhook delivery failed after retries, will retry later",
 				"domain", watch.Domain,
 				"watch_id", watch.ID,
+				"failure_count", watch.DeliveryFailures,
 				"error", err)
+
+			// Check if should mark as dead immediately
+			if watch.DeliveryFailures >= maxDeliveryFailures {
+				watch.Dead = true
+				watch.DeadSince = time.Now()
+				m.logger.Warn("watch marked as dead due to repeated failures",
+					"domain", watch.Domain,
+					"watch_id", watch.ID,
+					"failure_count", watch.DeliveryFailures)
+			}
 		}
 	} else if watch.LastStatus != currentStatus {
 		// Status changed but not the transition we care about
@@ -290,6 +339,85 @@ func (m *Manager) deliverWebhookWithRetry(ctx context.Context, watch *WatchData,
 	}
 
 	return fmt.Errorf("webhook delivery failed: status=%d, err=%w", statusCode, err)
+}
+
+// shouldRetryWebhook determines if a failed webhook delivery should be retried.
+// It checks the backoff interval based on the number of failures.
+func (m *Manager) shouldRetryWebhook(watch *WatchData) bool {
+	if watch.LastDeliveryAttempt.IsZero() {
+		return false
+	}
+
+	elapsed := time.Since(watch.LastDeliveryAttempt)
+	failureIndex := watch.DeliveryFailures - 1
+
+	if failureIndex < 0 {
+		return false
+	}
+
+	if failureIndex < len(failureBackoffIntervals) {
+		return elapsed >= failureBackoffIntervals[failureIndex]
+	}
+
+	// Beyond defined intervals: check daily
+	return elapsed >= 24*time.Hour
+}
+
+// retryWebhookDelivery re-attempts webhook delivery for a failed watch.
+// On success, it resets the failure count and marks the watch as delivered.
+// On failure, it increments the failure count and may mark the watch as dead.
+func (m *Manager) retryWebhookDelivery(ctx context.Context, watch *WatchData) {
+	// Re-check the domain to get fresh data for the webhook payload
+	result, err := m.checker.Check(ctx, watch.Domain)
+	if err != nil {
+		m.logger.Error("failed to check domain for webhook retry",
+			"domain", watch.Domain,
+			"watch_id", watch.ID,
+			"error", err)
+		return
+	}
+
+	// Attempt webhook delivery
+	deliveryErr := m.deliverWebhookWithRetry(ctx, watch, result)
+
+	// Update failure tracking
+	watch.LastDeliveryAttempt = time.Now()
+
+	if deliveryErr == nil {
+		// Success: reset failure count
+		watch.DeliveryFailures = 0
+		watch.Delivered = true
+		m.logger.Info("webhook retry succeeded",
+			"domain", watch.Domain,
+			"watch_id", watch.ID,
+			"previous_failures", watch.DeliveryFailures)
+	} else {
+		// Failure: increment count
+		watch.DeliveryFailures++
+		m.logger.Error("webhook retry failed",
+			"domain", watch.Domain,
+			"watch_id", watch.ID,
+			"failure_count", watch.DeliveryFailures,
+			"error", deliveryErr)
+
+		// Check if should mark as dead
+		if watch.DeliveryFailures >= maxDeliveryFailures {
+			watch.Dead = true
+			watch.DeadSince = time.Now()
+			m.logger.Warn("watch marked as dead due to repeated failures",
+				"domain", watch.Domain,
+				"watch_id", watch.ID,
+				"failure_count", watch.DeliveryFailures)
+		}
+	}
+
+	// Save updated watch data
+	if err := m.store.Update(watch); err != nil {
+		m.logger.Error("failed to update watch after retry",
+			"domain", watch.Domain,
+			"watch_id", watch.ID,
+			"error", err)
+	}
 }
 
 // Register creates a new watch with abuse prevention checks.

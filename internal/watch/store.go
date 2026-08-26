@@ -31,6 +31,12 @@ type WatchData struct {
 	LastStatus  string    `json:"last_status"` // "available" or "taken"
 	ClientIP    string    `json:"client_ip"`  // For abuse prevention
 	Delivered   bool      `json:"delivered"`  // True after webhook delivery
+
+	// Reconnection fields
+	DeliveryFailures     int       `json:"delivery_failures"`     // Consecutive delivery failures
+	LastDeliveryAttempt  time.Time `json:"last_delivery_attempt"` // Last webhook delivery attempt
+	Dead                 bool      `json:"dead"`                  // Watch is permanently dead
+	DeadSince           time.Time `json:"dead_since"`            // When watch was marked dead
 }
 
 // watchBucket is the name of the bbolt bucket storing watch data.
