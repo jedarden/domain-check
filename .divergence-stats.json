@@ -1,30 +1,30 @@
 {
-  "analysis_timestamp": "2026-08-26T13:05:41-04:00",
-  "branch1": "remotes/origin/main",
-  "branch2": "remotes/github-mirror/main",
+  "analysis_timestamp": "2026-08-26T13:09:20-04:00",
+  "branch1": "github-mirror/main",
+  "branch2": "origin/main",
   "common_ancestor": "9e8220f7894cee8d772d12e3e050474070e60a13",
   "common_ancestor_date": "2026-08-26T12:55:54-04:00",
-  "time_since_divergence": "9m47.744709891s",
+  "time_since_divergence": "13m26.564279207s",
   "branch1_stats": {
-    "branch": "remotes/origin/main",
-    "total_commits": 1082,
-    "unique_commits": 11,
-    "last_commit": "812b7ae6a7d3779c0f692dbf0850c09e4912c3a8",
-    "last_commit_date": "2026-08-26T13:04:23-04:00",
-    "top_authors": [
-      {
-        "author": "jedarden",
-        "commits": 11
-      }
-    ]
-  },
-  "branch2_stats": {
-    "branch": "remotes/github-mirror/main",
+    "branch": "github-mirror/main",
     "total_commits": 1071,
     "unique_commits": 0,
     "last_commit": "9e8220f7894cee8d772d12e3e050474070e60a13",
     "last_commit_date": "2026-08-26T12:55:54-04:00"
   },
-  "total_unique_commits": 11,
-  "divergence_type": "branch1_ahead"
+  "branch2_stats": {
+    "branch": "origin/main",
+    "total_commits": 1085,
+    "unique_commits": 14,
+    "last_commit": "020b013e93c95979a879719eec67f1946c4a6a5a",
+    "last_commit_date": "2026-08-26T13:08:42-04:00",
+    "top_authors": [
+      {
+        "author": "jedarden",
+        "commits": 14
+      }
+    ]
+  },
+  "total_unique_commits": 14,
+  "divergence_type": "branch2_ahead"
 }
