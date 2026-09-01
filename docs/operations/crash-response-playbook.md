@@ -8,10 +8,11 @@
 
 ## Overview
 
-This playbook provides step-by-step procedures for responding to agent crashes that result in exit code -1. Exit code -1 can represent **two distinct signal types**:
+This playbook provides step-by-step procedures for responding to agent crashes that result in exit code -1. Exit code -1 can represent **three distinct crash patterns**:
 
 1. **Signal 9 (SIGKILL)**: Linux OOM (Out Of Memory) killer intervention
 2. **Signal 1 (SIGHUP)**: External system process termination
+3. **CPU Saturation**: System resource management intervention due to high CPU load (SIGKILL/SIGTERM from systemd/fleet manager)
 
 **Critical First Step**: Always run the classification script before taking any action:
 
@@ -22,7 +23,8 @@ This playbook provides step-by-step procedures for responding to agent crashes t
 This script will automatically:
 - Check repository health (size, loose objects)
 - Check system memory availability
-- Classify the crash as OOM or SIGHUP
+- Check CPU load and saturation
+- Classify the crash as OOM, SIGHUP, or CPU Saturation
 - Recommend appropriate actions
 
 ---
@@ -295,6 +297,83 @@ Action taken: Documented as fleet event, no repository action needed
 bead close <alert-bead-id> --reason "SIGHUP cascade event - documented as fleet-wide external termination, no repository issue"
 ```
 
+### For CPU Saturation Crashes
+
+#### Documentation (No Code Remediation Needed)
+
+**Step 1: Document the Event**
+
+Create crash investigation document:
+
+```bash
+# Use existing template
+cp docs/crash-investigation-template.md docs/crash-investigation-cpu-saturation-$(date +%Y%m%d).md
+```
+
+Document:
+- Timestamp range of crashes
+- CPU load averages during crash period
+- Number of affected workers (fleet-wide impact)
+- Task characteristics (large prompts, complex operations)
+- Evidence of retry success when load decreased
+
+**Step 2: Verify System State**
+
+```bash
+# Check current CPU load
+uptime
+# Check current processes
+top -b -n 1 | head -20
+# Check load history (if available)
+sar -u 1 5
+```
+
+**Step 3: Update Bead Notes**
+
+For each crash alert bead:
+
+```bash
+bead update <alert-bead-id> --notes "
+CPU saturation crash - transient resource event.
+Timestamp: <timestamp-range>
+CPU load: <load-avg> on <cores> cores (<percentage>% utilization)
+Memory: <available>GB available (healthy)
+Affected workers: <fleet-wide count>
+Root cause: System CPU saturation → resource management intervention
+Classification: CPU Saturation - exit code -1
+Action taken: Documented as transient resource event, no code changes needed
+Automatic retry: <succeeded on attempt N when CPU pressure decreased>
+"
+```
+
+**Step 4: Close Alert Beads**
+
+```bash
+bead close <alert-bead-id> --reason "CPU saturation crash - documented as transient resource event, no code defect"
+```
+
+#### Key Characteristics of CPU Saturation Crashes
+
+**Diagnostic Indicators:**
+- ✅ Repository is healthy (<500MB, <1000 loose objects)
+- ✅ Memory is available (>20% free)
+- ✅ CPU load average > 80% of cores (e.g., load 8+ on 9 cores)
+- ✅ Multiple crashes fleet-wide in short time window
+- ✅ No OOM events in system logs
+- ✅ Transforms complete successfully but agent crashes during response processing
+
+**Common Scenarios:**
+- Large prompts (>50KB) requiring extensive processing
+- Multiple agents running concurrently on same system
+- Background processes consuming CPU (builds, indexing, etc.)
+- Fleet-wide dispatch without load-aware throttling
+
+**Why No Code Remediation:**
+- Root cause is environmental (system load), not application logic
+- Repository state is healthy (no bloat, no corruption)
+- Automatic retry mechanism works correctly when CPU pressure decreases
+- Code changes cannot prevent external resource exhaustion
+
 ---
 
 ## Prevention (Ongoing)
@@ -303,7 +382,7 @@ bead close <alert-bead-id> --reason "SIGHUP cascade event - documented as fleet-
 
 - ✅ Classification script: `./scripts/classify-signal-crash.sh`
 - Run immediately on any exit code -1 crash
-- Distinguishes OOM from SIGHUP automatically
+- Distinguishes OOM, SIGHUP, and CPU Saturation automatically
 
 ### Layer 1: Prevention
 
@@ -353,6 +432,26 @@ kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig \
   --sort-by=.metadata.creationTimestamp | tail -5
 ```
 
+**CPU Saturation Monitoring**
+
+```bash
+# Check current system load
+uptime
+
+# Check if CPU is saturated (>80% load)
+LOAD=$(awk '{print $1}' /proc/loadavg)
+CORES=$(nproc)
+LOAD_PERCENT=$(awk "BEGIN {printf \"%.0f\", ($LOAD/$CORES)*100}")
+if [ "$LOAD_PERCENT" -gt 80 ]; then
+    echo "⚠️  WARNING: CPU at ${LOAD_PERCENT}% utilization"
+fi
+
+# Monitor load trend over time
+watch -n 5 uptime
+```
+
+For fleet-level awareness, monitor load averages across all workers before dispatching new work.
+
 ### Layer 3: Early Detection
 
 **Pattern Recognition**
@@ -362,6 +461,7 @@ Review crash alert bead creation logic for systematic pattern detection:
 - >3 crashes on same bead in 1 hour → Escalate as systematic pattern
 - Multiple workers with crashes in same time window → Fleet-wide event
 - Repository bloat detected → Immediate recovery action
+- CPU saturation pattern (healthy repo + high load + memory OK) → CPU saturation crash, no remediation needed
 
 ### Layer 4: Response
 
@@ -378,6 +478,13 @@ For SIGHUP cascade events:
 - Document in central incident log
 - Coordinate with fleet manager
 - Avoid duplicate investigations across workers
+
+For CPU saturation events:
+- Monitor CPU load across fleet before dispatching new work
+- Use pre-dispatch CPU load check: `./scripts/check-cpu-load.sh` (returns exit code 1 when CPU is saturated)
+- Implement load-aware throttling (pause dispatch when >80% CPU utilization)
+- Coordinate retry timing across workers (avoid stampede retry during saturation)
+- Share load state across all workers via shared monitoring
 
 ---
 
@@ -413,6 +520,24 @@ For SIGHUP cascade events:
    - Were no repository actions taken?
    - Was fleet coordination effective?
    - Were duplicate investigations avoided?
+
+**For CPU Saturation Crashes:**
+
+1. **Was the event documented correctly?**
+   - Was classification accurate (distinguished from OOM/SIGHUP)?
+   - Was CPU load at crash time captured?
+   - Were fleet-wide impacts identified?
+   - Was repository health confirmed (not misclassified as OOM)?
+
+2. **Was response appropriate?**
+   - Were no code changes attempted?
+   - Was automatic retry mechanism validated?
+   - Was the transient nature of the event communicated?
+
+3. **Was monitoring effective?**
+   - Was CPU load monitored during the crash window?
+   - Were load trends tracked before/during/after the event?
+   - Was the correlation between load and crashes documented?
 
 ### Adjust Thresholds
 
@@ -470,6 +595,15 @@ tail -30 .beads/logs/repo-health.log | grep "Repository Health"
 4. ✅ Fleet-level coordination procedures established
 5. ✅ Zero misattribution to task failures
 
+### For CPU Saturation Crashes
+
+1. ✅ All CPU saturation crashes classified correctly (healthy repo + high load + memory OK)
+2. ✅ CPU saturation events documented as transient resource events
+3. ✅ No code changes attempted for CPU saturation crashes
+4. ✅ Automatic retry mechanism validated (succeeds when load decreases)
+5. ✅ CPU load monitoring integrated into fleet operations
+6. ✅ Zero misclassification as OOM or SIGHUP when CPU saturation is the cause
+
 ---
 
 ## Emergency Contacts
@@ -492,8 +626,9 @@ tail -30 .beads/logs/repo-health.log | grep "Repository Health"
 ```bash
 # Always run first!
 ./scripts/classify-signal-crash.sh
-# Exit code 0 = SIGHUP (external event)
+# Exit code 0 = SIGHUP (external event) or CPU Saturation (transient resource event)
 # Exit code 1 = OOM (repository issue)
+# Output will specify which classification
 ```
 
 ### Recovery Script
@@ -512,6 +647,16 @@ tail -30 .beads/logs/repo-health.log | grep "Repository Health"
 
 # Review historical health data
 cat .beads/logs/repo-health.log
+```
+
+### CPU Load Check (Pre-Dispatch)
+
+```bash
+# Check CPU load before dispatching heavy operations
+./scripts/check-cpu-load.sh
+# Exit code 0 = OK to dispatch
+# Exit code 1 = CPU saturated (>=90% utilization), defer dispatch
+# Exit code 0 with warning = CPU elevated (>=80% but <90%), proceed with caution
 ```
 
 ### Bead Commands

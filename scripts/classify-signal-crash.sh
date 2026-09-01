@@ -66,10 +66,28 @@ main() {
     echo "Total Memory: ${MEM_TOTAL_MB}MB"
     echo ""
 
+    # Check 3: CPU load (NEW - for CPU saturation detection)
+    log_section "CPU Load Check"
+    CPU_CORES=$(nproc)
+    LOAD_1MIN=$(awk '{print $1}' /proc/loadavg)
+    LOAD_5MIN=$(awk '{print $2}' /proc/loadavg)
+    LOAD_15MIN=$(awk '{print $3}' /proc/loadavg)
+
+    LOAD_PERCENT_1=$(awk "BEGIN {printf \"%.1f\", ($LOAD_1MIN/$CPU_CORES)*100}")
+    LOAD_PERCENT_5=$(awk "BEGIN {printf \"%.1f\", ($LOAD_5MIN/$CPU_CORES)*100}")
+    LOAD_PERCENT_15=$(awk "BEGIN {printf \"%.1f\", ($LOAD_15MIN/$CPU_CORES)*100}")
+
+    echo "CPU Cores: $CPU_CORES"
+    echo "Load Average (1min): $LOAD_1MIN (${LOAD_PERCENT_1}%)"
+    echo "Load Average (5min): $LOAD_5MIN (${LOAD_PERCENT_5}%)"
+    echo "Load Average (15min): $LOAD_15MIN (${LOAD_PERCENT_15}%)"
+    echo ""
+
     # Classification logic
     log_section "Diagnostic Assessment"
 
     BLOAT_DETECTED=0
+    CPU_SATURATED=0
     OOM_LIKELIHOOD="LOW"
     CLASSIFICATION=""
 
@@ -93,9 +111,17 @@ main() {
         OOM_LIKELIHOOD="HIGH"
     fi
 
+    # Check for CPU saturation (load average > 80% of cores)
+    LOAD_HIGH=$(awk "BEGIN {print ($LOAD_1MIN > ($CPU_CORES * 0.8)) ? \"1\" : \"0\"}")
+    if [ "$LOAD_HIGH" -eq 1 ]; then
+        log_warn "High CPU load detected (${LOAD_PERCENT_1}% utilization > 80% threshold)"
+        CPU_SATURATED=1
+    fi
+
     echo ""
     log_section "Classification Result"
 
+    # Priority 1: Check for repository bloat/OOM (highest priority)
     if [ "$BLOAT_DETECTED" -eq 1 ] || [ "$OOM_LIKELIHOOD" = "HIGH" ]; then
         CLASSIFICATION="OOM_SIGKILL"
         log_error "CLASSIFICATION: LIKELY OOM SIGKILL (Signal 9)"
@@ -112,9 +138,38 @@ main() {
         echo "     git rev-list --objects --all | git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' | awk '/^blob/ {print substr(\$0,6)}' | sort -nk2 | tail -10"
         echo ""
         exit 1
+
+    # Priority 2: Check for CPU saturation (transient resource issue)
+    elif [ "$CPU_SATURATED" -eq 1 ]; then
+        CLASSIFICATION="CPU_SATURATION"
+        log_warn "CLASSIFICATION: LIKELY CPU SATURATION CRASH (SIGKILL/SIGTERM due to resource pressure)"
+        echo ""
+        echo "Root Cause: High CPU load (>${LOAD_PERCENT_1}%) causing system resource management intervention"
+        echo ""
+        echo "Characteristics:"
+        echo "  - Repository is healthy (${REPO_SIZE_MB}MB, ${LOOSE_OBJECTS} loose objects)"
+        echo "  - Memory is available (${MEM_PERCENT}%)"
+        echo "  - CPU is saturated (load average ${LOAD_1MIN} on ${CPU_CORES} cores)"
+        echo ""
+        echo "Recommended Actions:"
+        echo "  1. NO CODE REMEDIATION NEEDED - This is a transient resource event"
+        echo "  2. Document as CPU saturation crash (similar to SIGHUP cascade)"
+        echo "  3. Verify automatic retry will succeed when CPU pressure decreases"
+        echo "  4. Check for fleet-wide crashes in same time window (system-wide load event)"
+        echo ""
+        echo "Additional Verification Steps:"
+        echo "  - Review system load history: uptime"
+        echo "  - Check for concurrent heavy processes: top -b -n 1 | head -20"
+        echo "  - Document in bead notes as transient CPU saturation event"
+        echo ""
+        exit 0  # Exit 0 because no remediation needed (similar to SIGHUP)
+
+    # Priority 3: Default to SIGHUP cascade (external event)
     else
         CLASSIFICATION="SIGHUP_CASCADE"
         log_info "Repository is healthy (${REPO_SIZE_MB}MB, ${LOOSE_OBJECTS} loose objects)"
+        log_info "Memory is available (${MEM_PERCENT}%)"
+        log_info "CPU load is normal (${LOAD_PERCENT_1}%)"
         log_info "CLASSIFICATION: LIKELY SIGHUP CASCADE (Signal 1)"
         echo ""
         echo "Root Cause: External system process (systemd/fleet manager) termination"
