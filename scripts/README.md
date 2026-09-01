@@ -173,6 +173,75 @@ fi
 
 **Documentation:** See `docs/crash-mitigation-strategies.md` (Proposal 4.3)
 
+### Resource Monitor (`resource-monitor.sh`)
+
+Monitors system resources and generates alerts before crashes occur.
+
+**Quick Start:**
+```bash
+# Single resource check
+./scripts/resource-monitor.sh
+
+# Continuous monitoring (5-minute intervals)
+./scripts/resource-monitor.sh --continuous
+
+# Custom interval (1 minute)
+./scripts/resource-monitor.sh --continuous --interval 60
+```
+
+**What It Monitors:**
+1. **Memory Availability** - Alert at 10GB warning, 5GB critical
+2. **Disk Space** - Alert at 30GB warning, 20GB critical
+3. **CPU Load** - Alert at 10 warning, 15 critical
+4. **Memory Pressure** - Alert at 70% warning, 80% critical (OOM threshold)
+
+**Alert Logs:**
+- Resource alerts: `.beads/logs/resource-alerts.log`
+- Metrics data: `.beads/logs/resource-metrics.log`
+
+**Usage Pattern:**
+```bash
+# Continuous monitoring via cron
+*/5 * * * * /home/coding/domain-check/scripts/resource-monitor.sh --continuous --interval 300
+```
+
+**Documentation:** See `docs/crash-monitoring-implementation.md` (Proposal 4.2)
+
+### Service Monitor (`service-monitor.sh`)
+
+Monitors external service availability and detects outages.
+
+**Quick Start:**
+```bash
+# Single service check
+./scripts/service-monitor.sh
+
+# Continuous monitoring (1-minute intervals)
+./scripts/service-monitor.sh --continuous
+
+# Verbose mode with detailed output
+./scripts/service-monitor.sh --verbose
+```
+
+**What It Monitors:**
+1. **Inference Gateway** - https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health
+2. **Argo Workflows** - https://argo-ci.ardenone.com
+3. **ArgoCD API** - https://argocd-ro-ardenone-manager-ts.ardenone.com:8444
+
+**Features:**
+- HTTP status code checking with configurable timeout
+- Response time tracking
+- Consecutive failure detection (3 failures = alert)
+- Alert logging to `.beads/logs/service-alerts.log`
+
+**Usage Pattern:**
+```bash
+# Continuous monitoring via cron
+* * * * * /home/coding/domain-check/scripts/service-monitor.sh --continuous --interval 60
+```
+
+**Documentation:** See `docs/crash-monitoring-implementation.md` (Proposal 4.1)
+
 ## Usage Examples
 
 ### Daily Maintenance
@@ -203,6 +272,24 @@ fi
 ```bash
 # Verify system health before starting agent work
 ./scripts/preflight-health-check.sh && ./scripts/crash-pattern-detection.sh
+
+# Check resource status
+./scripts/resource-monitor.sh
+
+# Verify service availability
+./scripts/service-monitor.sh
+```
+
+### Continuous Monitoring Setup
+```bash
+# Resource monitoring (every 5 minutes)
+*/5 * * * * /home/coding/domain-check/scripts/resource-monitor.sh --continuous --interval 300
+
+# Service monitoring (every 1 minute)
+* * * * * /home/coding/domain-check/scripts/service-monitor.sh --continuous --interval 60
+
+# Crash pattern detection (hourly)
+0 * * * * /home/coding/domain-check/scripts/crash-pattern-detection.sh --alert --since "1hour"
 ```
 
 ## Why Not `git gc --aggressive`?
