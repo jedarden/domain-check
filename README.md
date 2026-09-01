@@ -497,3 +497,5 @@ MIT
 Part of [jedarden.com](https://jedarden.com)
 
 *This GitHub repo is a read-only mirror of git.ardenone.com/jedarden/domain-check — issues and PRs are welcome here either way.*
+# GitHub Mirror Test
+Testing server-side push mirror from Forgejo to GitHub - Tue Sep  1 11:24:37 AM EDT 2026
