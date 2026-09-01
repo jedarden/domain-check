@@ -4,8 +4,8 @@
 
 set -euo pipefail
 
-# Configuration: Maximum file size in bytes (10MB default)
-MAX_SIZE=${MAX_SIZE:-$((10 * 1024 * 1024))}
+# Configuration: Maximum file size in bytes (50MB default)
+MAX_SIZE=${MAX_SIZE:-$((50 * 1024 * 1024))}
 
 # Get list of staged files that are being added or copied
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACR 2>/dev/null || true)
