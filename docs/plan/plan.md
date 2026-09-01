@@ -1231,7 +1231,7 @@ This project uses Architecture Decision Records (ADRs) to document significant a
 
 ### ADR-001: Domain Watch — Webhook-Based Notifications for Availability Changes
 
-**Status:** Accepted  
+**Status:** Accepted
 **Date:** 2026-07-20
 
 This ADR documents the decision to add a Domain Watch capability that allows users to register webhook URLs for notifications when a domain's availability changes from taken to available.
@@ -1246,3 +1246,23 @@ This ADR documents the decision to add a Domain Watch capability that allows use
 - Requires persistent volume (PVC) for production deployment
 
 For the complete ADR with context, alternatives considered, and consequences, see: [docs/adr/001-domain-watch-webhook-notifications.md](../adr/001-domain-watch-webhook-notifications.md)
+
+## Incident Response & Crash Analysis
+
+### Crash Incident Investigation (2026-08-14 to 2026-08-28)
+
+A comprehensive investigation of perceived crashes revealed **zero actual crashes** affecting domain-check operations. All investigated incidents were either system-wide SIGHUP cascade events, workflow issues during bead closing, or false positive alerts.
+
+**Key Findings:**
+- No OOM events involving domain-check processes
+- No git gc failures (all operations completed successfully)
+- Repository integrity maintained throughout
+- All crashes were external termination (SIGHUP) or workflow issues
+
+**Comprehensive Documentation:**
+- **[Crash Incident Summary](../research/crash-incident-summary-domain-check-2026-08-26.md)** - Complete incident timeline and analysis
+- **[Crash Pattern Analysis](../crash-pattern-analysis-2026-08-26.md)** - System-wide crash patterns and signal sources
+- **[Git GC Mitigation Strategy](../git-gc-mitigation-strategy.md)** - Detailed mitigation strategy with implementation timeline
+- **[Crash Data Bundle: bf-173o7e](../crash-data-bundle-bf-173o7e.md)** - Specific incident details and trace analysis
+
+**Status:** ✅ RESOLVED - Domain Check is healthy with no actual crashes
