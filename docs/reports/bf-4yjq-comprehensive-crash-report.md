@@ -476,6 +476,10 @@ The crashes represent a **workspace-wide infrastructure issue** that affects all
 **Report Quality:** HIGH - Complete dataset with comprehensive analysis  
 **Confidence Level:** HIGH - Root cause clearly identified, recommendations actionable
 
+**Related Documentation (Cross-References):**
+- `docs/crash-artifacts-bf-4yjq.md` - Complete artifacts catalog and crash evidence (August 17, 2026)
+- `docs/crashes/bf-4yjq-crash-report.md` - Updated comprehensive report with resolution status (September 1, 2026)
+
 **Report Version:** 1.0  
 **Classification:** Technical Investigation - Infrastructure Failure  
 **Distribution:** Workspace-wide awareness required for remediation

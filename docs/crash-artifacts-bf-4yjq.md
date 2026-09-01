@@ -241,7 +241,9 @@ All acceptance criteria for the crash artifacts gathering task have been met:
 
 ## Artifacts Catalog
 
-### Documentation
+### Related Documentation (Cross-References)
+- `docs/reports/bf-4yjq-comprehensive-crash-report.md` - Comprehensive crash investigation and analysis (August 14, 2026)
+- `docs/crashes/bf-4yjq-crash-report.md` - Complete crash report with resolution status (September 1, 2026)
 - `bf-5e1jao-investigation-summary.md` - Complete investigation report
 - `docs/crash-artifacts-bf-4yjq.md` - This artifacts catalog
 
