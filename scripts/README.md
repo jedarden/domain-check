@@ -2,6 +2,66 @@
 
 This directory contains utility scripts for the domain-check project.
 
+## Pre-flight Health Check (`preflight-health-check.sh`)
+
+**Purpose:** Prevent agent crashes from external service failures and resource exhaustion by verifying system health before starting tasks.
+
+**Quick Start:**
+```bash
+# Standard health check (fails if any check fails)
+./scripts/preflight-health-check.sh
+
+# Verbose mode with detailed output
+./scripts/preflight-health-check.sh --verbose
+
+# Monitoring mode (exit 0 even if checks fail)
+./scripts/preflight-health-check.sh --warn-only
+```
+
+**What It Checks:**
+1. **Inference Gateway Availability** - Verifies external AI service is reachable
+2. **Memory Availability** - Ensures minimum RAM available (default: 10GB)
+3. **Disk Space** - Checks sufficient free space (default: 20GB)
+4. **CPU Load** - Verifies system load is acceptable (default: <10 on 1min average)
+5. **Git Repository Health** - Validates repository integrity
+
+**Exit Codes:**
+- `0` - All checks passed (or `--warn-only` mode)
+- `1` - One or more checks failed
+- `2` - Invalid arguments
+
+**Environment Variables:**
+```bash
+# Inference gateway health endpoint
+export INFERENCE_GATEWAY_URL="https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health"
+
+# Minimum available memory in GB
+export MIN_AVAILABLE_MEM_GB=10
+
+# Minimum disk space in GB
+export MIN_DISK_FREE_GB=20
+
+# Maximum CPU load (1-minute average)
+export MAX_CPU_LOAD=10
+
+# HTTP timeout for gateway check
+export CURL_TIMEOUT=5
+```
+
+**Usage Pattern:**
+```bash
+# Before starting any agent task
+if ! ./scripts/preflight-health-check.sh; then
+  echo "System not healthy - deferring task"
+  exit 1
+fi
+
+# Task proceeds knowing resources are sufficient
+./run-agent-task.sh
+```
+
+**Documentation:** See `docs/crash-mitigation-strategies.md` (Proposal 1.3)
+
 ## Git Maintenance
 
 ### Safe Git GC (`safe-git-gc.sh`)

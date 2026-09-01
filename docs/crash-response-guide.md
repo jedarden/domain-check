@@ -107,10 +107,22 @@ uptime                     # Load average
 **Pattern:** Inference gateway or external service unavailable
 
 **Checklist:**
+- [ ] **Check if preflight health check was run**
+  ```bash
+  # Review health check log
+  cat /tmp/preflight-health-check.log | tail -50
+  
+  # If preflight check was skipped → Preventable crash
+  # If preflight check failed → Expected deferral (not a crash)
+  # If preflight check passed → Unexpected service failure
+  ```
 - [ ] Check service availability
   ```bash
   # For inference gateway (zai provider):
   curl -f --max-time 5 https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health || echo "Gateway down"
+  
+  # Or use the preflight check script:
+  ./scripts/preflight-health-check.sh --verbose
   ```
 - [ ] Identify failure point
   ```bash
@@ -329,11 +341,57 @@ systemd-run --scope --quiet \
 
 ### Pre-Flight Health Checks
 
-Before starting agent tasks that depend on external services:
+**IMPLEMENTED:** Pre-flight health check script available at `scripts/preflight-health-check.sh`
+
+**Before starting agent tasks that depend on external services, run:**
+
+```bash
+# Standard pre-flight check
+./scripts/preflight-health-check.sh
+
+# Verbose mode for detailed diagnostics
+./scripts/preflight-health-check.sh --verbose
+
+# Warn-only mode for monitoring
+./scripts/preflight-health-check.sh --warn-only
+```
+
+**What the script checks:**
+- Inference gateway availability
+- Memory availability (configurable, default 10GB)
+- Disk space (configurable, default 20GB)
+- CPU load (configurable, default <10 on 1min average)
+- Git repository health
+
+**Exit codes:**
+- `0` - All checks passed
+- `1` - One or more checks failed
+- `2` - Invalid arguments
+
+**Usage pattern:**
+```bash
+# Before starting agent task
+if ! ./scripts/preflight-health-check.sh; then
+  echo "ERROR: System health check failed"
+  echo "Task deferred until system is healthy"
+  exit 1
+fi
+
+# Task proceeds knowing resources are sufficient
+./agent-task.sh
+```
+
+**See also:** `docs/crash-prevention-preflight-checks.md` (implementation documentation)
+
+---
+
+**Alternative: Manual Health Checks**
+
+If you need to customize the checks, here's the manual approach:
 
 ```bash
 #!/bin/bash
-# Pre-flight health check script
+# Manual pre-flight health check
 
 # Check inference gateway
 GATEWAY_URL="https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health"
