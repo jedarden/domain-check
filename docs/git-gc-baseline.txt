@@ -1,20 +1,30 @@
 # Git Repository Baseline Metrics (Before git gc)
 
 Repository: domain-check
-Timestamp: Wednesday, August 26, 2026 at 12:15:57 AM EDT
+Timestamp: Tuesday, September 1, 2026 at 18:49:02 PM EDT
 
 ## Repository Size
-- Total .git directory: 137M
+- Total .git directory: 91M
 
 ## Loose Objects
-- Count: 11
-- Size: 44.00 KiB
+- Count: 17
+- Size: 48.00 KiB
 - Prune-packable: 0
 
 ## Pack Files
-- Pack count: 1
-- In-pack objects: 6,863
-- Pack size: 136.01 MiB
+- Pack count: 2
+- In-pack objects: 9,404
+- Pack size: 89.04 MiB
+
+## Pack File Details
+- Primary pack: pack-437818e2ad1cb9ef088d419224e5d9330e83c264.pack (89M)
+  - Index size: 260K
+  - Bitmap size: 56K
+  - Reverse index size: 40K
+- Secondary pack: pack-4092b4da832cb7c9fa72e40c70d03c08c142f856.pack (16K)
+  - Index size: 4.0K
+  - Reverse index size: 4.0K
+  - Mtimes size: 4.0K
 
 ## Garbage
 - Garbage count: 0
@@ -22,11 +32,18 @@ Timestamp: Wednesday, August 26, 2026 at 12:15:57 AM EDT
 
 ## Summary
 This baseline measurement captures the repository state before running git garbage collection.
-The repository has a moderate number of loose objects (11) and a single pack file containing
-6,863 objects, taking up most of the repository size (136.01 MiB of 137M total).
+The repository has grown in loose objects (17) since the last baseline and now contains 2 pack files
+with 9,404 total objects, occupying 89.04 MiB of the 91M total repository size.
+
+## Comparison with Previous Baseline (2026-08-26)
+- Repository size: 91M (down from 137M = -33.6% reduction)
+- Loose objects: 17 (up from 11 = +54.5% increase)
+- Pack files: 2 (up from 1 = doubled)
+- In-pack objects: 9,404 (up from 6,863 = +37.0% increase)
+- Pack size: 89.04 MiB (down from 136.01 MiB = -34.5% reduction)
 
 ## Next Steps
 After git gc is run, compare against this baseline to measure improvement in:
 - Total repository size
 - Loose object count and size
-- Pack file organization
+- Pack file organization and compression
