@@ -123,6 +123,56 @@ Monitor progress and resource usage of git gc operations.
 - ✅ Repository statistics
 - ✅ Recent log entries
 
+## Crash Prevention
+
+### Crash Pattern Detection (`crash-pattern-detection.sh`)
+
+Detects systematic crash patterns that indicate infrastructure events rather than isolated task failures.
+
+**Quick Start:**
+```bash
+# Check last 24 hours for crash patterns
+./scripts/crash-pattern-detection.sh
+
+# Analyze different time periods
+./scripts/crash-pattern-detection.sh --hours=48
+
+# Generate detailed report
+./scripts/crash-pattern-detection.sh --verbose --output=crash-report.txt
+```
+
+**What It Detects:**
+1. **High Crash Rate** - Alerts if crashes/hour exceeds threshold (default: 5/hour)
+2. **Crash Clustering** - Identifies concentrated crash events indicating infrastructure issues
+3. **System Health** - Checks current memory, CPU, and disk health
+
+**Exit Codes:**
+- `0` - No concerning patterns detected
+- `1` - Systematic crash pattern detected (take action)
+- `2` - Error in execution
+
+**Environment Variables:**
+```bash
+# Analysis time window in hours
+export HOURS=24
+
+# Crash rate threshold (crashes per hour)
+export CRASH_RATE_THRESHOLD=5
+```
+
+**Integration with Monitoring:**
+```bash
+# Run hourly via cron
+0 * * * * /home/coding/domain-check/scripts/crash-pattern-detection.sh --quiet
+
+# Alert if pattern detected
+if ! ./scripts/crash-pattern-detection.sh --quiet; then
+  echo "WARNING: Systematic crash pattern detected" | mail -s "Alert" admin@example.com
+fi
+```
+
+**Documentation:** See `docs/crash-mitigation-strategies.md` (Proposal 4.3)
+
 ## Usage Examples
 
 ### Daily Maintenance
@@ -132,6 +182,9 @@ Monitor progress and resource usage of git gc operations.
 
 # Monitor progress
 ./scripts/safe-git-gc-monitor.sh --watch
+
+# Check for crash patterns
+./scripts/crash-pattern-detection.sh
 ```
 
 ### After Large Changes
@@ -144,6 +197,12 @@ Monitor progress and resource usage of git gc operations.
 ```bash
 # Resume from last checkpoint
 ./scripts/safe-git-gc.sh --resume
+```
+
+### Health Checks Before Tasks
+```bash
+# Verify system health before starting agent work
+./scripts/preflight-health-check.sh && ./scripts/crash-pattern-detection.sh
 ```
 
 ## Why Not `git gc --aggressive`?
