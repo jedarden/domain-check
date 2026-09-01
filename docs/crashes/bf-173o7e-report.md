@@ -579,16 +579,296 @@ The git gc task completed successfully. The failure was in the bead closing work
 
 ---
 
-**Report Status:** ✅ COMPLETE  
-**Confidence Level:** HIGH  
-**Classification:** FALSE POSITIVE - Administrative workflow failure  
-**Recommendation:** Implement infrastructure and NEEDLE system fixes, no domain-check code changes required  
+**Report Status:** ✅ COMPLETE
+**Confidence Level:** HIGH
+**Classification:** FALSE POSITIVE - Administrative workflow failure
+**Recommendation:** Implement infrastructure and NEEDLE system fixes, no domain-check code changes required
 **Evidence:** Complete trace files, metadata, code review, system state analysis
 
 ---
 
-**Report Completed:** 2026-09-01  
-**Investigation Task:** domchk-2ec44c09  
-**Bead ID:** bf-173o7e  
-**All Artifacts:** Located and documented  
+**Report Completed:** 2026-09-01
+**Investigation Task:** domchk-2ec44c09
+**Bead ID:** bf-173o7e
+**All Artifacts:** Located and documented
 **Ready for:** Infrastructure and tool improvements implementation
+
+---
+
+## 14. Remediation Strategy
+
+Based on comprehensive crash analysis of both bf-173o7e (false positive) and domchk-c9641ac5 (service availability), this section provides ranked remediation options with implementation guidance.
+
+### Remediation Options (Ranked by Priority)
+
+#### 🔴 PRIORITY 1: NEEDLE System Improvements (High Impact, Medium Complexity)
+
+**Option 1.1: Crash Pattern Classification Engine**
+- **Description:** Implement pre-alert classification to distinguish technical failures from administrative workflow failures
+- **Implementation Complexity:** Medium (2-3 days)
+- **Risk:** Low - read-only classification, no production changes
+- **Impact:** Reduces false positive investigations by ~40%
+- **Actions:**
+  1. Create crash pattern classifier that reads metadata.json exit codes
+  2. Flag `error_max_turns` as "administrative timeout, not crash"
+  3. Check for task completion markers (commits, successful command outputs)
+  4. Suppress alerts for post-completion terminations
+- **Estimated Effort:** 16-24 hours
+- **Recommended:** ✅ YES - Highest ROI, immediate impact
+
+**Option 1.2: Alert Deduplication System**
+- **Description:** Implement fingerprinting to prevent 30+ duplicate investigation reports
+- **Implementation Complexity:** Medium (2-3 days)
+- **Risk:** Low - additive feature, no existing workflow disruption
+- **Impact:** Eliminates ~60% of investigation workload (duplicates)
+- **Actions:**
+  1. Generate crash fingerprint from (bead_id, exit_code, crash_timestamp)
+  2. Maintain resolved-crash cache with TTL (7 days)
+  3. Check cache before creating new investigation beads
+  4. Auto-link new alerts to existing investigation
+- **Estimated Effort:** 16-24 hours
+- **Recommended:** ✅ YES - High ROI, addresses systematic duplicate issue
+
+**Option 1.3: Work Completion Detection**
+- **Description:** Detect successful task completion before generating crash alerts
+- **Implementation Complexity:** Medium (3-4 days)
+- **Risk:** Low - defensive check, no system state mutation
+- **Impact:** Catches post-completion false positives immediately
+- **Actions:**
+  1. Check for git commits after crash timestamp
+  2. Parse trace.jsonl for successful command outputs
+  3. Validate repository state if git operation was task
+  4. Flag as "potential false positive" if work artifacts present
+- **Estimated Effort:** 24-32 hours
+- **Recommended:** ✅ YES - Critical for distinguishing true crashes
+
+---
+
+#### 🟡 PRIORITY 2: Bead Closing Workflow Improvements (Medium Impact, Low Complexity)
+
+**Option 2.1: Enhanced Bead Close Error Messages**
+- **Description:** Provide clear, actionable error messages when bead close fails
+- **Implementation Complexity:** Low (4-8 hours)
+- **Risk:** Very Low - string changes only
+- **Impact:** Reduces agent troubleshooting loops, prevents max_turns exhaustion
+- **Actions:**
+  1. Modify bead-rs close command to output specific failure reasons
+  2. Distinguish between: lock conflict, validation failure, state error
+  3. Provide suggested remediation in error message
+  4. Log detailed close attempt history
+- **Estimated Effort:** 4-8 hours
+- **Recommended:** ✅ YES - Quick win, prevents future false positives
+
+**Option 2.2: Fallback Bead Closing Strategies**
+- **Description:** Implement alternative closing methods when standard close fails
+- **Implementation Complexity:** Low-Medium (8-16 hours)
+- **Risk:** Low - defensive fallback, no breaking changes
+- **Impact:** Provides recovery path for transient lock/state issues
+- **Actions:**
+  1. Implement --force-close flag (bypass validation, force state change)
+  2. Implement direct database update when CLI fails
+  3. Retry with exponential backoff (3 attempts)
+  4. Log all fallback attempts for audit
+- **Estimated Effort:** 8-16 hours
+- **Recommended:** ⚠️ CONSIDER - Useful but error messaging is higher priority
+
+**Option 2.3: Dynamic Turn Limits**
+- **Description:** Adjust max_turns based on task complexity indicators
+- **Implementation Complexity:** Medium (16-24 hours)
+- **Risk:** Medium - requires heuristics testing, may cause runaway tasks
+- **Impact:** Prevents max_turns exhaustion for complex multi-step workflows
+- **Actions:**
+  1. Estimate task complexity from description keywords
+  2. Assign turn budgets: Simple (30), Medium (50), Complex (75)
+  3. Implement pre-checkpoint turn usage monitoring
+  4. Warn agent at 80% of budget
+- **Estimated Effort:** 16-24 hours
+- **Recommended:** ⚠️ DEFER - Higher risk, lower priority than crash classification
+
+---
+
+#### 🟢 PRIORITY 3: Inference Gateway Resilience (Medium Impact, Medium Complexity)
+
+**Option 3.1: Exponential Backoff Retry for 503 Errors**
+- **Description:** Implement retry logic with exponential backoff for HTTP 503 errors
+- **Implementation Complexity:** Medium (16-24 hours)
+- **Risk:** Medium - requires timeout tuning, may delay legitimate failures
+- **Impact:** Prevents service availability crashes from terminating tasks
+- **Actions:**
+  1. Detect 503 errors from inference gateway responses
+  2. Implement retry loop: 1s, 2s, 4s, 8s, 16s delays (5 attempts)
+  3. Log retry attempts with jitter values
+  4. Fail after max retries with clear error message
+- **Estimated Effort:** 16-24 hours
+- **Recommended:** ✅ YES - Addresses domchk-c9641ac5 crash pattern
+
+**Option 3.2: Gateway Health Pre-Flight Checks**
+- **Description:** Implement quick health check before starting long-running tasks
+- **Implementation Complexity:** Low (8-12 hours)
+- **Risk:** Very Low - read-only check, no task state mutation
+- **Impact:** Catches gateway issues before task execution begins
+- **Actions:**
+  1. Implement gateway health probe (HEAD request to /healthz)
+  2. Run pre-flight check at task start
+  3. If unhealthy, defer task with "service unavailable" message
+  4. Add health status to bead metadata
+- **Estimated Effort:** 8-12 hours
+- **Recommended:** ✅ YES - Quick defensive check, prevents wasted compute
+
+**Option 3.3: Gateway Monitoring and Alerting**
+- **Description:** Set up dedicated monitoring for inference gateway availability
+- **Implementation Complexity:** Low (8-16 hours)
+- **Risk:** Very Low - monitoring only, no production changes
+- **Impact:** Early detection of gateway degradation before crashes occur
+- **Actions:**
+  1. Deploy gateway health checker (cron: every 30s)
+  2. Alert on 503 rate > 10% or consecutive failures
+  3. Track gateway availability metrics over time
+  4. Correlate gateway outages with crash spikes
+- **Estimated Effort:** 8-16 hours
+- **Recommended:** ✅ YES - Operational visibility, proactive detection
+
+---
+
+#### 🔵 PRIORITY 4: Infrastructure Monitoring (Low Impact, Low Complexity)
+
+**Option 4.1: Memory Pressure Preemptive Alerting**
+- **Description:** Alert at 70% memory usage instead of waiting for OOM
+- **Implementation Complexity:** Low (4-8 hours)
+- **Risk:** Very Low - monitoring only
+- **Impact:** Provides early warning for resource pressure events
+- **Actions:**
+  1. Deploy memory pressure monitor (cron: every 1m)
+  2. Alert at 70% usage threshold (warn), 85% (critical)
+  3. Track memory trends over time
+  4. Correlate with crash patterns
+- **Estimated Effort:** 4-8 hours
+- **Recommended:** ✅ YES - Operational hygiene, quick implementation
+
+**Option 4.2: CPU Saturation Detection**
+- **Description:** Monitor load averages and alert on sustained saturation
+- **Implementation Complexity:** Low (4-8 hours)
+- **Risk:** Very Low - monitoring only
+- **Impact:** Early detection of CPU resource constraints
+- **Actions:**
+  1. Monitor 1m/5m/15m load averages
+  2. Alert on sustained >80% CPU utilization (5+ minutes)
+  3. Track CPU saturation events
+  4. Correlate with crash patterns
+- **Estimated Effort:** 4-8 hours
+- **Recommended:** ✅ YES - Complements memory monitoring
+
+---
+
+### Recommended Implementation Path
+
+#### Phase 1: Quick Wins (Week 1) - 32-48 hours total
+1. ✅ **Bead Close Error Messages** (4-8 hours) - Immediate impact
+2. ✅ **Memory Pressure Alerting** (4-8 hours) - Operational baseline
+3. ✅ **CPU Saturation Detection** (4-8 hours) - Complete monitoring picture
+4. ✅ **Gateway Pre-Flight Checks** (8-12 hours) - Prevent service crashes
+
+**Total Effort:** 20-36 hours
+**Impact:** Prevents 40% of false positives + operational visibility
+
+#### Phase 2: Core NEEDLE Improvements (Week 2-3) - 56-88 hours total
+1. ✅ **Crash Pattern Classification** (16-24 hours) - Highest ROI
+2. ✅ **Alert Deduplication** (16-24 hours) - Eliminates duplicate workload
+3. ✅ **Work Completion Detection** (24-32 hours) - False positive filtering
+
+**Total Effort:** 56-80 hours
+**Impact:** Systematic reduction of false positive investigations by ~80%
+
+#### Phase 3: Resilience Features (Week 4) - 24-40 hours total
+1. ✅ **Gateway 503 Retry Logic** (16-24 hours) - Service resilience
+2. ✅ **Gateway Monitoring** (8-16 hours) - Operational visibility
+
+**Total Effort:** 24-40 hours
+**Impact:** Prevents service availability crashes
+
+---
+
+### Risk Assessment Summary
+
+| Option | Risk Level | Risk Mitigation | Rollback Plan |
+|--------|------------|------------------|----------------|
+| 1.1 Crash Classification | Low | Read-only analysis, staging validation | Disable classification flag |
+| 1.2 Alert Deduplication | Low | Add cache bypass flag for manual override | Clear dedupe cache |
+| 1.3 Work Completion Detection | Low | Conservative heuristics, manual override | Disable completion check |
+| 2.1 Error Messages | Very Low | String changes only, no logic | Revert string changes |
+| 2.2 Fallback Close | Low | Audit logging, manual review required | Disable fallback modes |
+| 2.3 Dynamic Turn Limits | Medium | Hard cap at 100 turns, monitoring | Revert to static 30 |
+| 3.1 503 Retry | Medium | Max retry cap, timeout guards | Disable retry logic |
+| 3.2 Pre-Flight Checks | Very Low | Skip check via flag | Bypass pre-flight |
+| 3.3 Gateway Monitoring | Very Low | Monitoring only, no control | Disable alerts |
+| 4.1 Memory Alerts | Very Low | Alert only, no action | Disable alerts |
+| 4.2 CPU Monitoring | Very Low | Alert only, no action | Disable alerts |
+
+---
+
+### Trade-offs and Considerations
+
+**High Priority (Implement First):**
+- **Crash Pattern Classification (1.1)** - Highest ROI, addresses root cause of 40% false positives
+- **Alert Deduplication (1.2)** - Eliminates massive duplicate investigation workload
+- **Bead Error Messages (2.1)** - Quick win, prevents troubleshooting loops
+
+**Medium Priority (Implement Second):**
+- **Work Completion Detection (1.3)** - Completes false positive filtering system
+- **503 Retry Logic (3.1)** - Addresses service availability crashes
+- **Gateway Monitoring (3.3)** - Operational visibility
+
+**Lower Priority (Defer or Skip):**
+- **Dynamic Turn Limits (2.3)** - Higher risk, complexity not justified by benefit
+- **Fallback Close Strategies (2.2)** - Useful but error messaging is more impactful
+
+---
+
+### Success Metrics
+
+**Quantitative Metrics:**
+- False positive crash rate: Target <10% (currently ~40%)
+- Duplicate investigation rate: Target <5% (currently ~60%)
+- Service availability crashes: Target <2 per month
+- Investigation workload: Target 50% reduction (duplicate elimination)
+
+**Qualitative Metrics:**
+- Reduced alert fatigue for operations team
+- Faster detection of real technical crashes
+- Better operational visibility into gateway health
+- Improved agent task completion rates
+
+---
+
+### Long-term Prevention Strategy
+
+**Systemic Improvements:**
+1. **Crash Pattern Database:** Build historical crash pattern library for automatic classification
+2. **Predictive Alerting:** Forecast resource pressure events before they cause crashes
+3. **Self-Healing Gateway:** Implement automatic gateway failover for 503 events
+4. **Agent Training:** Improve agent error handling and troubleshooting strategies
+
+**Process Improvements:**
+1. **Post-Mortem Automation:** Auto-generate crash reports from trace analysis
+2. **Remediation Tracking:** Track remediation implementation and effectiveness
+3. **Crash Drills:** Regular crash response practice to improve detection speed
+4. **Documentation:** Maintain living crash knowledge base
+
+---
+
+### Domain-Check Code Status
+
+**Conclusion:** No code changes required for domain-check codebase.
+
+**Verification:**
+- ✅ Signal handling is robust (SIGINT/SIGTERM/SIGHUP)
+- ✅ Resource management is bounded (LRU cache, connection limits)
+- ✅ No memory leaks or unbounded goroutines
+- ✅ Graceful shutdown implemented and verified
+- ✅ 17+ days crash-free since SIGHUP remediation
+
+**Both crashes (bf-173o7e and domchk-c9641ac5) were external to domain-check code:**
+- bf-173o7e: NEEDLE workflow issue (bead closing failure)
+- domchk-c9641ac5: Inference gateway service availability
+
+**Remediation Focus:** Infrastructure and NEEDLE system improvements, not domain-check code changes.
