@@ -2,68 +2,54 @@
 
 **Date:** 2026-08-26  
 **Repository:** domain-check  
-**Purpose:** Capture repository state before running git garbage collection
+**Purpose:** Baseline measurements before running git gc operations
 
 ## Repository Overview
 
-- **Total .git Directory Size:** 92M
-- **Total Commits:** 2,160
-- **Total Reachable Objects:** 9,381
+- **Total commits:** 1,440
+- **Total objects:** 9,396
 
-## Object Storage Analysis
+## .git Directory Size
 
-### Current Object Distribution
-```
-Loose objects:      221 objects (1.49 MiB)
-Packed objects:     9,164 objects (88.70 MiB)
-Total packs:        1 pack
-Garbage objects:    0 (0 bytes)
-```
+- **Total .git size:** 92M
 
-### Object Statistics
-- **Loose Object Count:** 221
-- **Loose Object Size:** 1.49 MiB
-- **Packed Object Count:** 9,164
-- **Pack File Size:** 88.70 MiB
-- **Prune-packable Objects:** 0
-- **Garbage:** 0 objects (0 bytes)
+## Object Storage Details
 
-## Repository Health
+### Loose Objects
+- **Count:** 235 objects
+- **Size:** 1.57 MiB
 
-### Git FSCK Status
-- **Dangling Objects:** None detected
-- **Corrupted Objects:** None detected
+### Pack Files
+- **Number of packs:** 1
+- **Packed objects:** 9,164
+- **Pack size:** 88.70 MiB
 
-### Reflog Status
-- **Expirable Reflog Entries:** None (dry-run showed no output)
+### Garbage and Prunable Objects
+- **Garbage objects:** 0
+- **Prune-packable objects:** 0
 
-## Pre-GC Observations
+## Analysis
 
-### Storage Efficiency
-- **Pack Efficiency:** 98.3% of objects are packed (9,164 / 9,381)
-- **Loose Object Overhead:** Minimal (221 loose objects, 1.49 MiB)
-- **Storage Ratio:** 88.70 MiB pack size for 9,381 total objects
+The repository is in good condition:
+- **Pack efficiency:** 97.5% of objects are already packed (9,164 / 9,399)
+- **Loose objects:** Minimal - only 235 loose objects (2.5% of total)
+- **No garbage:** Repository has no orphaned or corrupted objects
+- **Single pack:** Well-optimized with a single pack file
 
-### Cleanup Potential
-- **Immediate Cleanup Targets:** Minimal
-  - No dangling objects to remove
-  - No expirable reflog entries
-  - No garbage objects detected
+## Expected GC Impact
 
-### Post-GC Expectations
-Based on current metrics:
-- **Space Savings:** Minimal expected (repository is already well-packed)
-- **Primary Benefit:** Object consolidation and pack optimization
-- **Risk:** Low (no complex cleanup operations needed)
+Given the current state, running `git gc` will likely:
+1. **Pack the 235 loose objects** into the existing pack file
+2. **Minimal size reduction** - loose objects are only 1.57 MiB
+3. **Potential minor compression improvements** from repacking
 
-## Next Steps
-
-1. Run `git gc --prune=now` to consolidate objects
-2. Compare post-GC metrics against this baseline
-3. Document actual space savings achieved
+The repository appears to have been recently maintained or gc'd already, as evidenced by:
+- High pack ratio (97.5%)
+- Very few loose objects
+- No garbage accumulation
 
 ## Notes
 
-- Repository appears well-maintained with good object packing
-- No significant cleanup opportunities identified
-- Safe to proceed with standard git gc operation
+- Baseline captured before any git gc operations
+- Use this as reference point for post-gc comparison
+- Consider running `git gc --aggressive` only if significant size reduction is needed
