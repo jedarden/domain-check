@@ -1,9 +1,9 @@
 # Crash Investigation Report: bf-4jarn
 
 **Report Date:** 2026-09-01
-**Investigation Task:** domchk-2c332837
+**Investigation Task:** domchk-fd337a61
 **Original Bead:** bf-4jarn
-**Crash Date:** 2026-08-16T13:55:33.221087868+00:00
+**Crash Date:** 2026-08-16T13:53:12.541989217+00:00
 
 ---
 
@@ -11,8 +11,8 @@
 
 **Classification:** ✅ **SIGHUP Cascade (Signal 1)** - External fleet-wide event  
 **Root Cause:** System-level process termination (systemd/fleet manager restart)  
-**Impact:** Single crash on domain-check workspace, part of 200+ fleet-wide crashes  
-**Status:** ✅ **RESOLVED** - Documented as known pattern, no action required
+**Impact:** Two crashes on domain-check workspace, part of 200+ fleet-wide crashes  
+**Status:** ✅ **RESOLVED** - Bead eventually completed successfully, no action required
 
 ---
 
@@ -20,12 +20,30 @@
 
 | Field | Value |
 |-------|-------|
-| **Bead ID** | bf-4jarn (domchk-2c332837) |
-| **Agent** | claude-code-glm-4.7 |
+| **Bead ID** | bf-4jarn (domchk-fd337a61) |
+| **Agent** | claude-code-glm-4.7-lab-roam-1 |
 | **Exit Code** | -1 (signal -1) |
 | **Signal** | SIGHUP (Signal 1) |
-| **Timestamp** | 2026-08-16T13:55:33.221087868+00:00 |
+| **Timestamp** | 2026-08-16T13:53:12.541989217+00:00 |
 | **Workspace** | /home/coding/domain-check |
+
+---
+
+## Crash Sequence
+
+From `.beads/events.jsonl`, the bead experienced multiple crash cycles:
+
+1. **First Crash:** 2026-08-16T13:53:12 UTC (exit code -1)
+   - Duration: 74,477 ms (~74 seconds)
+   - Immediate retry dispatched
+
+2. **Second Crash:** 2026-08-16T13:55:33 UTC (exit code -1)
+   - Duration: 140,177 ms (~140 seconds)
+   - Third retry dispatched
+
+3. **Success:** 2026-08-16T13:57:22 UTC (exit code 0)
+   - Duration: 108,356 ms (~108 seconds)
+   - **Bead completed successfully**
 
 ---
 
@@ -36,25 +54,25 @@
 ```bash
 # Repository size check
 $ du -sh .git
-91M     .git
+90M     .git
 
 # Loose objects check
 $ git count-objects -vH
-count: 97
-size: 576.00 KiB
+count: 37
+size: 204.00 KiB
 in-pack: 8877
 size-pack: 88.49 MiB
 
 # System memory check
 $ free -h
 total        used        free      shared  buff/cache   available
-Mem:           62Gi       20Gi        20Gi        17Mi        21Gi        41Gi
+Mem:           62Gi       21Gi        19Gi        17Mi        23Gi        40Gi
 ```
 
 **Results:**
-- ✅ Repository size: 91MB (< 500MB threshold)
-- ✅ Loose objects: 97 (< 1000 threshold)
-- ✅ Available memory: 41GB (66% of total)
+- ✅ Repository size: 90MB (< 500MB threshold)
+- ✅ Loose objects: 37 (< 1000 threshold)
+- ✅ Available memory: 40GB (65% of total)
 
 ### Classification Decision
 
@@ -62,10 +80,11 @@ Mem:           62Gi       20Gi        20Gi        17Mi        21Gi        41Gi
 
 | Check | OOM SIGKILL Pattern | SIGHUP Cascade Pattern | Result |
 |-------|-------------------|----------------------|--------|
-| Repository Health | Bloated (>500MB) | Healthy (<500MB) | ✅ Healthy (91MB) |
-| Loose Objects | > 1000 objects | < 100 objects | ✅ 97 objects |
-| System Memory | Exhausted | Available | ✅ 41GB available |
+| Repository Health | Bloated (>500MB) | Healthy (<500MB) | ✅ Healthy (90MB) |
+| Loose Objects | > 1000 objects | < 100 objects | ✅ 37 objects |
+| System Memory | Exhausted | Available | ✅ 40GB available |
 | Temporal Pattern | Systematic over hours/days | Fleet-wide clustering | ✅ Fleet-wide event |
+| Retry Success | Rarely succeeds | Often succeeds on retry | ✅ Succeeded on 3rd attempt |
 
 **Classification:** **SIGHUP Cascade (Signal 1)**
 
@@ -78,23 +97,24 @@ Mem:           62Gi       20Gi        20Gi        17Mi        21Gi        41Gi
 1. **External Signal Source**: System-level process (likely systemd service reload or fleet manager restart) sent SIGHUP to all worker processes
 2. **Signal Broadcast**: SIGHUP transmitted to multiple workers across different workspaces simultaneously
 3. **Process Termination**: Agent process received SIGHUP and terminated with exit code -1
-4. **Bead Release**: Crash alert bead created and released for retry
+4. **Retry Pattern**: Bead was automatically retried and crashed again in the same cascade window
+5. **Event Resolution**: After SIGHUP cascade window ended (~13:57 UTC), bead completed successfully
 
 ### Timeline Context
 
 - **2026-08-16 12:00-17:00 UTC**: Documented SIGHUP cascade window
-- **2026-08-16T12:42:35 UTC**: bf-9b8oe crash (earlier in same cascade)
-- **2026-08-16T12:59:57 UTC**: bf-gz3r6 crash (56 minutes earlier)
-- **2026-08-16T13:55:33 UTC**: This crash (bf-4jarn)
+- **2026-08-16T13:53:12 UTC**: First crash (bf-4jarn)
+- **2026-08-16T13:55:33 UTC**: Second crash (bf-4jarn)
+- **2026-08-16T13:57:22 UTC**: Success (bf-4jarn completed)
 - **Total Impact**: 200+ crashes across 4+ workers in 5-hour window
 
 ### Related Crashes in Same Window
 
 This crash is part of the same SIGHUP cascade event that affected:
 
-- **bf-9b8oe**: 2026-08-16T12:42:35 UTC (1h 13m earlier)
-- **bf-gz3r6**: 2026-08-16T12:59:57 UTC (56 minutes earlier)
-- **bf-64hxa**: 2026-08-16T06:59:54 UTC (early cascade)
+- **bf-gz3r6**: 2026-08-16T12:59:57 UTC
+- **bf-9b8oe**: 2026-08-16T12:42:35 UTC
+- **bf-64hxa**: 2026-08-16T06:59:54 UTC
 - **bf-3lwth**: 2026-08-16 afternoon
 - **bf-31p3g**: 2026-08-16 afternoon
 - **200+ other crashes**: Across multiple workspaces during same 5-hour window
@@ -103,122 +123,47 @@ This crash is part of the same SIGHUP cascade event that affected:
 
 ## Impact Assessment
 
-### Direct Impact
-- **Bead Affected**: bf-4jarn (single crash)
-- **Task Disruption**: Temporary, bead was released for retry
-- **Data Loss**: None (no uncommitted changes in workspace)
+### Repository Impact
+- ✅ No repository corruption
+- ✅ No loose object accumulation
+- ✅ No disk space issues
+- ✅ Git operations normal
 
-### Cross-Workspace Impact
-- **Affected Workers**: lab-roam-3, lab-roam-7, lab-roam-8, lab-domain-check, lab-drawrace, lab-test-fix
-- **Total Crashes**: 200+ across fleet
-- **Systemic Issue**: External to domain-check workspace
-
----
-
-## Comparison with Other Crash Patterns
-
-### OOM SIGKILL Pattern (bf-4yjq - 2026-08-12)
-
-| Characteristic | OOM Pattern (bf-4yjq) | SIGHUP Pattern (bf-4jarn) |
-|---------------|---------------------|------------------------|
-| Repository Size | 18GB (bloated) | 91MB (healthy) |
-| Loose Objects | 17GB (excessive) | 97 (normal) |
-| System Memory | Exhausted | Available (41GB) |
-| Crash Pattern | Systematic, repeatable | Fleet-wide clustering |
-| Root Cause | Repository bloat → OOM killer | External SIGHUP |
-| Resolution Required | git gc --aggressive | None (external event) |
-
-### Key Insight
-
-This crash demonstrates the **critical importance of crash classification**:
-- Exit code -1 can represent either SIGHUP (Signal 1) or SIGKILL (Signal 9)
-- Repository health checks distinguish OOM from SIGHUP patterns
-- Correct classification prevents unnecessary recovery actions
-- SIGHUP crashes require documentation only, not repository cleanup
+### Fleet Impact
+- ⚠️ Part of fleet-wide SIGHUP cascade (200+ crashes)
+- ✅ Automatic retry mechanism worked correctly
+- ✅ Bead eventually completed successfully
+- ✅ No data loss or state corruption
 
 ---
 
-## Remediation
+## Conclusions
 
-### Actions Taken
-✅ **No remediation required** - External fleet event
+**Root Cause:** External system-level SIGHUP signal (likely systemd service reload or fleet manager restart)  
+**Classification:** SIGHUP Cascade (Signal 1)  
+**Severity:** Low - External event, not a code or resource issue  
+**Status:** ✅ **RESOLVED** - Bead completed successfully on third retry  
+**Action Required:** ❌ None - Documented as known pattern
 
-**Rationale:**
-- Repository is healthy (no bloat detected)
-- Crash caused by external signal, not repository state
-- No domain-check-specific fix possible or needed
-- Event documented as known fleet-wide pattern
+---
 
-### Preventive Measures
-✅ **Already in place** (from crash response playbook):
-- Repository health monitoring (daily checks)
-- Pre-commit hooks for large file blocking
-- Git automatic GC configuration
-- Crash classification decision tree
-- Automated classification script (`./scripts/classify-signal-crash.sh`)
+## Follow-Up Actions
+
+✅ **COMPLETED:**
+- Crash investigation report created
+- Classification as SIGHUP cascade event
+- Documented in fleet-wide pattern analysis
+
+❌ **NOT REQUIRED:**
+- No code changes needed
+- No infrastructure changes needed
+- No monitoring changes needed (external event)
 
 ---
 
 ## Lessons Learned
 
-### Operational Insights
-
-1. **Signal -1 Ambiguity Resolved**: Exit code -1 can represent either SIGHUP (Signal 1) or SIGKILL (Signal 9). Repository health checks distinguish the etiology.
-
-2. **Fleet-Wide Events**: External system process termination affects all bead workspaces simultaneously. This is not a domain-check code defect.
-
-3. **No Action Required**: SIGHUP crashes require documentation only. Repository recovery actions (git gc, cleanup) are unnecessary and potentially harmful if applied to healthy repositories.
-
-4. **Classification First**: Always classify signal -1 crashes before attempting remediation. The diagnostic criteria prevent misapplication of OOM recovery procedures to SIGHUP events.
-
-5. **Temporal Clustering**: Multiple crashes within short time windows (12:42, 12:59, 13:55 on same day) indicate external systemic events rather than workspace-specific issues.
-
----
-
-## Verification
-
-### Post-Crash Repository State
-
-```bash
-# Verification commands
-$ du -sh .git
-91M     .git  ✅ Healthy (<500MB)
-
-$ git count-objects -vH | grep -E '^count:|^in-pack:'
-count: 97
-in-pack: 8877  ✅ Normal (<1000 loose objects)
-
-$ free -h | grep "^Mem:"
-Mem:           62Gi       20Gi        20Gi        17Mi        21Gi        41Gi  ✅ Available (66%)
-```
-
-**Conclusion**: Repository is healthy, no cleanup required.
-
----
-
-## References
-
-- **Crash Response Playbook**: `docs/operations/crash-response-playbook.md`
-- **Related Investigation**: `docs/crash-investigation-bf-gz3r6-2026-08-16.md` (same cascade event, 56 min earlier)
-- **Related Investigation**: `docs/crash-investigation-bf-9b8oe-2026-08-16.md` (same cascade event, 1h 13m earlier)
-- **Related Investigation**: `docs/crash-investigation-bf-64hxa-2026-08-16.md` (same cascade event, earlier)
-- **Classification Script**: `./scripts/classify-signal-crash.sh`
-
----
-
-## Conclusion
-
-**Summary**: The crash on bead bf-4jarn was a **SIGHUP cascade event** caused by external system-level process termination, not a repository health issue or OOM condition.
-
-**Status**: ✅ **CLOSED** - Documented as known fleet-wide pattern, no action required.
-
-**Classification Confidence**: **HIGH** - All diagnostic criteria (repository health, memory availability, temporal pattern) confirm SIGHUP etiology.
-
-**Impact**: **NONE** - No action required, crash is part of documented fleet-wide external event.
-
----
-
-*Report prepared by: claude-code-glm-4.7-lab-roam-3*  
-*Investigation date: 2026-09-01*  
-*Classification: SIGHUP Cascade (Signal 1)*  
-*Remediation: None required (external fleet event)*
+1. **SIGHUP Cascade Pattern**: External system signals can cause fleet-wide crashes with exit code -1
+2. **Automatic Retry Works**: The retry mechanism successfully handled this case - 3rd attempt succeeded
+3. **Temporal Clustering**: Multiple crashes within a 5-minute window indicate external event, not resource exhaustion
+4. **Repository Health**: Healthy repository state (90MB, 37 loose objects) rules out OOM/git-gc issues
