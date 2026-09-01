@@ -441,6 +441,10 @@ Bead bf-4yjq experienced systematic crashes caused by severe repository bloat, n
 - `/home/coding/domain-check/crash-evidence-bf-4yjq.md`
 - `/home/coding/domain-check/root-cause-bf-4yjq-crash.md`
 
+### Related Documentation (Cross-References)
+- `docs/crash-artifacts-bf-4yjq.md` - Complete artifacts catalog with crash timeline and system state (August 17, 2026)
+- `docs/reports/bf-4yjq-comprehensive-crash-report.md` - Original comprehensive crash investigation and analysis (August 14, 2026)
+
 ### Database Records
 - `.beads/beads.db` (8MB SQLite database)
 - `.beads/checkpoint/forensic.jsonl` (7.9MB forensic log)

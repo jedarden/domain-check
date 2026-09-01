@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Pre-flight health check for agent tasks
 # Prevents crashes from external service failures and resource exhaustion
 #
