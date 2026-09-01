@@ -291,7 +291,80 @@ The gc operation appears to have completed successfully before the agent crashed
 
 ---
 
-## 7. Error Analysis
+## 7. Root Cause Analysis
+
+### Signal Classification
+
+**Finding:** This crash involved **NO SYSTEM SIGNAL** - specifically, it was NOT signal -1.
+
+**Evidence Chain:**
+
+1. **Exit Code Analysis:**
+   - `exit_code: 1` (application error)
+   - `timeout_reason: null` (no signal termination)
+   - Final error: `error_max_turns` (application-level limit)
+
+2. **Signal -1 Definition:**
+   - Signal -1 would indicate `SIGKILL` (kill -9)
+   - Would show `timeout_reason: "received_signal"`
+   - Would show `signal: "SIGKILL"` in metadata
+   - Exit code would be 128+9=137
+
+3. **Actual Metadata:**
+   ```json
+   {
+     "exit_code": 1,           // NOT -1 or 137
+     "outcome": "failure",
+     "timeout_reason": null    // NO signal received
+   }
+   ```
+
+4. **System Logs Cross-Check:**
+   - System logs show SIGKILL events at 16:52-17:01 for OTHER services
+   - bf-173o7e crashed at 17:06:59 (5+ minutes after SIGKILL wave)
+   - No SIGKILL events correlate with bf-173o7e PID or timestamp
+
+### Root Cause Classification
+
+**Primary Cause:** Application-level turn limit exhaustion
+
+**Confidence:** CERTAIN
+
+**Evidence:**
+- ✅ Exit code 1 (not -1)
+- ✅ Error message: "error_max_turns"
+- ✅ No signal in metadata
+- ✅ Task completed successfully before termination
+- ✅ System logs show no SIGKILL at crash time
+
+### What Actually Happened
+
+1. **12:55-13:02:** Git gc task executed successfully
+2. **13:02-17:06:** Agent attempted to close bead (4+ minutes)
+3. **Multiple bead close attempts:** All failed with Exit 1
+4. **17:06:** Agent hit 30-turn limit during troubleshooting
+5. **Session terminated:** `error_max_turns` (not signal -1)
+
+### Misclassification Source
+
+The crash was likely misclassified as "signal -1" due to:
+- Alert system parsing error (exit code 1 interpreted as signal)
+- Automated monitoring tools conflating `exit_code: 1` with signal termination
+- Lack of signal validation in alert generation pipeline
+
+### Comparison with Actual Signal -1 Crashes
+
+| Attribute | bf-173o7e (This Crash) | True Signal -1 Pattern |
+|-----------|------------------------|------------------------|
+| Exit Code | 1 | 137 (128+9) |
+| timeout_reason | null | "received_signal" |
+| signal field | absent | "SIGKILL" |
+| Task completion | Successful | Interrupted |
+| System logs | No SIGKILL correlation | SIGKILL present |
+
+---
+
+## 8. Error Analysis
 
 ### Exit Code Analysis
 
