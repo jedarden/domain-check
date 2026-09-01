@@ -1,103 +1,103 @@
-# Repository Health Scripts
+# Domain Check Scripts
 
-This directory contains scripts for monitoring and maintaining repository health to prevent signal -1 crashes caused by repository bloat.
+This directory contains utility scripts for the domain-check project.
 
-## Background
+## Git Maintenance
 
-These scripts were created in response to a comprehensive root cause analysis (bead bf-ku6mmu) of agent signal -1 crashes. The crashes were caused by repository bloat (18GB with 17GB of loose git objects) triggering the Linux OOM killer during git operations.
+### Safe Git GC (`safe-git-gc.sh`)
 
-### Root Cause Summary
+A memory-efficient, resumable git garbage collection system that prevents OOM issues through staged operations.
 
-- **Signal -1** = **SIGKILL (signal 9)** from Linux **OOM killer**
-- **Repository State**: 18GB total (should be <500MB) with 17.16GB loose objects
-- **Contributing Pattern**: 17+ identical commits containing 237MB `.beads/` JSONL files
-- **Crash Count**: 9 systematic crashes over 2.5 hours (100% SIGKILL pattern)
+**Quick Start:**
+```bash
+# Check if gc is needed
+./scripts/safe-git-gc.sh --check-only
 
-## Scripts
+# Run standard gc (stages 1-2, ~10-30 minutes)
+./scripts/safe-git-gc.sh
 
-### repo-health-check.sh
+# Run full gc with deep compression (all stages, ~1-2 hours)
+./scripts/safe-git-gc.sh --full
 
-Monitors repository health and alerts when thresholds are exceeded.
+# Resume from last checkpoint if interrupted
+./scripts/safe-git-gc.sh --resume
+```
+
+**Features:**
+- ✅ Three-stage gc strategy (standard → incremental → deep compression)
+- ✅ Memory-limited operations (configurable via `SAFE_GC_MEMORY_MAX`)
+- ✅ Checkpoint/resume capability after each stage
+- ✅ Pre-flight integrity checks
+- ✅ Progress logging to `.git/safe-gc.log`
+
+**Environment Variables:**
+```bash
+# Maximum memory for git operations (default: 2g)
+export SAFE_GC_MEMORY_MAX=2g
+
+# Custom checkpoint file location
+export SAFE_GC_CHECKPOINT=.git/safe-gc-checkpoint.json
+```
+
+**Documentation:**
+- Strategy overview: `docs/safer-git-gc-strategy.md`
+- Implementation guide: `docs/safe-git-gc-implementation.md`
+
+### Safe Git GC Monitor (`safe-git-gc-monitor.sh`)
+
+Monitor progress and resource usage of git gc operations.
 
 **Usage:**
 ```bash
-./scripts/repo-health-check.sh
+# One-time status check
+./scripts/safe-git-gc-monitor.sh
+
+# Watch mode (auto-refresh every 2 seconds)
+./scripts/safe-git-gc-monitor.sh --watch
 ```
 
-**Checks performed:**
-- Repository size (warn: 500MB, critical: 1GB)
-- Loose objects count (warn: 10k, critical: 50k)
-- Pack file ratio (should be majority packed)
-- Large files in working directory (>10MB)
-- .gitignore protections for .beads/ and *.jsonl
+**Features:**
+- ✅ Real-time status display
+- ✅ Checkpoint state inspection
+- ✅ Running process detection
+- ✅ Repository statistics
+- ✅ Recent log entries
 
-**Exit codes:**
-- `0` - Repository is healthy
-- `1` - Repository is degraded (warning)
-- `2` - Repository is critical (risk of signal -1 crashes)
+## Usage Examples
 
-### setup-git-gc-config.sh
-
-Configures git garbage collection settings to prevent repository bloat.
-
-**Usage:**
+### Daily Maintenance
 ```bash
-./scripts/setup-git-gc-config.sh
+# Check if gc needed, run if so
+./scripts/safe-git-gc.sh --check-only || ./scripts/safe-git-gc.sh
+
+# Monitor progress
+./scripts/safe-git-gc-monitor.sh --watch
 ```
 
-**Settings configured:**
-- `gc.auto = 256` - More frequent GC (default: 6700)
-- `gc.autoPackLimit = 10` - More aggressive consolidation (default: 50)
-- `gc.aggressiveWindow = 1.hour` - Aggressive compression window
-- `gc.pruneExpire = 2.weeks.ago` - Prune old objects
-- `repack.writeBitmaps = true` - Better clone performance
-
-## Integration with CI/CD
-
-These scripts can be integrated into CI/CD pipelines:
-
+### After Large Changes
 ```bash
-# Run health check before git operations
-./scripts/repo-health-check.sh || exit 1
-
-# Configure git settings in CI environment
-./scripts/setup-git-gc-config.sh
+# Run full gc with deep compression
+./scripts/safe-git-gc.sh --full
 ```
 
-## Manual Remediation
-
-If repository health check reports critical status, execute:
-
+### If Interrupted
 ```bash
-# Aggressive garbage collection (may take hours on large repos)
-git gc --aggressive --prune=now
-
-# Verify cleanup
-./scripts/repo-health-check.sh
+# Resume from last checkpoint
+./scripts/safe-git-gc.sh --resume
 ```
 
-## Pre-commit Protection
+## Why Not `git gc --aggressive`?
 
-The `.git/hooks/pre-commit` script automatically prevents large file commits:
+The standard `git gc --aggressive` command:
+- ❌ Can consume gigabytes of RAM (unbounded)
+- ❌ Runs for hours on large repositories
+- ❌ Cannot be resumed if interrupted
+- ❌ No progress visibility
 
-- **Max file size**: 10MB
-- **Max total commit**: 50MB
-- **Blocks .beads/** files that should be .gitignored
+Our staged approach:
+- ✅ Memory-capped operations (~1-2GB max)
+- ✅ Faster execution (10-120 minutes depending on mode)
+- ✅ Checkpoint after each stage (resumable)
+- ✅ Full progress monitoring and logging
 
-## Monitoring Recommendations
-
-Run repository health checks periodically:
-
-```bash
-# Daily cron job
-0 0 * * * /path/to/domain-check/scripts/repo-health-check.sh
-
-# Before major git operations
-./scripts/repo-health-check.sh && git push
-```
-
-## Related Documentation
-
-- Root Cause Analysis: `/docs/analysis/agent-signal-minus1-root-cause-analysis.md`
-- Executive Summary: `/signal-1-crash-executive-summary.md`
-- Investigation Report: `/signal-1-crash-investigation-beads-root-cause-analysis.md`
+See `docs/safer-git-gc-strategy.md` for detailed comparison.
