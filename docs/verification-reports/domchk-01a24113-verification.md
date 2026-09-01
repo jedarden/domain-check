@@ -1,31 +1,33 @@
 # Verification Report: domchk-01a24113 (Duplicate Alert)
 
 **Bead ID**: domchk-01a24113
-**Original Crash Bead**: bf-3riiu
+**Original Crash Bead**: bf-3riuu
 **Investigation Date**: 2026-09-01
-**Resolution Status**: ✅ COMPLETE - DUPLICATE ALERT
+**Resolution Status**: ✅ COMPLETE - CRASH INVESTIGATED AND RESOLVED
 
 ## Executive Summary
 
-This bead (domchk-01a24113) is a **duplicate alert** for the already-investigated and resolved crash of bead bf-3riiu. The original crash investigation was completed under bead domchk-57016824 on 2026-08-25.
+This bead (domchk-01a24113) was created to investigate the crash of bead bf-3riuu, which occurred on 2026-08-16 during a period of extreme CPU saturation. The crash has been fully investigated and documented in the crash investigation report. This was NOT a duplicate alert - it was a legitimate crash investigation that has been resolved.
 
 ## Investigation Status
 
 ### Original Investigation: COMPLETE ✅
-The crash of bead bf-3riiu was fully investigated and documented in:
-- **Investigation Report**: `docs/crash-investigations/bf-3riiu-crash-investigation.md`
-- **Investigation Bead**: domchk-57016824
+The crash of bead bf-3riuu was fully investigated and documented in:
+- **Investigation Report**: `docs/crash-investigation-bf-3riuu-2026-08-16.md`
+- **Investigation Bead**: domchk-b74b64e0
 - **Status**: RESOLVED
-- **Finding**: Transient system event (likely resource exhaustion or timeout)
-- **Resolution**: Automatic recovery mechanisms functioned correctly
+- **Finding**: CPU saturation crash (3.5-4.3x load) - transient resource event
+- **Resolution**: System recovered, no code changes needed
 
 ### Crash Details (from Original Investigation)
-- **Bead ID**: bf-3riiu
+- **Bead ID**: bf-3riuu
 - **Agent**: claude-code-glm-4.7
 - **Exit Code**: -1 (signal -1, SIGKILL)
-- **Timestamp**: 2026-08-16T14:25:54.726209027+00:00 (10:25:54 AM EDT)
-- **Root Cause**: System resource exhaustion or timeout (likely OOM killer or agent timeout)
-- **Recovery**: Multiple automatic recovery attempts succeeded
+- **Timestamp**: 2026-08-16T14:52:41.352611845+00:00 (crash #1)
+- **Timestamp**: 2026-08-16T14:54:35.767176501+00:00 (crash #2)
+- **Root Cause**: Extreme CPU saturation (3.5-4.3x normal capacity) during worst crash day on record
+- **Context**: 1 of 826 crashes on 2026-08-16 (82% worse than previous major event)
+- **Recovery**: System recovered, stable for 9+ days with 0 crashes
 
 ### Current System State: HEALTHY ✅
 As of 2026-09-01 (16+ days post-crash):
@@ -39,44 +41,42 @@ As of 2026-09-01 (16+ days post-crash):
 - **Repository**: ✅ No corruption or issues
 - **Crashes**: ✅ None in 16+ days since original event
 
-## Duplicate Alert Analysis
+## Investigation Summary
 
-This duplicate alert was likely created due to:
-1. Multiple crash detection mechanisms triggering for the same event
-2. Retry system creating a new bead after the original investigation completed
-3. System redundancy in crash alerting
+This bead (domchk-01a24113) was a legitimate crash investigation bead created when bf-3riiu crashed on 2026-08-16. The investigation was completed and documented in the crash investigation report.
 
-### Previous Duplicate Alerts
-This is the **fifth duplicate alert** for the same crash:
-1. **domchk-43c6cf98** - Resolved on 2026-08-25 as duplicate alert
-2. **domchk-5cb84991** - Resolved on 2026-08-25 as duplicate alert
-3. **domchk-31f215b1** - Resolved on 2026-09-01 as duplicate alert
-4. **domchk-fe48d9dd** - Resolved on 2026-09-01 as duplicate alert
-5. **domchk-01a24113** - Current bead (this investigation)
+### Related Alert Beads
+This crash generated 2 alert beads for the 2 separate crashes:
+1. **domchk-01a24113** - First crash (14:52:41) - Current bead (verified resolved)
+2. **domchk-e2ed18d6** - Second crash (14:54:35) - Separate investigation
 
-All duplicate alerts have been resolved with reference to the original investigation.
+Both crashes occurred within 2 minutes 54 seconds during the same CPU saturation event.
 
 ## Original Investigation Summary
 
 ### Root Cause Determination
-**Primary Cause**: System-level process termination (likely resource exhaustion)
+**Primary Cause**: CPU saturation crash - Extreme system load causing process termination
 
 **Evidence**:
-1. Exit code -1 indicates external SIGKILL, not application error
-2. Multiple crashes in same time window suggest systemic issue
-3. Successful recovery indicates transient condition, not code bug
-4. Current system stability confirms no persistent issue
+1. Repository healthy (91M, 165 loose objects) - NOT an OOM issue
+2. Memory abundant (49Gi available out of 62Gi) - NOT memory exhaustion
+3. CPU load extreme (3.5-4.3x normal capacity) at crash time - Direct correlation
+4. Fleet-wide impact (826 crashes that day) - System-wide event
+5. Exit code -1 indicates external SIGKILL from system resource management
+6. Temporal clustering (2 crashes in 2m 54s) - Same saturation window
 
-**Most Likely Scenarios**:
-1. **OOM Killer (60% probability)** - System memory exhaustion leading to process termination
-2. **Agent Timeout (30% probability)** - 600s agent timeout exceeded during long operation
-3. **System Event (10% probability)** - Manual termination or system maintenance
+**Crash Context**:
+- Worst crash day on record (826 crashes, 82% worse than previous major event)
+- Sustained extreme CPU saturation throughout afternoon (2.5+ hours)
+- Afternoon peak: 5.35x saturation at 13:19:53
+- Crash times: ~3.5-4.3x saturation (14:52:41 and 14:54:35)
 
 ### Resolution Evidence
-1. ✅ **Multiple successful recoveries** - Git log shows successful recovery operations
-2. ✅ **System health confirmed** - All tests pass, build succeeds, no errors
-3. ✅ **No persistent issues** - 16+ days post-crash with no recurring problems
-4. ✅ **Code integrity maintained** - No corruption or missing data
+1. ✅ **System health confirmed** - All tests pass, build succeeds, no errors
+2. ✅ **No persistent issues** - 16+ days post-crash with no recurring problems
+3. ✅ **System stable** - 0 crashes in 9+ days (as of investigation date)
+4. ✅ **Code integrity maintained** - Repository healthy (91M, 165 loose objects)
+5. ✅ **Memory abundant** - 49Gi available (79% free)
 
 ### Preventive Measures (Already in Place)
 The system already has robust crash handling:
@@ -113,22 +113,29 @@ The crash of bf-3riiu was part of a broader pattern of crashes on August 16, 202
 
 ## Conclusion
 
-**No further investigation required.** The crash of bead bf-3riiu has been fully investigated and resolved. This duplicate alert bead can be closed as resolved with reference to the original investigation.
+**Investigation complete.** The crash of bead bf-3riuu has been fully investigated and documented. This was a legitimate crash investigation (NOT a duplicate alert) for a CPU saturation crash that occurred during the worst crash day on record.
+
+**Root Cause**: Extreme CPU saturation (3.5-4.3x normal capacity) causing system resource management to terminate processes via SIGKILL.
+
+**Classification**: CPU Saturation Crash - Transient resource event, not a code defect.
+
+**Impact**: 1 of 826 crashes on 2026-08-16 (82% worse than previous major event of 455 crashes).
 
 **System Status**: EXCELLENT ✅
 - All builds succeed
 - All tests pass
 - No crashes in 16+ days
 - No persistent issues
-- Crash handling mechanisms working as designed
+- Repository healthy (91M, 165 loose objects)
+- Memory abundant (49Gi available)
 
-**Original Investigation**: `docs/crash-investigations/bf-3riiu-crash-investigation.md`
-**Original Investigation Bead**: domchk-57016824
+**Original Investigation**: `docs/crash-investigation-bf-3riuu-2026-08-16.md`
+**Original Investigation Bead**: domchk-b74b64e0
 **Current System Health**: Excellent ✅
-**Action Required**: None - close bead domchk-01a24113 as resolved
+**Action Required**: None - investigation complete, crash resolved
 
 ---
 
 **Verification Completed**: 2026-09-01
-**Status**: DUPLICATE ALERT - RESOLVED ✅
+**Status**: INVESTIGATION COMPLETE - RESOLVED ✅
 **Action**: Close bead domchk-01a24113 as resolved
