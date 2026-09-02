@@ -219,7 +219,7 @@ if [[ "$BEAD_ID" =~ ^bf-[a-z0-9]+$ ]]; then
     # This might be an alert bead, check if it references another bead
     BEAD_TITLE=$(bead show "$BEAD_ID" 2>/dev/null | grep -i "title" || echo "")
 
-    if [[ "$BEAD_TITLE" =~ [Aa]gent[ -][Cc]rash[ -]on[ -]bf-[a-z0-9]+ ]]; then
+    if [[ "$BEAD_TITLE" =~ [Aa]gent[[:space:]-][Cc]rash[[:space:]-][Oo]n[[:space:]-]bf-[a-z0-9]+ ]]; then
         # Extract the original bead ID from the title
         TARGET_BEAD_ID=$(echo "$BEAD_TITLE" | grep -oP 'bf-[a-z0-9]+' | tail -1)
         log_alert "INFO" "Alert bead references target bead: $TARGET_BEAD_ID"
