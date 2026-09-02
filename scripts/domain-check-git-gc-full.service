@@ -5,8 +5,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-User=%i
-WorkingDirectory=%h/domain-check
+WorkingDirectory=/home/coding/domain-check
 ExecStart=/home/coding/domain-check/scripts/safe-git-gc.sh --full
 StandardOutput=append:/home/coding/domain-check/.beads/logs/git-gc-full.log
 StandardError=append:/home/coding/domain-check/.beads/logs/git-gc-full.log
