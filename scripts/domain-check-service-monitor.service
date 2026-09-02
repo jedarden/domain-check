@@ -4,7 +4,7 @@ Documentation=file:///home/coding/domain-check/docs/crash-mitigation-strategies.
 
 [Service]
 Type=oneshot
-ExecStart=/home/coding/domain-check/scripts/service-monitor.sh --once --quiet
+ExecStart=/home/coding/domain-check/scripts/service-monitor.sh --once
 WorkingDirectory=/home/coding/domain-check
 Nice=10
 IOSchedulingClass=idle

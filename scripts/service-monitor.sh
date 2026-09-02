@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Service Availability Monitoring Script
 # Purpose: Monitor external service availability and detect outages
 # Usage: ./scripts/service-monitor.sh [--continuous] [--interval <seconds>] [--services <list>]

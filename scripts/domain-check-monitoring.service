@@ -4,7 +4,7 @@ Documentation=file:///home/coding/domain-check/docs/crash-response-guide.md
 
 [Service]
 Type=oneshot
-ExecStart=/home/coding/domain-check/scripts/crash-pattern-detection.sh --quiet
+ExecStart=/home/coding/domain-check/scripts/crash-pattern-detection.sh
 WorkingDirectory=/home/coding/domain-check
 Nice=10
 IOSchedulingClass=idle

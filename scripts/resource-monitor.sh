@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Resource Monitoring and Alerting Script
 # Purpose: Monitor system resources and generate alerts before crashes occur
 # Usage: ./scripts/resource-monitor.sh [--continuous] [--interval <seconds>] [--alert-on <threshold>]

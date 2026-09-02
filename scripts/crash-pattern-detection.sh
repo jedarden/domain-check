@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Crash Pattern Detection Script
 # Purpose: Detect systematic crash patterns and infrastructure events
 # Usage: ./scripts/crash-pattern-detection.sh [--alert] [--since <timeframe>]
