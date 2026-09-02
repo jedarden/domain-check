@@ -165,8 +165,6 @@ check_repository_health() {
 determine_resolution_type() {
     local bead_id="$1"
 
-    log_resolution "INFO" "Determining resolution type for bead: $bead_id"
-
     # Check task completion first
     local task_status=$(check_task_completion "$bead_id")
     case "$task_status" in
@@ -244,23 +242,18 @@ mark_resolved() {
 
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    # Build resolution record
-    local resolution_record=$(cat <<EOF
-{
-  "bead_id": "$bead_id",
-  "resolved_at": "$timestamp",
-  "resolution_type": "$resolution_type",
-  "reason": "$reason",
-  "verified": true
-}
-EOF
-)
-
-    # Update state file using --argjson with properly escaped JSON
+    # Update state file using jq with individual arguments
     jq --arg id "$bead_id" \
-       --argjson new "$resolution_record" \
-       '.resolutions[$id] = $new | .metadata.last_updated = $timestamp' \
        --arg timestamp "$timestamp" \
+       --arg resolution_type "$resolution_type" \
+       --arg reason "$reason" \
+       '.resolutions[$id] = {
+           "bead_id": $id,
+           "resolved_at": $timestamp,
+           "resolution_type": $resolution_type,
+           "reason": $reason,
+           "verified": true
+         } | .metadata.last_updated = $timestamp' \
        "$RESOLUTION_STATE_FILE" > "$RESOLUTION_STATE_FILE.tmp"
 
     mv "$RESOLUTION_STATE_FILE.tmp" "$RESOLUTION_STATE_FILE"
@@ -374,6 +367,7 @@ main() {
 
         mark-resolved)
             # Auto-determine resolution type
+            log_resolution "INFO" "Determining resolution type for bead: $bead_id"
             local resolution_type=$(determine_resolution_type "$bead_id")
             local reason="Auto-detected resolution: $resolution_type"
 
