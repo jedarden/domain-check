@@ -123,6 +123,29 @@ Monitor progress and resource usage of git gc operations.
 - ✅ Repository statistics
 - ✅ Recent log entries
 
+### Pre-Repack Verification (`verify-pre-repack.sh`)
+
+Gate script to run immediately before any `git repack`. Verifies the
+repository is in a consistent post-gc state and that resources are
+sufficient.
+
+**Usage:**
+```bash
+./scripts/verify-pre-repack.sh            # full output
+./scripts/verify-pre-repack.sh --quiet    # suppress statistics
+```
+
+**Checks (any failure exits 1):**
+- Parent git gc operation is complete (no `gc.pid`, no gc process)
+- `git fsck --full` validation passes (dangling objects are informational)
+- At least 2GB free disk space (`MIN_DISK_GB`, default 2)
+- No git processes running and no git-internal lock files held
+
+Exit codes: `0` ready for repack, `1` checks failed, `2` invalid arguments.
+
+**Documentation:**
+- Verified baseline: `docs/maintenance/pre-repack-verification-2026-09-02.md`
+
 ## Crash Prevention
 
 ### Crash Pattern Detection (`crash-pattern-detection.sh`)
