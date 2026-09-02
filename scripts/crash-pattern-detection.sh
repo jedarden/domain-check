@@ -11,10 +11,10 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ALERT_LOG="$PROJECT_ROOT/.beads/logs/crash-pattern-alerts.log"
 EVENTS_FILE="$PROJECT_ROOT/.beads/events.jsonl"
 
-# Thresholds
-CRASH_SURGE_THRESHOLD=10       # crashes in 10 minutes = infrastructure event
+# Thresholds (updated for early detection per systemic crash prevention recommendations)
+CRASH_SURGE_THRESHOLD=3        # crashes in 5 minutes = infrastructure event (early detection)
 HIGH_CRASH_RATE_THRESHOLD=5    # crashes in 1 hour = elevated
-SYSTEM_EVENT_WINDOW="10minutes" # time window for surge detection
+SYSTEM_EVENT_WINDOW="5minutes"  # time window for surge detection (reduced from 10min)
 
 # Defaults
 ALERT_MODE=false

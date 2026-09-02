@@ -148,10 +148,10 @@ if [[ "$AUTO_PROCESS" == true ]]; then
         fi
 
         # CRITICAL FIX 6: Check if this was a successful completion (exit code 0)
-        TRACE_FILE="$bead_dir/trace.jsonl"
-        if [[ -f "$TRACE_FILE" ]]; then
-            EXIT_CODES=$(grep -o '"exit_code":[0-9-]*' "$TRACE_FILE" 2>/dev/null | cut -d: -f2 | sort -u | tr '\n' ' ')
-            if [[ "$EXIT_CODES" =~ "0" ]] && [[ ! "$EXIT_CODES" =~ "-" ]]; then
+        METADATA_FILE="$bead_dir/metadata.json"
+        if [[ -f "$METADATA_FILE" ]]; then
+            EXIT_CODE=$(grep -o '"exit_code":[0-9-]*' "$METADATA_FILE" 2>/dev/null | cut -d: -f2 | head -1)
+            if [[ "$EXIT_CODE" == "0" ]]; then
                 log_alert "INFO" "Skipping crash: $bead_id (exit code 0 - successful completion)"
                 touch "$bead_dir/.alert-processed"
                 continue
@@ -212,8 +212,8 @@ BEAD_STATUS=$(bead show "$BEAD_ID" 2>/dev/null | grep -i "status" | head -1 || e
 if [[ "$BEAD_STATUS" =~ [Cc]losed ]]; then
     log_alert "INFO" "Bead $BEAD_ID is already CLOSED - no alert needed"
 
-    # Verify exit code from trace
-    EXIT_CODE=$(grep -o '"exit_code":[0-9-]*' "$TRACE_DIR/$BEAD_ID/trace.jsonl" 2>/dev/null | head -1 | cut -d: -f2)
+    # Verify exit code from metadata
+    EXIT_CODE=$(grep -o '"exit_code":[0-9-]*' "$TRACE_DIR/$BEAD_ID/metadata.json" 2>/dev/null | head -1 | cut -d: -f2)
 
     if [[ "$EXIT_CODE" == "0" ]]; then
         log_alert "INFO" "Bead completed successfully (exit code 0) - this is a false positive crash"
@@ -267,9 +267,9 @@ fi
 
 # CRITICAL FIX 4: Validate exit code before generating alert
 # Exit code 0 means success, not a crash
-EXIT_CODES=$(grep -o '"exit_code":[0-9-]*' "$TRACE_DIR/$BEAD_ID/trace.jsonl" 2>/dev/null | cut -d: -f2 | sort -u | tr '\n' ' ')
+EXIT_CODE=$(grep -o '"exit_code":[0-9-]*' "$TRACE_DIR/$BEAD_ID/metadata.json" 2>/dev/null | head -1 | cut -d: -f2)
 
-if [[ "$EXIT_CODES" =~ "0" ]] && [[ ! "$EXIT_CODES" =~ "-" ]]; then
+if [[ "$EXIT_CODE" == "0" ]]; then
     log_alert "INFO" "Bead completed successfully (exit code 0) - no alert generated"
     echo "Reason: Exit code 0 indicates successful completion, not a crash"
     exit 0
