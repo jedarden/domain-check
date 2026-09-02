@@ -52,10 +52,11 @@ From `~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-14.jsonl`
 (session `a6dbb1fc`, booted 05:18:53Z):
 
 - **132** `agent.dispatched` events for `bf-173o7e` (first 12:58:58.215Z, last 23:24:54.871Z)
-- **131** `agent.completed`: **129 × exit −1**, **1 × exit 124** (timeout), **1 × exit 0** (orphaned-on-success)
+- **131** `agent.completed`: **129 × exit −1**, **1 × exit 124** (timeout), **1 × exit 0** (orphaned-on-success). The one dispatch without a completion is **#54** (14:27:11.239Z) — session `a6dbb1fc` died at `transform.started` 14:27:11.276Z and the storm resumed 20:58:18Z under new session `a6eaf955` (per `domchk-673bbad9`)
 - The analyzed crash is the **38th dispatch** of that sequence (counting basis:
   dispatch order in this log; the `#41` cited for the 14:06:08 kill in
-  `domchk-0eea1a4b` differs by 2 due to counting basis, not substance)
+  `domchk-0eea1a4b` is an off-by-one — that kill belongs to dispatch #40,
+  14:04:58.872Z + 69.7 s duration)
 - Every attempt re-injected the **identical prompt** (same `prompt_hash`), the
   signature of needle's zero-backoff release→re-claim loop
 - 42.2 s attempt duration sits in the storm's typical 21–217 s kill band —
