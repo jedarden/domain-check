@@ -191,13 +191,51 @@ fi
 
 ### Monitoring and Alerting
 
+**Continuous Monitoring Setup:**
+
+Automated monitoring can be enabled via cron jobs:
+
+```bash
+# Install continuous monitoring (runs automatically via cron)
+./scripts/monitoring-setup.sh
+
+# Remove monitoring when no longer needed
+./scripts/monitoring-remove.sh
+```
+
+**Installed Jobs:**
+- Crash pattern detection: every 10 minutes
+- Resource monitoring: every 5 minutes
+- Service monitoring: every 2 minutes
+
+**Manual Monitoring Scripts:**
+
+```bash
+# Pre-flight health check (run before starting agent tasks)
+./scripts/preflight-health-check.sh
+
+# Resource monitoring (one-time check)
+./scripts/resource-monitor.sh --once
+
+# Service monitoring (one-time check)
+./scripts/service-monitor.sh --once
+
+# Crash pattern detection (analyze last 24 hours)
+./scripts/crash-pattern-detection.sh
+```
+
+**Monitoring Logs:**
+- `.beads/logs/crash-monitor.log` - Crash pattern alerts
+- `.beads/logs/resource-monitor.log` - Resource threshold alerts
+- `.beads/logs/service-monitor.log` - Service availability alerts
+
 **Recommended Alerts:**
 - **Memory Pressure:** Alert at 70% pressure (before 80% OOM threshold)
 - **Disk Space:** Alert at < 30GB free
 - **Crash Surge:** Alert at 10+ crashes in 10 minutes (infrastructure event)
 - **Service Availability:** Monitor inference gateway health endpoint
 
-**Implementation Status:** Monitoring improvements documented in `docs/crash-mitigation-strategies.md`, implementation pending infrastructure team.
+**Implementation Status:** ✅ Monitoring scripts operational. Run `./scripts/monitoring-setup.sh` to enable continuous monitoring.
 
 ### Key Learnings
 
