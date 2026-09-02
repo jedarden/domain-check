@@ -96,11 +96,53 @@ The installers do this; bare `cp` into `~/.config/systemd/user/` does not.
 
 ---
 
+## Persistent Pack-Memory Bounds (OOM root-cause fix)
+
+Exit-code -1 crashes in this workspace (bf-173o7e: 129 kills on 2026-08-14; bf-4x12ec: same
+mechanism) were **kernel memcg OOM kills**, not git bugs: a bare `git gc --aggressive
+--prune=now` over a bloated repo pushed git-pack-objects RSS past the 12GiB `MemoryMax` of
+needle's per-dispatch scope (`run-p*.scope` in the systemd **user** manager), and the kernel
+SIGKILLed the agent. `safe-git-gc.sh` bounds only its own sanctioned path — the bare
+invocation is defended solely by git config, which for a year existed only as hand-applied
+local state in this repo's `.git/config` and nowhere reproducible.
+
+`scripts/setup-git-gc-config.sh` now makes that bound persistent, reproducible, and
+verifiable:
+
+- `pack.windowMemory = 2g` — caps the delta search window
+- `pack.deltaCacheSize = 1g` — caps the delta write-out cache
+- `pack.threads = 1` — **required**: per git docs the window limit is *per thread*, so
+  leaving threads unset lets git multiply the window across all cores
+- Worst case ≈ 3GiB per pack run, a quarter of the 12GiB dispatch scope
+
+```bash
+./scripts/setup-git-gc-config.sh              # bound this repo (local scope)
+./scripts/setup-git-gc-config.sh --global     # bound all repos for this user (~/.gitconfig)
+./scripts/setup-git-gc-config.sh --verify     # exit 1 if the effective bound is missing/unsafe
+```
+
+Applied `--global` on this box on 2026-09-02, so every repo for the `coding` user is
+protected — including the other repos whose dispatch scopes produced the bf-4x12ec-family
+kills. Re-run `--verify` if a repo reports fresh exit-code -1 crashes during git operations.
+
+Tested by `scripts/test-gc-memory-bounds.sh`: it runs the exact crash command at reduced
+scale (8×64MiB incompressible blobs) under a 768MiB cgroup — 1/16th of the dispatch scope —
+and asserts exit 0 with peak RSS ≈ 313MiB. Before the bound, the same command needed >12GiB
+and died 129 times in a row.
+
+What this does **not** cover: needle's zero-backoff re-claim loop, which amplified one
+deterministic kill into a 129-attempt storm (bead released → re-claimed 9s later). That is
+needle-side, outside this repo; alert-side suppression is handled by
+`scripts/crash-alert-manager.sh` dedup/cooldown.
+
+---
+
 ## Prevention Checklist
 
 **Daily:**
 - [ ] Run pre-flight health check before starting work
 - [ ] Check available memory (>10GB required)
+- [ ] Confirm pack-memory bounds still verify: `./scripts/setup-git-gc-config.sh --verify`
 
 **Weekly:**
 - [ ] Run `./scripts/check-repo-health.sh`
@@ -122,6 +164,7 @@ The installers do this; bare `cp` into `~/.config/systemd/user/` does not.
 | `check-repo-health.sh` | Repository size and object check | Weekly health monitoring |
 | `safe-git-gc.sh` | Memory-limited garbage collection | When cleanup needed |
 | `safe-git-gc-monitor.sh` | Monitor gc progress | During gc operations |
+| `setup-git-gc-config.sh` | Persistent pack-memory bound + verify | After cloning; `--verify` when exit -1 appears |
 
 ---
 
@@ -157,6 +200,9 @@ free -h
 
 # Run with memory limit
 SAFE_GC_MEMORY_MAX=2g ./scripts/safe-git-gc.sh --full
+
+# Confirm the persistent pack-memory bound is intact (see its section above)
+./scripts/setup-git-gc-config.sh --verify
 ```
 
 ### Pre-Flight Check Fails

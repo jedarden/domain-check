@@ -113,6 +113,8 @@ All cluster manifests (Deployment, Service, IngressRoute, etc.) live in **jedard
 
 **Evidence:** Investigation of bead bf-173o7e showed `git gc --aggressive` completed successfully with 1.1GB peak memory usage, no OOM events, and repository integrity verified. Safe-git-gc scripts provide even better safety.
 
+**Mechanical guard for the bare-gc path (2026-09-02):** safe-git-gc.sh bounds only its own invocations — the Aug-14 crash storm happened when an agent ran bare `git gc --aggressive --prune=now`, whose pack-objects RSS exceeded the 12GiB `MemoryMax` of needle's dispatch scope (memcg OOM SIGKILL → exit code -1, 129 attempts). That path is now defended by persistent git config, not convention: `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` (the window limit is per-thread, so threads must be pinned) → worst case ≈3GiB per pack run. Applied repo-locally **and** globally (`./scripts/setup-git-gc-config.sh --global`). Check anytime with `./scripts/setup-git-gc-config.sh --verify` (exit 1 = unbounded, unsafe); tests in `scripts/test-gc-memory-bounds.sh` rerun the exact crash command under a 768MiB cgroup. See `docs/maintenance/repository-maintenance-guide.md`.
+
 ### Service Availability Checks
 
 Before starting tasks that depend on external services:
