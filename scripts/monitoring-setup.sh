@@ -45,6 +45,9 @@ fi
 cat >> "$TEMP_CRON" << EOF
 
 # === Domain Check Monitoring (installed $(date)) ===
+# Crash alert manager with classification and deduplication (every 5 minutes)
+*/5 * * * * cd $REPO_ROOT && $SCRIPT_DIR/crash-alert-manager.sh --auto-process >> $REPO_ROOT/.beads/logs/crash-alert-manager.log 2>&1
+
 # Crash pattern detection (every 10 minutes)
 */10 * * * * cd $REPO_ROOT && $SCRIPT_DIR/crash-pattern-detection.sh --quiet >> $REPO_ROOT/.beads/logs/crash-monitor.log 2>&1
 
@@ -53,6 +56,9 @@ cat >> "$TEMP_CRON" << EOF
 
 # Service monitoring (every 2 minutes)
 */2 * * * * cd $REPO_ROOT && $SCRIPT_DIR/service-monitor.sh --once --quiet >> $REPO_ROOT/.beads/logs/service-monitor.log 2>&1
+
+# Repository health monitoring (every hour)
+0 * * * * cd $REPO_ROOT && $SCRIPT_DIR/check-repo-health.sh --quiet >> $REPO_ROOT/.beads/logs/repo-health.log 2>&1
 EOF
 
 # Install crontab

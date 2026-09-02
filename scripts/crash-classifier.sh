@@ -36,18 +36,20 @@ if [ -z "$BEAD_ID" ]; then
 fi
 
 # Artifact paths
-BEAD_DIR=".beads/checkpoint/forensic.jsonl"
-METADATA_FILE=".beads/beads.db"
+TRACE_DIR=".beads/traces/${BEAD_ID}/trace.jsonl"
 
-if [ ! -f "$BEAD_DIR" ]; then
-    echo "ERROR: Bead artifacts not found: $BEAD_DIR"
+if [ ! -f "$TRACE_DIR" ]; then
+    echo "ERROR: Bead trace not found: $TRACE_DIR"
     exit 2
 fi
 
-# Extract bead data from checkpoint
+# Extract bead data from trace file
 extract_bead_data() {
     local bead_id="$1"
-    grep "\"id\":\"$bead_id\"" "$BEAD_DIR" 2>/dev/null || true
+    local trace_file=".beads/traces/${bead_id}/trace.jsonl"
+    if [ -f "$trace_file" ]; then
+        cat "$trace_file"
+    fi
 }
 
 # Classify crash
@@ -57,7 +59,7 @@ classify_crash() {
 
     if [ -z "$bead_data" ]; then
         echo "UNKNOWN"
-        echo "No bead data found in checkpoint"
+        echo "No trace data found for bead"
         exit 2
     fi
 
