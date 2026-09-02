@@ -1,0 +1,12 @@
+[Unit]
+Description=Domain Check Repository Health Check (Daily)
+Documentation=https://git.ardenone.com/jedarden/domain-check
+
+[Timer]
+# Run daily at 2 AM (before GC)
+OnCalendar=*-*-* 02:00:00
+AccuracySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

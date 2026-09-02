@@ -1,0 +1,14 @@
+[Unit]
+Description=Domain Check Crash Pattern Detection
+Documentation=file:///home/coding/domain-check/docs/crash-response-guide.md
+
+[Service]
+Type=oneshot
+ExecStart=/home/coding/domain-check/scripts/crash-pattern-detection.sh --quiet
+WorkingDirectory=/home/coding/domain-check
+Nice=10
+IOSchedulingClass=idle
+IOSchedulingPriority=7
+Environment=PATH=/home/coding/.local/bin:/run/current-system/sw/bin
+StandardOutput=append:/home/coding/domain-check/.beads/logs/crash-monitor.log
+StandardError=append:/home/coding/domain-check/.beads/logs/crash-monitor.log

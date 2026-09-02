@@ -1,0 +1,14 @@
+[Unit]
+Description=Domain Check Service Monitoring
+Documentation=file:///home/coding/domain-check/docs/crash-mitigation-strategies.md
+
+[Service]
+Type=oneshot
+ExecStart=/home/coding/domain-check/scripts/service-monitor.sh --once --quiet
+WorkingDirectory=/home/coding/domain-check
+Nice=10
+IOSchedulingClass=idle
+IOSchedulingPriority=7
+Environment=PATH=/home/coding/.local/bin:/run/current-system/sw/bin
+StandardOutput=append:/home/coding/domain-check/.beads/logs/service-monitor.log
+StandardError=append:/home/coding/domain-check/.beads/logs/service-monitor.log

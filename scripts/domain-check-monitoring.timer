@@ -1,0 +1,12 @@
+[Unit]
+Description=Domain Check Monitoring Timer (crash patterns, resources, services)
+Documentation=file:///home/coding/domain-check/docs/crash-mitigation-strategies.md
+
+[Timer]
+# Run every 10 minutes
+OnCalendar=*:00/10
+# Run immediately on timer start if it missed the last start
+Persistent=true
+
+[Install]
+WantedBy=timers.target
