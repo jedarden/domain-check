@@ -10,6 +10,9 @@
 # Environment variables:
 #   SAFE_GC_MEMORY_MAX  Maximum memory to use (default: 2g)
 #   SAFE_GC_CHECKPOINT  Checkpoint file path (default: .git/safe-gc-checkpoint.json)
+#   SAFE_GC_LOCK_FILE   Box-wide gc lock (default: /tmp/domain-check-safe-git-gc.lock)
+#   SAFE_GC_LOCK_WAIT   Seconds to wait for the gc lock before skipping (default: 1800)
+#   SAFE_GC_NO_CGROUP   Set to 1 to disable the systemd cgroup memory ceiling
 
 set -euo pipefail
 
@@ -18,6 +21,15 @@ MEMORY_MAX="${SAFE_GC_MEMORY_MAX:-2g}"
 CHECKPOINT_FILE="${SAFE_GC_CHECKPOINT:-.git/safe-gc-checkpoint.json}"
 LOG_FILE=".git/safe-gc.log"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Box-wide serialization: the bf-65lsdu OOM (2026-08-13) was amplified by
+# multiple git gc operations running concurrently, each consuming >4GB. One
+# shared lockfile caps the whole box at a single gc run at a time.
+LOCK_FILE="${SAFE_GC_LOCK_FILE:-/tmp/domain-check-safe-git-gc.lock}"
+LOCK_WAIT_SECS="${SAFE_GC_LOCK_WAIT:-1800}"
+NO_CGROUP="${SAFE_GC_NO_CGROUP:-0}"
+CGROUP_CAP="unknown"
+CAPPED_SEQ=0
 
 # Colors for output
 RED='\033[0;31m'
@@ -71,13 +83,86 @@ log_error() {
   echo -e "${RED}[✗]${NC} $*" | tee -a "$LOG_FILE"
 }
 
+# Convert a systemd-style size (bare bytes, K, M, G) to bytes
+mem_to_bytes() {
+  local value="${1^^}"
+  local number
+  number="$(tr -dc '0-9' <<< "$value")"
+  if [[ -z "$number" ]]; then
+    echo 0
+    return
+  fi
+  case "$value" in
+    *K) echo $((number * 1024)) ;;
+    *M) echo $((number * 1024 * 1024)) ;;
+    *G) echo $((number * 1024 * 1024 * 1024)) ;;
+    *)  echo "$number" ;;
+  esac
+}
+
+# Resolve whether a hard cgroup memory ceiling is available via the systemd
+# user manager. Probed once per run; when unavailable the gc still runs under
+# the soft git limits (pack.windowMemory / pack.deltaCacheSize).
+resolve_cgroup_cap() {
+  if [[ "$NO_CGROUP" == "1" ]] || ! command -v systemd-run >/dev/null 2>&1; then
+    CGROUP_CAP="off"
+    return
+  fi
+  if systemd-run --user --quiet --scope --unit="safe-git-gc-probe-$$" \
+      -p MemoryMin=1M -- true >/dev/null 2>&1; then
+    CGROUP_CAP="on"
+  else
+    CGROUP_CAP="off"
+  fi
+}
+
+# Run a command inside a hard cgroup memory ceiling when one is available.
+# A runaway gc is then OOM-killed inside its own cgroup instead of exhausting
+# the box and letting the global OOM killer shoot an unrelated agent process —
+# the mechanism behind the bf-65lsdu signal -1 crash (2026-08-13).
+run_memory_capped() {
+  if [[ "$CGROUP_CAP" == "on" ]]; then
+    local max_bytes high_bytes
+    max_bytes="$(mem_to_bytes "$MEMORY_MAX")"
+    high_bytes=$((max_bytes * 3 / 4))
+    CAPPED_SEQ=$((CAPPED_SEQ + 1))
+    systemd-run --user --quiet --scope \
+      --unit="safe-git-gc-${$$}-${CAPPED_SEQ}" \
+      -p "MemoryMax=${max_bytes}" \
+      -p "MemoryHigh=${high_bytes}" \
+      -- "$@"
+  else
+    "$@"
+  fi
+}
+
+# Serialize gc runs box-wide so total gc memory is bounded to one ceiling.
+# Skips cleanly (exit 0) when another gc holds the lock — the nightly timer
+# will simply run again, whereas stacking two gc runs is what OOM'd the box.
+acquire_gc_lock() {
+  if ! command -v flock >/dev/null 2>&1; then
+    log_warning "flock not available; running without gc serialization"
+    return 0
+  fi
+  if ! exec 9>"$LOCK_FILE"; then
+    log_warning "Cannot open lock file $LOCK_FILE; running without gc serialization"
+    return 0
+  fi
+  if ! flock -w "$LOCK_WAIT_SECS" 9; then
+    log_warning "Another git gc holds $LOCK_FILE (waited ${LOCK_WAIT_SECS}s); skipping this run"
+    exit 0
+  fi
+  log "Acquired gc lock: $LOCK_FILE"
+}
+
 # Check if git is needed
 check_gc_needed() {
   log "Checking if gc is needed..."
 
-  # Count loose objects
+  # Count loose objects (`count:` is the loose-object count in verbose output;
+  # there is no `loose:` key, so grep for that instead)
   local loose_objects
-  loose_objects=$(git count-objects 2>/dev/null | grep '^loose:' | awk '{print $2}' || echo "0")
+  loose_objects=$(git count-objects -v 2>/dev/null | grep '^count:' | awk '{print $2}' || echo "0")
 
   # Count pack files
   local pack_count
@@ -139,7 +224,7 @@ preflight_check() {
 
   # Check repository integrity
   log "  Verifying repository integrity..."
-  if ! git fsck --no-progress 2>&1 | tee -a "$LOG_FILE"; then
+  if ! run_memory_capped git fsck --no-progress 2>&1 | tee -a "$LOG_FILE"; then
     log_error "Repository integrity check failed"
     return 1
   fi
@@ -162,7 +247,7 @@ save_checkpoint() {
   repo_size=$(du -sh .git 2>/dev/null | awk '{print $1}')
 
   local loose_objects
-  loose_objects=$(git count-objects 2>/dev/null | grep '^loose:' | awk '{print $2}' || echo "0")
+  loose_objects=$(git count-objects -v 2>/dev/null | grep '^count:' | awk '{print $2}' || echo "0")
 
   local pack_count
   pack_count=$(find .git/objects/pack -name '*.pack' 2>/dev/null | wc -l)
@@ -216,7 +301,7 @@ stage1_standard_gc() {
   git config pack.deltaCacheSize "1g"
 
   # Run standard gc
-  if git gc --prune=now 2>&1 | tee -a "$LOG_FILE"; then
+  if run_memory_capped git gc --prune=now 2>&1 | tee -a "$LOG_FILE"; then
     local end_time
     end_time=$(date +%s)
     local duration=$((end_time - start_time))
@@ -240,11 +325,11 @@ stage2_incremental_repack() {
 
   # Pack any remaining loose objects
   log "  Packing loose objects..."
-  git repack -q -d --max-pack-size=500m 2>&1 | tee -a "$LOG_FILE" || true
+  run_memory_capped git repack -q -d --max-pack-size=500m 2>&1 | tee -a "$LOG_FILE" || true
 
   # Consolidate small packs
   log "  Consolidating packs..."
-  git repack -q -d -f --depth=50 --window=50 2>&1 | tee -a "$LOG_FILE" || true
+  run_memory_capped git repack -q -d -f --depth=50 --window=50 2>&1 | tee -a "$LOG_FILE" || true
 
   local end_time
   end_time=$(date +%s)
@@ -264,7 +349,7 @@ stage3_deep_compression() {
 
   # Deep repack with memory limits
   log "  Deep repacking with memory limit: $MEMORY_MAX"
-  git repack -q -d -f --depth=10 --window=10 --window-memory="$MEMORY_MAX" 2>&1 | tee -a "$LOG_FILE" || true
+  run_memory_capped git repack -q -d -f --depth=10 --window=10 --window-memory="$MEMORY_MAX" 2>&1 | tee -a "$LOG_FILE" || true
 
   local end_time
   end_time=$(date +%s)
@@ -280,7 +365,7 @@ final_verification() {
   log "Running final verification..."
 
   # Verify repository integrity
-  if ! git fsck --no-progress 2>&1 | tee -a "$LOG_FILE"; then
+  if ! run_memory_capped git fsck --no-progress 2>&1 | tee -a "$LOG_FILE"; then
     log_error "Repository integrity check failed after gc"
     return 1
   fi
