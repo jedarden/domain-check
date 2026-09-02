@@ -37,6 +37,7 @@ fi
 
 # Artifact paths
 TRACE_DIR=".beads/traces/${BEAD_ID}/trace.jsonl"
+METADATA_DIR=".beads/traces/${BEAD_ID}/metadata.json"
 
 if [ ! -f "$TRACE_DIR" ]; then
     echo "ERROR: Bead trace not found: $TRACE_DIR"
@@ -49,6 +50,15 @@ extract_bead_data() {
     local trace_file=".beads/traces/${bead_id}/trace.jsonl"
     if [ -f "$trace_file" ]; then
         cat "$trace_file"
+    fi
+}
+
+# Extract exit code from metadata.json
+extract_exit_code() {
+    local bead_id="$1"
+    local metadata_file=".beads/traces/${bead_id}/metadata.json"
+    if [ -f "$metadata_file" ]; then
+        grep -oP '"exit_code":\s*-?\d+' "$metadata_file" 2>/dev/null | sed 's/"exit_code"://' | tr -d ' ' | head -1
     fi
 }
 
@@ -79,10 +89,22 @@ classify_crash() {
         return 0
     fi
 
-    # Check for exit code -1 (SIGKILL/SIGHUP)
+    # Check for successful task completion before crash (bf-1ea4g pattern)
+    # This check must come BEFORE exit code -1 check to catch post-completion crashes
+    # Pattern: work committed < 30 seconds before crash
+    if echo "$bead_data" | grep -q "git commit\|work.*complete\|task.*done"; then
+        echo "FALSE_POSITIVE"
+        echo "Reason: Task completed successfully before crash"
+        echo "Pattern: Post-completion cleanup or administrative failure (bf-1ea4g pattern)"
+        echo "Action: Verify task completion, may be false positive"
+        return 0
+    fi
+
+    # Check for exit code -1 (SIGKILL/SIGHUP) from metadata.json
     # IMPORTANT: Check if bead ultimately completed successfully (FALSE_POSITIVE pattern)
     # Root cause analysis from bf-4k2ws showed SIGHUP cascades often result in successful auto-retry
-    if echo "$bead_data" | grep -q '"exit_code":-1'; then
+    EXIT_CODE=$(extract_exit_code "$bead_id")
+    if [[ "$EXIT_CODE" == "-1" ]]; then
         # Check bead status to determine if this is a false positive
         BEAD_STATUS=$(bead show "$bead_id" 2>/dev/null | grep -i "^Status" || echo "unknown")
 
@@ -111,17 +133,6 @@ classify_crash() {
         echo "Reason: OOM killer or memory exhaustion"
         echo "Pattern: System resource exhaustion"
         echo "Action: Check memory usage and available RAM"
-        return 0
-    fi
-
-    # Check for successful task completion before crash
-    # Pattern: work committed < 30 seconds before crash
-    if echo "$bead_data" | grep -q "git commit\|work.*complete\|task.*done"; then
-        # Check if crash happened shortly after completion
-        echo "FALSE_POSITIVE"
-        echo "Reason: Task completed successfully before crash"
-        echo "Pattern: Post-completion cleanup or administrative failure"
-        echo "Action: Verify task completion, may be false positive"
         return 0
     fi
 
