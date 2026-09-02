@@ -1,197 +1,145 @@
 #!/usr/bin/env bash
-# Service Availability Monitoring Script
-# Purpose: Monitor external service availability and detect outages
-# Usage: ./scripts/service-monitor.sh [--continuous] [--interval <seconds>] [--services <list>]
+# Service Availability Monitor
+# Checks critical external services and reports availability
+# Used as pre-flight check before starting agent tasks
 
 set -euo pipefail
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ALERT_LOG="$PROJECT_ROOT/.beads/logs/service-alerts.log"
-METRICS_LOG="$PROJECT_ROOT/.beads/logs/service-metrics.log"
+INFERENCE_GATEWAY="https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health"
+TIMEOUT=5
+RETRIES=3
+RETRY_DELAY=2
 
-# Default services to monitor
-DEFAULT_SERVICES=(
-  "inference-gateway|https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health"
-  "argo-workflows|https://argo-ci.ardenone.com"
-  "argocd|https://argocd-ro-ardenone-manager-ts.ardenone.com:8444/api/v1/applications"
-)
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-# Monitoring defaults
-CONTINUOUS_MODE=false
-INTERVAL_SECONDS=60          # 1 minute
-TIMEOUT_SECONDS=5
-VERBOSE=false
-RUN_ONCE=false
-CONSECUTIVE_FAILURES=0
-MAX_CONSECUTIVE_FAILURES=3
-
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --continuous)
-      CONTINUOUS_MODE=true
-      shift
-      ;;
-    --interval)
-      INTERVAL_SECONDS="$2"
-      shift 2
-      ;;
-    --timeout)
-      TIMEOUT_SECONDS="$2"
-      shift 2
-      ;;
-    --once)
-      RUN_ONCE=true
-      shift
-      ;;
-    --verbose)
-      VERBOSE=true
-      shift
-      ;;
-    -h|--help)
-      echo "Usage: $0 [options]"
-      echo "Options:"
-      echo "  --continuous       Run continuously (default: single check)"
-      echo "  --interval <secs>  Check interval in seconds (default: 60)"
-      echo "  --timeout <secs>   Request timeout in seconds (default: 5)"
-      echo "  --once             Run single check then exit"
-      echo "  --verbose          Show detailed check output"
-      echo "  -h, --help         Show this help message"
-      exit 0
-      ;;
-    *)
-      echo "Error: Unknown argument: $1" >&2
-      exit 1
-      ;;
-  esac
-done
-
-# Ensure log directory exists
-mkdir -p "$(dirname "$ALERT_LOG")"
-mkdir -p "$(dirname "$METRICS_LOG")"
-
-# Logging functions
-log_alert() {
-  local level="$1"
-  local service="$2"
-  local message="$3"
-  local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  echo "[$timestamp] [$level] [$service] $message" | tee -a "$ALERT_LOG"
+# Logging
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
 }
 
-log_metric() {
-  local service_name="$1"
-  local metric_value="$2"  # 0 = down, 1 = up
-  local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  echo "$timestamp service_up{service=\"$service_name\"}=$metric_value" >> "$METRICS_LOG"
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
-verbose() {
-  if [[ "$VERBOSE" == true ]]; then
-    echo "$@"
-  fi
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check single service
-check_service() {
-  local service_name="$1"
-  local service_url="$2"
+# Check inference gateway with retry logic
+check_inference_gateway() {
+    local attempt=1
+    local status_code="000"
+    local response_body=""
 
-  verbose "Checking $service_name at $service_url..."
+    while [ $attempt -le $RETRIES ]; do
+        log_info "Checking inference gateway (attempt $attempt/$RETRIES)..."
 
-  local start_time=$(date +%s%N)
-  local http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$TIMEOUT_SECONDS" "$service_url" 2>&1)
-  local end_time=$(date +%s%N)
-  local response_time=$(( (end_time - start_time) / 1000000000 ))  # Convert nanoseconds to seconds
+        # Capture HTTP status code and body
+        response=$(curl -s -w "\n%{http_code}" -m "$TIMEOUT" "$INFERENCE_GATEWAY" 2>&1 || echo "000")
+        status_code=$(echo "$response" | tail -1)
+        response_body=$(echo "$response" | head -n -1)
 
-  # Log metrics
-  if [[ "$http_code" == "000" ]]; then
-    # Connection failed
-    log_metric "$service_name" 0
-    verbose "  ❌ Connection failed (timeout or DNS error)"
-    echo "DOWN: $service_name (connection failed)"
+        if [ "$status_code" = "200" ]; then
+            log_info "✓ Inference gateway: HEALTHY (HTTP 200)"
+            return 0
+        elif [ "$status_code" = "503" ]; then
+            log_warn "✗ Inference gateway: UNAVAILABLE (HTTP 503 - no available server)"
+            if [ $attempt -lt $RETRIES ]; then
+                log_info "Retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+            fi
+        elif [ "$status_code" = "000" ]; then
+            log_error "✗ Inference gateway: CONNECTION FAILED (timeout or network error)"
+            if [ $attempt -lt $RETRIES ]; then
+                log_info "Retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+            fi
+        else
+            log_warn "✗ Inference gateway: UNEXPECTED STATUS (HTTP $status_code)"
+            if [ $attempt -lt $RETRIES ]; then
+                log_info "Retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+            fi
+        fi
+
+        attempt=$((attempt + 1))
+    done
+
+    log_error "Inference gateway: UNHEALTHY after $RETRIES attempts"
     return 1
-  elif [[ "$http_code" == "200" ]] || [[ "$http_code" == "204" ]]; then
-    # Service healthy
-    log_metric "$service_name" 1
-    verbose "  ✅ Healthy (HTTP $http_code, ${response_time}s)"
-    echo "UP: $service_name (HTTP $http_code, ${response_time}s)"
-    return 0
-  else
-    # Service returning error code
-    log_metric "$service_name" 0
-    verbose "  ⚠️  HTTP $http_code (service error)"
-    echo "DOWN: $service_name (HTTP $http_code)"
-    return 1
-  fi
 }
 
-# Single monitoring cycle
-monitor_cycle() {
-  local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  local total_services=${#DEFAULT_SERVICES[@]}
-  local services_up=0
+# Check system resources
+check_system_resources() {
+    log_info "Checking system resources..."
 
-  echo "=== Service Monitor: $timestamp ==="
-
-  for service_entry in "${DEFAULT_SERVICES[@]}"; do
-    IFS='|' read -r service_name service_url <<< "$service_entry"
-
-    if check_service "$service_name" "$service_url"; then
-      ((services_up++))
-      CONSECUTIVE_FAILURES=0
+    # Memory check
+    local avail_mem_gb=$(free -g | awk '/^Mem:/{print $7}')
+    if [ "$avail_mem_gb" -lt 10 ]; then
+        log_warn "⚠ Low memory: ${avail_mem_gb}GB available (<10GB threshold)"
     else
-      ((CONSECUTIVE_FAILURES++))
-
-      # Alert on consecutive failures
-      if [[ $CONSECUTIVE_FAILURES -ge $MAX_CONSECUTIVE_FAILURES ]]; then
-        log_alert "CRITICAL" "$service_name" "Service down for $CONSECUTIVE_FAILURES consecutive checks"
-      fi
+        log_info "✓ Memory: ${avail_mem_gb}GB available"
     fi
-  done
 
-  local availability=$((services_up * 100 / total_services))
-  echo "Availability: $services_up/$total_services services (${availability}%)"
-  echo
+    # Disk check
+    local avail_disk_gb=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
+    if [ "$avail_disk_gb" -lt 20 ]; then
+        log_warn "⚠ Low disk space: ${avail_disk_gb}GB free (<20GB threshold)"
+    else
+        log_info "✓ Disk: ${avail_disk_gb}GB free"
+    fi
 
-  # Alert if all services are down
-  if [[ $services_up -eq 0 ]]; then
-    log_alert "CRITICAL" "ALL_SERVICES" "All monitored services are down - possible infrastructure issue"
-  fi
+    # Load average
+    local load_1min=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
+    local load_int=$(echo "$load_1min" | cut -d. -f1)
+    if [ "$load_int" -gt 10 ]; then
+        log_warn "⚠ High load: ${load_1min} (1-minute average)"
+    else
+        log_info "✓ Load: ${load_1min} (1-minute average)"
+    fi
 }
 
 # Main function
 main() {
-  if [[ "$RUN_ONCE" == true ]] || [[ "$CONTINUOUS_MODE" == false ]]; then
-    # Single check mode
-    monitor_cycle
+    echo "=================================="
+    echo "Service Availability Monitor"
+    echo "=================================="
+    echo ""
 
-    # Exit code based on service availability
-    if [[ $services_up -eq ${#DEFAULT_SERVICES[@]} ]]; then
-      exit 0  # All services up
-    elif [[ $services_up -gt 0 ]]; then
-      exit 1  # Some services down
-    else
-      exit 2  # All services down
+    local gateway_healthy=true
+
+    # Check inference gateway
+    if ! check_inference_gateway; then
+        gateway_healthy=false
     fi
-  fi
 
-  # Continuous mode
-  echo "=== Continuous Service Monitoring Started ==="
-  echo "Interval: ${INTERVAL_SECONDS}s"
-  echo "Services monitored: ${#DEFAULT_SERVICES[@]}"
-  echo "Press Ctrl+C to stop"
-  echo
+    echo ""
 
-  while true; do
-    monitor_cycle
+    # Check system resources
+    check_system_resources
 
-    verbose "Sleeping for ${INTERVAL_SECONDS}s..."
-    sleep "$INTERVAL_SECONDS"
-  done
+    echo ""
+    echo "=================================="
+
+    if [ "$gateway_healthy" = false ]; then
+        log_error "PRE-FLIGHT CHECK FAILED: Inference gateway is unavailable"
+        log_error "Recommendation: Wait for service recovery or investigate gateway status"
+        echo ""
+        echo "Manual gateway check:"
+        echo "  curl -sf --max-time 5 $INFERENCE_GATEWAY || echo 'Gateway down'"
+        exit 1
+    else
+        log_info "PRE-FLIGHT CHECK PASSED: All services healthy"
+        exit 0
+    fi
 }
 
-# Run main
-main
+# Run if executed directly
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main "$@"
+fi
