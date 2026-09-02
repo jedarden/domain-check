@@ -155,6 +155,7 @@
 
 #### Other Crash Reports
 
+- `docs/crash-investigations/bf-4x12ec-final-crash-report.md` - **Canonical bf-4x12ec report** (2026-09-02; consolidated synthesis of the artifacts doc, log review, and Addenda 1-3 — 53-attempt retry storm, cgroup-scoped OOM root cause, work verified complete; cite this one, superseding the individual bf-4x12ec documents)
 - `docs/crash-investigations/bf-4yjq-crash-investigation.md` - **Canonical bf-4yjq report** (2026-09-02; verified 50 crashes, storm context, reproducibility assessment — supersedes the 9-crash figures in the reports below)
 - `docs/crashes/bf-4yjq-crash-report.md` - Comprehensive crash report (partially superseded; see banner)
 - `docs/crashes/bf-4yjq-crash-evidence-summary.md` - Evidence summary
