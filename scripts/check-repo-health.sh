@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Comprehensive repository health check
 # Runs all repository health diagnostics
 

@@ -219,6 +219,86 @@ check_git_health() {
   fi
 }
 
+# Check: Repository size and bloat prevention
+check_repo_size() {
+  log_info "Checking repository size..."
+
+  # Only run if we're in a git repository
+  if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    log_verbose "Not in a git repository - skipping repository size check"
+    return 0
+  fi
+
+  # Thresholds (in MB)
+  WARN_THRESHOLD_MB=2048    # 2 GB
+  CRITICAL_THRESHOLD_MB=5120  # 5 GB
+  AUTO_GC_THRESHOLD_MB=10240  # 10 GB - trigger automatic GC
+
+  # Get repository size in MB
+  repo_size_mb=$(du -s .git 2>/dev/null | awk '{print int($1/1024)}')
+  repo_size_gb=$(echo "scale=1; $repo_size_mb/1024" | awk '{printf "%.1f", $1}')
+
+  log_verbose "Repository .git size: ${repo_size_gb} GB (${repo_size_mb} MB)"
+
+  # Get detailed git object statistics
+  git_stats=$(git count-objects -vH 2>/dev/null || echo "")
+  loose_objects=$(echo "$git_stats" | grep "^count:" | awk '{print $2}')
+  loose_size_kb=$(echo "$git_stats" | grep "^size:" | awk '{print $2}')
+  pack_size_mb=$(echo "$git_stats" | grep "^size-pack:" | awk '{print $2}' | sed 's/MiB//')
+
+  log_verbose "Loose objects: $loose_objects"
+  log_verbose "Loose size: $loose_size_kb"
+  log_verbose "Pack size: ${pack_size_mb}MiB"
+
+  # Check thresholds and take action
+  if [ "$repo_size_mb" -ge "$AUTO_GC_THRESHOLD_MB" ]; then
+    log_error "✗ Repository size critical: ${repo_size_gb} GB (threshold: $(($AUTO_GC_THRESHOLD_MB/1024)) GB)"
+    log_error "  Automatic garbage collection required"
+    log_error "  Loose objects: $loose_objects"
+    log_error "  Pack size: ${pack_size_mb}MiB"
+    log_error ""
+    log_error "RECOMMENDED ACTION:"
+    log_error "  Run: ./scripts/safe-git-gc.sh"
+    log_error "  Or: git gc --aggressive --prune=now"
+
+    # Check if safe-git-gc.sh exists and is executable
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -x "$script_dir/safe-git-gc.sh" ]; then
+      log_error ""
+      log_error "Safe GC script available at: $script_dir/safe-git-gc.sh"
+    fi
+
+    FAILED_CHECKS+=("repo_size_critical")
+    ((CHECKS_FAILED++))
+    return 1
+
+  elif [ "$repo_size_mb" -ge "$CRITICAL_THRESHOLD_MB" ]; then
+    log_error "✗ Repository size exceeds critical threshold: ${repo_size_gb} GB (threshold: $(($CRITICAL_THRESHOLD_MB/1024)) GB)"
+    log_error "  Garbage collection strongly recommended"
+    log_error "  Loose objects: $loose_objects"
+    log_error "  Pack size: ${pack_size_mb}MiB"
+
+    FAILED_CHECKS+=("repo_size_critical")
+    ((CHECKS_FAILED++))
+    return 1
+
+  elif [ "$repo_size_mb" -ge "$WARN_THRESHOLD_MB" ]; then
+    log_warn "⚠ Repository size large: ${repo_size_gb} GB (warning threshold: $(($WARN_THRESHOLD_MB/1024)) GB)"
+    log_warn "  Consider running: git gc"
+    log_warn "  Loose objects: $loose_objects"
+
+    # Warning doesn't fail the check, but does track it
+    log_info "✓ Repository size acceptable but monitor growth"
+    ((CHECKS_PASSED++))
+    return 0
+
+  else
+    log_info "✓ Repository size healthy: ${repo_size_gb} GB"
+    ((CHECKS_PASSED++))
+    return 0
+  fi
+}
+
 # Main health check execution
 main() {
   log_info "=== Pre-flight Health Check Started ==="
@@ -234,6 +314,7 @@ main() {
   check_disk_space
   check_cpu_load
   check_git_health
+  check_repo_size
 
   # Summary
   total_checks=$((CHECKS_PASSED + CHECKS_FAILED))

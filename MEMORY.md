@@ -4,6 +4,7 @@ This directory stores persistent project memory for the domain-check workspace.
 
 ## Memory Files
 
+- [Repository Bloat OOM Crashes](docs/crash-artifacts-bf-4yjq.md) — Incident bf-4yjq: 9 crashes over 2.5 hours from 18GB repository with 17GB loose objects causing OOM during routine git operations
 - [SIGHUP Git Merge Crash Pattern](memory/crash-pattern-sighup-git-merge.md) — Exit code -1 during long-running git operations with 661+ divergent commits under high load
 
 ## Memory Format

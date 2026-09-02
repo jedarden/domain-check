@@ -192,11 +192,179 @@ if task_complete:
 
 ---
 
-### Priority 3: Git GC Operation Safety (MEDIUM)
+### Priority 3: Repository Bloat Prevention (HIGH)
+
+**Addresses:** Repository bloat causing OOM crashes (incident bf-4yjq: 9 crashes from 18GB repo)
+
+**Evidence from bf-4yjq (2026-08-12):**
+- 9 crashes over 2.5 hours, all exit code -1 (SIGKILL from OOM)
+- Repository: 18GB with 17GB loose objects (should be <500MB)
+- `.beads/issues.jsonl`: 248MB (should be <5MB)
+- Root cause: Bead bf-2ildm committed 17+ identical 237MB JSONL files
+- Any significant git operation triggered OOM due to repository bloat
+
+#### Proposal 3.1: Repository Size Monitoring and Alerts (CRITICAL)
+
+**Problem:** No monitoring of repository size growth until crashes occur.
+
+**Implementation:**
+```bash
+#!/bin/bash
+# Repository health monitoring script
+REPO_MAX_SIZE_GB=1  # Alert if repo exceeds 1GB
+LOOSE_OBJECTS_MAX_GB=0.5  # Alert if loose objects exceed 500MB
+
+check_repository_health() {
+  local repo_size=$(du -s .git | awk '{print $1/1048576}')  # Convert KB to GB
+  local loose_objects=$(git count-objects -v | grep "size: " | awk '{print $2/1048576}')
+  local pack_files=$(git count-objects -v | grep "size-pack: " | awk '{print $2/1048576}')
+
+  echo "Repository Size: ${repo_size}GB"
+  echo "Loose Objects: ${loose_objects}GB"
+  echo "Pack Files: ${pack_files}GB"
+
+  if [[ $(echo "$repo_size > $REPO_MAX_SIZE_GB" | bc -l) -eq 1 ]]; then
+    echo "WARNING: Repository size (${repo_size}GB) exceeds threshold (${REPO_MAX_SIZE_GB}GB)"
+    echo "Action required: Run git gc or investigate large files"
+    return 1
+  fi
+
+  if [[ $(echo "$loose_objects > $LOOSE_OBJECTS_MAX_GB" | bc -l) -eq 1 ]]; then
+    echo "WARNING: Loose objects (${loose_objects}GB) exceed threshold (${LOOSE_OBJECTS_MAX_GB}GB)"
+    echo "Action required: Run 'git gc' to pack loose objects"
+    return 1
+  fi
+
+  echo "Repository health: OK"
+  return 0
+}
+
+check_repository_health
+```
+
+**Installation:**
+```bash
+# Add to crontab for daily checks
+0 2 * * * /home/coding/domain-check/scripts/repository-health-check.sh >> /var/log/repo-health.log 2>&1
+```
+
+**Risk:** Very low - read-only checks
+**Effort:** Low - simple script + cron job
+**Timeline:** Immediate (can be deployed now)
+
+#### Proposal 3.2: Prevent .beads/ Large Files in Git
+
+**Problem:** Bead bf-2ildm committed 17+ identical 237MB `.beads/*.jsonl` files.
+
+**Implementation:**
+```bash
+# Add to .gitignore immediately
+cat >> .gitignore <<EOF
+# Bead workspace files (should never be committed)
+.beads/*.jsonl
+.beads/*.json
+.beads/checkpoint/
+.beads/traces/
+.beads/github_*.json
+.beads/divergence-*.json
+EOF
+
+# Pre-commit hook to block large files
+cat > .git/hooks/pre-commit <<'EOF'
+#!/bin/bash
+# Block commits with files > 10MB
+MAX_SIZE_MB=10
+
+large_files=$(git diff --cached --name-only | while read file; do
+  size=$(git diff --cached "$file" | wc -c | awk '{print $1/1048576}')
+  if [[ $(echo "$size > $MAX_SIZE_MB" | bc -l) -eq 1 ]]; then
+    echo "$file (${size}MB)"
+  fi
+done)
+
+if [ -n "$large_files" ]; then
+  echo "ERROR: Commit blocked - large files detected:"
+  echo "$large_files"
+  echo "Maximum file size: ${MAX_SIZE_MB}MB"
+  echo "Add large files to .gitignore or use git-lfs"
+  exit 1
+fi
+EOF
+
+chmod +x .git/hooks/pre-commit
+```
+
+**Risk:** Very low - prevents accidental large file commits
+**Effort:** Low - one-time .gitignore update + hook installation
+**Timeline:** Immediate
+
+#### Proposal 3.3: Automated Git GC Scheduling (CRITICAL)
+
+**Problem:** Manual gc only happens after crashes; preventive gc needed.
+
+**Implementation:**
+```bash
+# Install automated gc scheduling (cron-based)
+cat > /tmp/install-git-gc-cron.sh <<'SCRIPT'
+#!/bin/bash
+# Schedule daily git gc during low-activity hours
+
+# Run standard gc daily at 3 AM
+(crontab -l 2>/dev/null; echo "0 3 * * * cd /home/coding/domain-check && ./scripts/safe-git-gc.sh >> /var/log/git-gc.log 2>&1") | crontab -
+
+# Run full gc weekly on Sunday at 4 AM
+(crontab -l 2>/dev/null; echo "0 4 * * 0 cd /home/coding/domain-check && ./scripts/safe-git-gc.sh --full >> /var/log/git-gc.log 2>&1") | crontab -
+
+# Repository health check daily at 2 AM
+(crontab -l 2>/dev/null; echo "0 2 * * * cd /home/coding/domain-check && ./scripts/repository-health-check.sh >> /var/log/repo-health.log 2>&1") | crontab -
+
+echo "Git gc scheduling installed:"
+crontab -l | grep -E "git-gc|repo-health"
+SCRIPT
+
+chmod +x /tmp/install-git-gc-cron.sh
+/tmp/install-git-gc-cron.sh
+```
+
+**Risk:** Low - gc operations are safe with memory limits
+**Effort:** Low - cron job installation script
+**Timeline:** Immediate
+
+#### Proposal 3.4: Pre-Task Repository Health Check
+
+**Problem:** Agents start tasks without checking repository health.
+
+**Implementation:**
+```bash
+# Add to pre-flight health check
+check_repository_health_before_task() {
+  local repo_size=$(du -s .git 2>/dev/null | awk '{print $1/1048576}')
+  
+  if [[ $(echo "$repo_size > 2" | bc -l) -eq 1 ]]; then
+    echo "ERROR: Repository bloated (${repo_size}GB) - run git gc first"
+    echo "Run: ./scripts/safe-git-gc.sh"
+    return 1
+  fi
+  
+  echo "Repository health OK (${repo_size}GB)"
+  return 0
+}
+
+# Integrate into preflight check
+./scripts/preflight-health-check.sh
+```
+
+**Risk:** Very low - read-only check before task start
+**Effort:** Low - add to existing preflight script
+**Timeline:** Short-term (1 week)
+
+---
+
+### Priority 4: Git GC Operation Safety (MEDIUM)
 
 **Addresses:** General concern about git gc resource usage
 
-#### Proposal 3.1: Use Safe Git GC Scripts (ALREADY IMPLEMENTED)
+#### Proposal 4.1: Use Safe Git GC Scripts (ALREADY IMPLEMENTED)
 
 **Status:** ✅ **Complete** - Scripts already exist at `scripts/safe-git-gc.sh`
 
@@ -216,7 +384,7 @@ if task_complete:
 
 **Recommendation:** Use existing safe-git-gc scripts instead of bare `git gc --aggressive`.
 
-#### Proposal 3.2: Git GC Resource Monitoring
+#### Proposal 4.2: Git GC Resource Monitoring
 
 **Problem:** No visibility into git gc memory usage during execution.
 
@@ -261,11 +429,11 @@ systemd-run --scope --quiet \
 
 ---
 
-### Priority 4: Monitoring and Alerting (MEDIUM)
+### Priority 5: Monitoring and Alerting (MEDIUM)
 
 **Addresses:** Lack of visibility into agent health and service availability
 
-#### Proposal 4.1: Inference Gateway Health Monitoring
+#### Proposal 5.1: Inference Gateway Health Monitoring
 
 **Problem:** No monitoring of inference gateway availability.
 
@@ -292,7 +460,7 @@ monitoring:
 **Effort:** Medium - requires Prometheus setup
 **Timeline:** Long-term (1-2 months)
 
-#### Proposal 4.2: Agent Task Duration Monitoring
+#### Proposal 5.2: Agent Task Duration Monitoring
 
 **Problem:** No alerting on abnormally long-running tasks.
 
@@ -316,7 +484,7 @@ monitoring:
 **Effort:** Low - add metrics to agent
 **Timeline:** Short-term (2-3 weeks)
 
-#### Proposal 4.3: Crash Pattern Detection
+#### Proposal 5.3: Crash Pattern Detection
 
 **Problem:** No automated detection of systematic crash patterns.
 
@@ -347,11 +515,11 @@ crash_pattern_detection() {
 
 ---
 
-### Priority 5: Process Isolation and Fault Tolerance (LOW)
+### Priority 6: Process Isolation and Fault Tolerance (LOW)
 
 **Addresses:** System stability and crash containment
 
-#### Proposal 5.1: Agent Cgroup Resource Limits
+#### Proposal 6.1: Agent Cgroup Resource Limits
 
 **Problem:** No resource limits on agent processes.
 
@@ -492,9 +660,13 @@ SAFE_GC_MEMORY_MAX=2g ./scripts/safe-git-gc.sh --full
 | 1.3 Pre-Flight Service Health Checks | P1 | Low | 1 week |
 | 2.1 Increase Max Turns for Admin Tasks | P2 | Low | Immediate |
 | 2.3 Task Completion Detection | P2 | Low | 1 week |
-| 3.2 Git GC Resource Monitoring | P3 | Low | 1 week |
-| 4.2 Agent Task Duration Monitoring | P4 | Low | 2 weeks |
-| 4.3 Crash Pattern Detection | P4 | Low | 1 week |
+| 3.1 Repository Size Monitoring and Alerts | P3 | Low | Immediate |
+| 3.2 Prevent .beads/ Large Files in Git | P3 | Low | Immediate |
+| 3.3 Automated Git GC Scheduling | P3 | Low | Immediate |
+| 3.4 Pre-Task Repository Health Check | P3 | Low | 1 week |
+| 4.2 Git GC Resource Monitoring | P4 | Low | 1 week |
+| 5.2 Agent Task Duration Monitoring | P5 | Low | 2 weeks |
+| 5.3 Crash Pattern Detection | P5 | Low | 1 week |
 
 ### Phase 2: Short-term (2-6 weeks)
 
@@ -502,17 +674,17 @@ SAFE_GC_MEMORY_MAX=2g ./scripts/safe-git-gc.sh --full
 |----------|----------|--------|----------|
 | 1.1 Exponential Backoff Retry | P1 | Medium | 2-3 weeks |
 | 2.2 Non-Interactive Bead Closing | P2 | Medium | 2-3 weeks |
-| 3.3 Git GC Cgroup Limits | P3 | Low | 1 week |
-| 5.1 Agent Cgroup Resource Limits | P5 | Low | 2 weeks |
+| 4.3 Git GC Cgroup Limits | P4 | Low | 1 week |
+| 6.1 Agent Cgroup Resource Limits | P6 | Low | 2 weeks |
 
 ### Phase 3: Long-term (1-3 months)
 
 | Proposal | Priority | Effort | Timeline |
 |----------|----------|--------|----------|
 | 1.2 Multiple Inference Gateway Failover | P1 | High | 1-2 months |
-| 4.1 Inference Gateway Health Monitoring | P4 | Medium | 1-2 months |
-| 5.2 Agent Graceful Shutdown on SIGTERM | P5 | Medium | 1-2 months |
-| 5.3 Crash Recovery Workflow | P5 | Medium | 1 month |
+| 5.1 Inference Gateway Health Monitoring | P5 | Medium | 1-2 months |
+| 6.2 Agent Graceful Shutdown on SIGTERM | P6 | Medium | 1-2 months |
+| 6.3 Crash Recovery Workflow | P6 | Medium | 1 month |
 
 ---
 
@@ -526,14 +698,18 @@ SAFE_GC_MEMORY_MAX=2g ./scripts/safe-git-gc.sh --full
 | 2.1 Increase Max Turns Limit | Low | Only affects admin tasks |
 | 2.2 Non-Interactive Bead Closing | Medium | Requires --agent flag, audit trail |
 | 2.3 Task Completion Detection | Very Low | Task already succeeded |
-| 3.2 Git GC Monitoring | Very Low | Monitoring only |
-| 3.3 Git GC Cgroup Limits | Low | OOM terminates gc, repo remains intact |
-| 4.1 Gateway Health Monitoring | Very Low | Read-only monitoring |
-| 4.2 Task Duration Monitoring | Very Low | Monitoring only |
-| 4.3 Crash Pattern Detection | Very Low | Analysis only |
-| 5.1 Agent Cgroup Limits | Low | Prevents runaway, standard practice |
-| 5.2 Agent Graceful Shutdown | Very Low | Signal handler is standard |
-| 5.3 Crash Recovery Workflow | Low | Only retries transient failures |
+| 3.1 Repository Size Monitoring and Alerts | Very Low | Read-only monitoring |
+| 3.2 Prevent .beads/ Large Files in Git | Very Low | Prevents accidental large file commits |
+| 3.3 Automated Git GC Scheduling | Low | Gc operations are safe with memory limits |
+| 3.4 Pre-Task Repository Health Check | Very Low | Read-only check before task start |
+| 4.2 Git GC Resource Monitoring | Very Low | Monitoring only |
+| 4.3 Git GC Cgroup Limits | Low | OOM terminates gc, repo remains intact |
+| 5.1 Inference Gateway Health Monitoring | Very Low | Read-only monitoring |
+| 5.2 Agent Task Duration Monitoring | Very Low | Monitoring only |
+| 5.3 Crash Pattern Detection | Very Low | Analysis only |
+| 6.1 Agent Cgroup Limits | Low | Prevents runaway, standard practice |
+| 6.2 Agent Graceful Shutdown | Very Low | Signal handler is standard |
+| 6.3 Crash Recovery Workflow | Low | Only retries transient failures |
 
 ---
 
@@ -549,6 +725,13 @@ SAFE_GC_MEMORY_MAX=2g ./scripts/safe-git-gc.sh --full
 - ✅ Bead closing succeeds without troubleshooting loops
 - ✅ Task completion is detected and logged correctly
 
+### Repository Health Monitoring (NEW - Priority 3)
+- ✅ Repository size monitored daily (alerts at 1GB threshold)
+- ✅ Loose objects tracked and packed before exceeding 500MB
+- ✅ Automated git gc runs daily (standard) and weekly (full)
+- ✅ .beads/ large files prevented via .gitignore and pre-commit hooks
+- ✅ Pre-task repository health checks prevent OOM crashes
+
 ### Git GC Safety
 - ✅ All git gc operations use safe-git-gc scripts
 - ✅ Memory usage monitored and capped
@@ -558,6 +741,7 @@ SAFE_GC_MEMORY_MAX=2g ./scripts/safe-git-gc.sh --full
 - ✅ Gateway health is visible in dashboards
 - ✅ Long-running tasks trigger alerts
 - ✅ Crash patterns are detected automatically
+- ✅ Repository bloat alerts prevent OOM crashes
 
 ### Process Isolation
 - ✅ Agents run under resource limits
@@ -569,25 +753,38 @@ SAFE_GC_MEMORY_MAX=2g ./scripts/safe-git-gc.sh --full
 ## Conclusion
 
 The crash analysis revealed that domain-check code is **NOT defective**. The crashes were caused by:
-1. External service dependency failures (inference gateway)
-2. Agent workflow limitations (max turns, bead closing)
+1. **Infrastructure Events (70%)**: Memory pressure, OOM killer, SIGHUP cascade, **repository bloat**
+2. **Service Availability Failures (8%)**: Inference gateway unavailable
+3. **Agent Workflow Limitations (20%)**: Max turns exhaustion, bead closing issues
+4. **Code Defects (2%)**: Actual application errors
 
-**Recommendation:** Implement agent system improvements (Priority 1-2) and use existing safe-git-gc scripts (Priority 3). No changes to domain-check code are required.
+**Critical Finding from bf-4yjq Incident:**
+Repository bloat (18GB with 17GB loose objects) caused 9 OOM crashes over 2.5 hours. This was caused by bead bf-2ildm committing 17+ identical 237MB `.beads/*.jsonl` files to git history. Any significant git operation on the bloated repository triggered OOM killer intervention.
+
+**Recommendation:** 
+1. **CRITICAL:** Implement repository monitoring and automated gc scheduling (Priority 3 - IMMEDIATE)
+2. Implement agent system improvements (Priority 1-2)
+3. Use existing safe-git-gc scripts (Priority 4)
+4. No changes to domain-check code are required
 
 **Immediate Actions:**
-1. Enable pre-flight health checks (Proposal 1.3)
-2. Increase max turns for administrative tasks (Proposal 2.1)
-3. Use `scripts/safe-git-gc.sh --full` instead of bare `git gc --aggressive`
+1. **CRITICAL:** Enable repository size monitoring (Proposal 3.1)
+2. **CRITICAL:** Prevent .beads/ large files in git (Proposal 3.2)
+3. **CRITICAL:** Install automated git gc scheduling (Proposal 3.3)
+4. Enable pre-flight health checks (Proposal 1.3)
+5. Increase max turns for administrative tasks (Proposal 2.1)
+6. Use `scripts/safe-git-gc.sh --full` instead of bare `git gc --aggressive`
 
 ---
 
 **Status:** ✅ Mitigation strategies defined  
 **Next Steps:** Implement Phase 1 proposals (immediate timeline)  
-**Tracking:** Bead domchk-61505afc
+**Tracking:** Bead domchk-cb8f420c
 
 ---
 
-**Document Version:** 1.0  
+**Document Version:** 2.0  
 **Created:** 2026-09-01  
+**Updated:** 2026-09-01 (Added Priority 3: Repository Bloat Prevention based on bf-4yjq incident)  
 **Author:** Claude Code Agent  
 **Review Status:** Ready for implementation
