@@ -209,12 +209,59 @@ git fsck --full
 # If repository valid and compressed → Git gc succeeded, termination was cleanup
 ```
 
-**Action:** 
+**Action:**
 - ✅ Use `scripts/safe-git-gc.sh` instead of bare `git gc --aggressive`
 - ✅ Verify repository integrity
 - ⚠️ If OOM occurred, document memory limits used
 
-### Pattern 3: Service Availability Failure (~10% of crashes)
+### Pattern 3: Repository Bloat Crashes (~15% of infrastructure crashes)
+
+**Symptoms:**
+- Exit code -1 (SIGKILL from OOM killer)
+- Repository size > 5GB (should be <500MB)
+- Loose objects > 1GB (should be packed)
+- Routine git operations trigger OOM
+- Multiple crashes over short period (all exit code -1)
+
+**Evidence from bf-4yjq (2026-08-12):**
+- 9 crashes over 2.5 hours, all exit code -1
+- Repository: 18GB with 17GB loose objects
+- `.beads/issues.jsonl`: 248MB (should be <5MB)
+- Any significant git operation triggered OOM
+
+**Verification:**
+```bash
+# Check repository size
+du -sh .git
+du -sh .git/objects
+
+# Count loose vs packed objects
+git count-objects -vH
+
+# If repository > 5GB with > 1GB loose objects → REPOSITORY BLOAT
+```
+
+**Action:**
+- ⚠️ IMMEDIATE: Add `.beads/*.jsonl` to `.gitignore`
+- ⚠️ Run safe git gc: `./scripts/safe-git-gc.sh --full`
+- ✅ Enable repository monitoring: `./scripts/monitoring-setup.sh`
+- ✅ Install scheduled gc in crontab (daily)
+- ✅ Install pre-commit hooks to prevent future large file additions
+- ✅ Document root cause bead (e.g., bf-2ildm) that created large commits
+
+**Prevention:**
+```bash
+# Install repository monitoring
+./scripts/monitoring-setup.sh
+
+# Add to .gitignore immediately
+echo ".beads/*.jsonl" >> .gitignore
+echo ".beads/*.json" >> .gitignore
+echo ".beads/checkpoint/" >> .gitignore
+echo ".beads/traces/" >> .gitignore
+```
+
+### Pattern 4: Service Availability Failure (~8% of crashes)
 
 **Symptoms:**
 - Exit code 1 with HTTP 503/502 errors
@@ -226,7 +273,7 @@ git fsck --full
 - ⚠️ Retry task when service restored
 - ✅ NO code changes needed
 
-### Pattern 4: Max Turns Exhaustion (~20% of crashes)
+### Pattern 5: Max Turns Exhaustion (~20% of crashes)
 
 **Symptoms:**
 - Exit code 1 with "error_max_turns"
@@ -590,7 +637,7 @@ monitoring:
 
 ### What Causes Crashes
 
-1. **Infrastructure Events (70%)**: Memory pressure, OOM killer, SIGHUP cascade
+1. **Infrastructure Events (70%)**: Memory pressure, OOM killer, SIGHUP cascade, **repository bloat**
 2. **Workflow Failures (20%)**: Max turns exhaustion, bead closing loops
 3. **Service Failures (8%)**: Inference gateway unavailable, network issues
 4. **Code Defects (2%)**: Actual application errors
@@ -633,6 +680,7 @@ Other Exit Code?
 - **Specific Crashes:** 
   - `docs/crash-analysis-domchk-c9641ac5-2026-09-01.md` (Service availability)
   - `docs/investigation-summary-bf-173o7e-2026-09-01.md` (False positive)
+  - `docs/crash-artifacts-bf-4yjq.md` (Repository bloat - 9 OOM crashes from 18GB repo)
 - **Git GC Safety:** `docs/safe-git-gc-implementation.md`, `docs/safer-git-gc-strategy.md`
 
 ---
