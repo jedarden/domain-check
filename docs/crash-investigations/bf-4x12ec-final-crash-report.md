@@ -109,14 +109,24 @@ deterministic: same repo state, same command, same scope budget.
 Captured *inside* the crash window: **45 Gi available, 0 B swap used** — and
 the next attempt was still killed. Free host RAM and an OOM kill coexist
 when the kill is under a **cgroup** limit (`constraint=CONSTRAINT_MEMCG`),
-which only needs the *scope's* budget exceeded. Corroboration from the
-current boot's kernel log (same period, same mechanism): on 2026-08-16
-13:29:49 EDT — inside bf-4x12ec's cleanup window, before the Aug-17 closure
-— the kernel killed `git` at **7.79 GB anon-rss** under `CONSTRAINT_MEMCG`
-in a transient `run-p*.scope`. All 13 `Killed process` events in the current
-boot (6 node/vitest, 6 bash, 1 git) are CONSTRAINT_MEMCG with
+which only needs the *scope's* budget exceeded.
+
+Corroboration from the current boot's kernel log (same period, same
+mechanism — re-verified 2026-09-02, bead `domchk-0f9eb93a`, and far stronger
+than the single-event count cited by earlier drafts): the journal holds
+**419 `Killed process` events, every one `CONSTRAINT_MEMCG`, zero
+host-wide**. **413 fall on 2026-08-16** — inside bf-4x12ec's cleanup window,
+before the Aug-17 closure — of which **257 name `task=git`**, spread over
+**248 distinct transient scopes** (`oom_memcg=.../app.slice/run-p*.scope`)
+from 00:27:35 to 13:29:51 EDT. That is one fresh needle-dispatched scope per
+retry attempt, each killed when `git`'s anon-rss reached the same ~12 GiB
+ceiling (peak observed 12,555,188 kB; typical events ~12.30 GB, e.g.
+`Killed process 3322486 (git) ... anon-rss:12301364kB ... oom_score_adj:200`)
+— the Aug-14 mechanism replayed with kernel logging intact. All kills carry
 `oom_score_adj=200`: this box's agent/child processes run in memory-limited
-scopes and are marked preferred OOM victims.
+scopes and are marked preferred OOM victims. (The remaining kills are 6
+single-`bash` events on 2026-09-02 07:15–08:32 EDT — background noise, no
+`git` kills since Aug 16.)
 
 ### Debunked alternative explanations
 
@@ -210,11 +220,18 @@ closed, not re-dispatched.
    at this density is ~3. The storm was specific to bf-4x12ec's own retry
    cycle; the nearby bf-173o7e crash at 12:59:48 is uncorrelated.
 4. **Duplicate-alert / false-positive storm (the dominant ongoing pattern).**
-   bf-4x12ec has been the target of a dozen+ redundant alert beads
-   (bf-qz9mov, bf-1uh46l, bf-48vwac, bf-4h2mqq, bf-4xbt4g, bf-4oblul,
-   bf-2m532x, bf-3cy3vk, bf-44upi7, bf-2u3dzu, bf-5f9xqg, domchk-661c2dc6,
-   domchk-90640785, …). One alert fired **nine days after** both completion
-   (Aug 14) and closure (Aug 17). Root enabler: `bead.orphaned` at
+   bf-4x12ec is the target of **44 redundant alert beads** — exactly one per
+   exit-`-1` attempt, created 10:23:11–11:28:02 UTC at ~90 s intervals (full
+   inventory in the Appendix). Verification coverage of those 44:
+   **36 investigated** (a doc artifact and/or bead-notes verification), and
+   every recorded investigation reached the same verdict — false positive /
+   duplicate alert, original work complete. 8 have no verification record
+   (`bf-3m9m1v`, `bf-30pdr8`, `bf-2vepdz`, `bf-4qj2rz`, `bf-353z15`,
+   `bf-bm3x3s`, `bf-68u9bl`, `bf-2aa8vo`) and ~20 remain
+   open/in_progress/deferred despite being verified — cleanup candidates,
+   not open work. Alerts kept regenerating even after closure (one
+   retrospective sweep touched beads as late as Aug 26, nine days after
+   completion and closure). Root enabler: `bead.orphaned` at
    12:58:55 left the bead open, and alert generation lacked closed-bead
    filtering and dedup — exactly what the 2026-09-02 crash-alert-manager
    fixes (closed-bead filtering, duplicate detection, completion awareness,
