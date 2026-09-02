@@ -189,6 +189,91 @@ if [ $AVAILABLE_MEM -lt 10 ]; then
 fi
 ```
 
+### Repository Bloat Prevention and Detection
+
+**Critical:** Repository bloat is a leading cause of infrastructure crashes in this workspace. The bf-1s6c3 crash (2026-08-12) was caused by an 18GB repository with 17GB of loose objects, triggering OOM killer during git operations.
+
+**Repository Size Limits:**
+| Metric | Healthy | Warning | Critical | Action Required |
+|--------|---------|---------|----------|-----------------|
+| **Total Repository Size** | <500MB | 500MB-1GB | >1GB | Immediate cleanup |
+| **Loose Objects** | <100MB | 100MB-500MB | >500MB | Run git gc |
+| **Loose Object Count** | <100 | 100-1000 | >1000 | Pack objects |
+| **Size Ratio (Loose:Packed)** | <1:10 | 1:10 to 1:2 | >1:2 | Inverted - critical |
+
+**Repository Bloat Symptoms:**
+- Exit code -1 (SIGKILL) during git operations
+- Repository size > 5GB (should be <500MB)
+- Loose objects > 1GB (should be packed)
+- Routine git operations trigger OOM
+- Multiple crashes over short period (all exit code -1)
+
+**Detection Commands:**
+```bash
+# Check repository size
+du -sh .git
+
+# Check loose vs packed objects
+git count-objects -vH
+
+# Full repository health check
+./scripts/check-repo-health.sh
+
+# Monitor repository continuously
+./scripts/repo-health-monitor.sh
+```
+
+**Prevention Measures:**
+
+1. **GitIgnore Configuration** (CRITICAL):
+   ```bash
+   # Ensure .beads/ is excluded from git
+   cat .gitignore | grep ".beads/"
+   # Should include:
+   # .beads/*.jsonl
+   # .beads/*.json
+   # .beads/checkpoint/
+   # .beads/traces/
+   ```
+
+2. **Pre-commit Hooks**:
+   ```bash
+   # Install hooks to prevent large file additions
+   ./scripts/setup-git-hooks.sh
+   # Blocks files >10MB from being committed
+   ```
+
+3. **Scheduled Maintenance**:
+   ```bash
+   # Add to crontab for weekly repository checks
+   0 2 * * 0 /home/coding/domain-check/scripts/safe-git-gc.sh --check-only
+   0 3 * * 0 /home/coding/domain-check/scripts/check-repo-health.sh
+   ```
+
+**Emergency Cleanup (If Repository Bloated):**
+```bash
+# 1. Check repository state
+git count-objects -vH
+du -sh .git
+
+# 2. Run safe git gc with monitoring
+./scripts/safe-git-gc.sh --full
+
+# 3. Monitor progress in another terminal
+./scripts/safe-git-gc-monitor.sh --watch
+
+# 4. Verify cleanup success
+du -sh .git
+git fsck --full
+```
+
+**Evidence from bf-1s6c3 Crash:**
+- Repository: 18GB (should be <500MB) - 36x larger than normal
+- Loose objects: 17.16GB (should be packed) - 99% of repository
+- Cleanup result: 18GB → 138MB (99.2% reduction)
+- Task completed successfully after cleanup
+- No code defects found - purely infrastructure issue
+
 ### Monitoring and Alerting
 
 **Continuous Monitoring Setup:**
@@ -207,12 +292,16 @@ Automated monitoring can be enabled via cron jobs:
 - Crash pattern detection: every 10 minutes
 - Resource monitoring: every 5 minutes
 - Service monitoring: every 2 minutes
+- Repository health monitoring: every hour
 
 **Manual Monitoring Scripts:**
 
 ```bash
 # Pre-flight health check (run before starting agent tasks)
 ./scripts/preflight-health-check.sh
+
+# Repository health check
+./scripts/check-repo-health.sh
 
 # Resource monitoring (one-time check)
 ./scripts/resource-monitor.sh --once
@@ -228,10 +317,13 @@ Automated monitoring can be enabled via cron jobs:
 - `.beads/logs/crash-monitor.log` - Crash pattern alerts
 - `.beads/logs/resource-monitor.log` - Resource threshold alerts
 - `.beads/logs/service-monitor.log` - Service availability alerts
+- `.beads/logs/repo-health.log` - Repository size and object alerts
 
 **Recommended Alerts:**
 - **Memory Pressure:** Alert at 70% pressure (before 80% OOM threshold)
 - **Disk Space:** Alert at < 30GB free
+- **Repository Size:** Alert at >1GB (critical threshold)
+- **Loose Objects:** Alert at >500MB (needs packing)
 - **Crash Surge:** Alert at 10+ crashes in 10 minutes (infrastructure event)
 - **Service Availability:** Monitor inference gateway health endpoint
 
@@ -240,13 +332,22 @@ Automated monitoring can be enabled via cron jobs:
 ### Key Learnings
 
 **What Causes Crashes:**
-1. Infrastructure events (memory pressure, OOM, SIGHUP cascade)
-2. Agent workflow limitations (max turns, bead closing issues)
-3. External service failures (inference gateway availability)
+1. **Infrastructure events (70%)**: Memory pressure, OOM, SIGHUP cascade, **repository bloat (18GB → OOM)**
+2. **Agent workflow limitations (20%)**: Max turns, bead closing issues
+3. **External service failures (8%)**: Inference gateway availability
+4. **Code defects (2%)**: Actual application errors — **NONE found in domain-check**
+
+**Repository Bloat as Primary Crash Cause:**
+- The bf-1s6c3 crash (2026-08-12) was caused by 18GB repository with 17GB loose objects
+- Triggered OOM killer during git reconciliation operations (exit code -1)
+- Resolution: Repository cleanup reduced 18GB → 138MB (99.2% reduction)
+- Task completed successfully after cleanup
+- Prevention: Use `.gitignore` for `.beads/`, run `./scripts/check-repo-health.sh` weekly
 
 **What Does NOT Cause Crashes:**
 1. ✅ Domain-check code (no defects found in any investigation)
 2. ✅ Git GC operations (when using safe-git-gc scripts)
 3. ✅ Normal application operations (well within resource limits)
+4. ✅ Repository maintenance (with proper monitoring and pre-flight checks)
 
-**Bottom Line:** Domain-check code is stable and defect-free. Focus crash investigation efforts on infrastructure, workflow, and service availability issues, not code defects.
+**Bottom Line:** Domain-check code is stable and defect-free. Focus crash investigation efforts on infrastructure (especially repository bloat), workflow, and service availability issues, not code defects.

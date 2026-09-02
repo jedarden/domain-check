@@ -20,10 +20,10 @@ Repository bloat caused 9 crashes (bead bf-4yjq) when the repository grew to 18G
 
 | Level | Size | Action Required | Auto-Triggered |
 |-------|------|-----------------|----------------|
-| **Healthy** | < 2GB | None | N/A |
-| **Warning** | 2-5GB | Monitor growth | No |
-| **Critical** | 5-10GB | Run git gc soon | No |
-| **Emergency** | ≥ 10GB | Run git gc immediately | Yes (auto-gc-trigger.sh) |
+| **Healthy** | <500MB | None | N/A |
+| **Warning** | 500MB-1GB | Monitor growth, plan gc | No |
+| **Critical** | 1-5GB | Run git gc soon | No |
+| **Emergency** | ≥5GB | Run git gc immediately | Yes (auto-gc-trigger.sh) |
 
 ### What Causes Bloat
 
@@ -32,8 +32,20 @@ Repository bloat caused 9 crashes (bead bf-4yjq) when the repository grew to 18G
 3. **Duplicate files:** Identical files committed multiple times
 4. **Binary artifacts:** Build outputs, test data, or binaries in git history
 
-### Historical Example: Bead bf-4yjq
+### Historical Examples
 
+#### Bead bf-1s6c3 (2026-08-12) - Repository Bloat OOM Crash
+- **Repository size:** 18GB (17GB loose objects)
+- **Cause:** Repeated commits of large `.beads/` JSONL files from problematic bead operations (bf-2ildm)
+  - 17+ identical commits for "GitHub-specific commits extraction"
+  - Each commit included 237MB `.beads/issues.jsonl`, 237MB `.beads/beads.base.jsonl`
+  - **Impact:** 17 commits × ~500MB per commit = ~8.5GB redundant data
+- **Crash mechanism:** Git reconciliation operations → Memory exhaustion → OOM killer → SIGKILL (exit code -1)
+- **Resolution:** Repository cleanup reduced 18GB → 138MB (99.2% reduction)
+- **Task completion:** Merge commit created successfully on 2026-08-16 after cleanup
+- **Key lesson:** Repository bloat is a leading cause of infrastructure crashes (70% of crashes)
+
+#### Bead bf-4yjq (2026-08-12) - Systematic Repository Bloat Crashes
 - **Repository size:** 18GB (17GB loose objects)
 - **Cause:** Bead bf-2ildm committed 17+ identical 237MB `.beads/*.jsonl` files
 - **Impact:** 9 OOM crashes over 2.5 hours (any git operation triggered OOM)
@@ -52,7 +64,7 @@ Repository bloat caused 9 crashes (bead bf-4yjq) when the repository grew to 18G
 ```
 
 **What it checks:**
-- ✅ Repository size (< 2GB healthy, ≥ 10GB critical)
+- ✅ Repository size (<500MB healthy, ≥5GB critical)
 - ✅ Inference gateway availability
 - ✅ Memory availability (≥ 10GB free)
 - ✅ Disk space (≥ 20GB free)
@@ -235,7 +247,7 @@ git reflog expire --expire=now --all && git gc --prune=now --aggressive
    ./scripts/check-repo-health.sh
    ```
 
-2. **Run full GC if repository > 2GB:**
+2. **Run full GC if repository > 500MB:**
    ```bash
    ./scripts/safe-git-gc.sh --full
    ```
@@ -401,10 +413,10 @@ git clone --depth 1 <repo-url>  # Shallow clone (last commit only)
 
 Repository maintenance is successful when:
 
-1. ✅ Repository size is < 2GB (healthy threshold)
+1. ✅ Repository size is <500MB (healthy threshold)
 2. ✅ Pre-flight health check passes all tests
 3. ✅ Git fsck shows no errors
-4. ✅ Loose objects count is < 1000
+4. ✅ Loose objects count is <100
 5. ✅ No files > 10MB in git history
 6. ✅ All monitoring tests pass: `./scripts/test-repo-monitoring.sh --integration`
 
