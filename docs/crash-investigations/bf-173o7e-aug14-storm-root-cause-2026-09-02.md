@@ -32,10 +32,22 @@ new one the same way; do not treat the assigned value as the kill):
 | 13:21:05.530Z | `HANDLING_RELEASE_DONE` heartbeat | 13:20:31.223Z (119.6 s run) | 1st hour-13Z kill analysed by domchk-17ca8b7d |
 | **14:06:16.551Z** | `HANDLING_RELEASE_DONE` heartbeat (seq 4562) | **14:06:08.828Z** (69.7 s run; dispatched 14:04:58.872Z, seq 4550) | **dispatch #41 of the storm** |
 | 21:44:27.262Z | crash-alert creation | 21:42:29.847Z (36.3 s run) | hour-21Z attempt |
+| 13:55:36.566Z | `HANDLING_RELEASE_DONE` heartbeat | 13:55:24.357Z (71.7 s run; claimed 13:54:12.622Z, dispatched 13:54:12.637Z) | cycle 4 — the crash subject of `domchk-760530a8` (re-derived under its sibling `domchk-31e43626`) |
 
 The 14:06:08 kill is isolated: the only other fleet completion within
 ±30 s is `lab-s1` finishing `bf-3ev0q` at 14:06:01 with **exit 124** (the
 600 s cap) — an unrelated timeout on a different worker, not a second crash.
+
+The 13:55:24 kill is the storm's most direct **mid-gc proof**: its agent
+transcript (`4a6daee4-aa55-4a1b-a276-71cd1ecc9cc0.jsonl` under
+`~/.claude/projects/-home-coding-domain-check/`) spans exactly the run
+(13:54:13.645Z → 13:55:13.665Z) and ends with the assistant text *"The git gc
+process is running successfully. Let me wait a bit more"* followed by a
+`sleep 10 && tail -50 /tmp/git-gc-domain-check.log` progress check — the agent
+was SIGKILLed 10.7 s later while waiting on the gc it had launched inside the
+same 12 GiB scope. This cycle's transcript is truncated flush-by-kill (the
+others end at the gc call itself), which is why it shows the wait state
+explicitly.
 
 ## 2. What `exit −1` means
 
