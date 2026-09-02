@@ -139,7 +139,7 @@ preflight_check() {
 
   # Check repository integrity
   log "  Verifying repository integrity..."
-  if ! git fsck --quiet 2>&1 | tee -a "$LOG_FILE"; then
+  if ! git fsck --no-progress 2>&1 | tee -a "$LOG_FILE"; then
     log_error "Repository integrity check failed"
     return 1
   fi
@@ -280,7 +280,7 @@ final_verification() {
   log "Running final verification..."
 
   # Verify repository integrity
-  if ! git fsck --quiet 2>&1 | tee -a "$LOG_FILE"; then
+  if ! git fsck --no-progress 2>&1 | tee -a "$LOG_FILE"; then
     log_error "Repository integrity check failed after gc"
     return 1
   fi
