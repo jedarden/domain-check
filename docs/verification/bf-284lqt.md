@@ -89,3 +89,34 @@ Note: the working tree totals 2.6G, but 2.5G of that is `.beads/` (gitignored, `
 - [x] Status summary recorded in notes (bead domchk-0c54af77)
 
 **Re-verified status:** ✅ FALSE POSITIVE — bf-65lsdu closed; cleanup successful and durable.
+
+---
+
+## Re-verification: 2026-09-02 (bead domchk-b7d680a5)
+
+Reviewed this report for completeness against the alert-verification checklist (original task completion status, before/after repository metrics, explicit false positive conclusion). All three key findings are present and every claim re-checked against live state:
+
+- **bf-65lsdu status** — `bead show bf-65lsdu` confirms **Closed**, rev 5, updated 2026-08-17T00:45:33Z (matches the table above).
+- **Alert provenance** — `bead show bf-284lqt` confirms the alert body: exit code -1 (signal -1) at 2026-08-13T22:38:48Z, i.e. a mid-task interruption ~1.4h after bf-65lsdu was created, not a work defect.
+- **Repository metrics** — before ~18GB / 4,515 loose objects (17.20 GiB); after 138MB (2026-08-26) and 92MB (2026-09-02). Referenced `bf-65lsdu-cleanup-verification.md` present in `docs/verification/`.
+
+No findings were missing and no corrections were required. Current state at this review:
+
+```
+$ git count-objects -vH
+count: 10
+size: 76.00 KiB
+in-pack: 10383
+packs: 1
+size-pack: 90.19 MiB
+prune-packable: 0
+garbage: 0
+size-garbage: 0 bytes
+
+$ du -sh .git
+92M	.git
+```
+
+The 10 loose objects (76 KiB) accumulated from normal git activity since the morning verification the same day — still far inside healthy thresholds (loose <100MB, count <100 per CLAUDE.md).
+
+**Re-verified status:** ✅ FALSE POSITIVE — bf-65lsdu closed; cleanup successful and durable (92MB).
