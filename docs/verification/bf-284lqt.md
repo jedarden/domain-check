@@ -120,3 +120,45 @@ $ du -sh .git
 The 10 loose objects (76 KiB) accumulated from normal git activity since the morning verification the same day — still far inside healthy thresholds (loose <100MB, count <100 per CLAUDE.md).
 
 **Re-verified status:** ✅ FALSE POSITIVE — bf-65lsdu closed; cleanup successful and durable (92MB).
+
+---
+
+## Re-verification: 2026-09-02 (bead domchk-b77fb9c9)
+
+Prior sections verified that bf-284lqt *is* closed. This pass additionally verified the **closure reason text** recorded on the bead against the closure acceptance criteria, by reading the checkpoint event log (`.beads/checkpoint/forensic.jsonl`, sequence 19584):
+
+```
+kind: closed   actor: system   time: 2026-09-02T10:44:58Z
+reason: "false positive: bf-65lsdu completed successfully (exit 0, 2026-08-17);
+         repo now 92MB / 14 loose objects, fsck clean — verified in domchk-ca7d6d12"
+```
+
+### Acceptance criteria — closure reason
+
+| Criterion | Met by | |
+|-----------|--------|---|
+| Documents false positive status | leading `false positive:` | ✅ |
+| References completed parent bead | `bf-65lsdu completed successfully (exit 0, 2026-08-17)` | ✅ |
+| Confirms cleanup successful | `repo now 92MB / 14 loose objects, fsck clean` | ✅ |
+| References verification report | verification bead `domchk-ca7d6d12`; report is this file | ✅ |
+
+Live state re-checked at this pass: `bead show bf-65lsdu` → **Closed** (rev 5, 2026-08-17T00:45:33Z); `bead show bf-284lqt` → **Closed** (rev 17, 2026-09-02T10:44:58Z, no reopen since). Repository metrics:
+
+```
+$ git count-objects -vH
+count: 15
+size: 112.00 KiB
+in-pack: 10383
+packs: 1
+size-pack: 90.19 MiB
+prune-packable: 0
+garbage: 0
+size-garbage: 0 bytes
+
+$ du -sh .git
+92M	.git
+```
+
+15 loose objects (112 KiB) — normal daily accumulation since the morning count of 10, still far inside healthy thresholds (loose <100MB, count <100 per CLAUDE.md). The bead was left untouched: no reopen, no label change (its `verification-failed` label predates the 2026-09-02 verifications but is inert on a closed alert bead, and alert tooling may key on labels).
+
+**Re-verified status:** ✅ FALSE POSITIVE — closure reason on bf-284lqt satisfies all acceptance criteria; no further action required.
