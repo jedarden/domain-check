@@ -44,3 +44,48 @@ size-garbage: 0 bytes
 The cleanup was **successful** - the repository went from ~18GB to 138MB, eliminating the bloat that caused OOM crashes. This retrospective alert is a false positive; the original task (bf-65lsdu) was completed successfully.
 
 **Status:** ✅ FALSE POSITIVE - Original task completed successfully
+
+---
+
+## Re-verification: 2026-09-02 (bead domchk-0c54af77)
+
+Confirmed on 2026-09-02 that bf-284lqt remains a false positive retrospective alert for already-completed bf-65lsdu.
+
+### Bead status
+
+| Bead | Title | Status | Last updated |
+|------|-------|--------|--------------|
+| bf-65lsdu | Run repository cleanup to eliminate 17GB bloat | **Closed** (rev 5) | 2026-08-17T00:45:33Z |
+| bf-284lqt | ALERT: Agent crash on bead bf-65lsdu | **Closed** (rev 17) | 2026-09-02T10:44:58Z |
+
+Timeline: bf-65lsdu was created 2026-08-13T21:16Z; the alert bf-284lqt fired ~1.5h later (2026-08-13T22:38Z) when the agent running the cleanup was killed (exit -1, signal -1). The work was recovered (per `bf-65lsdu-cleanup-verification.md`, recovered by bf-2i5toy) and bf-65lsdu was closed 2026-08-17 with all acceptance criteria met. The alert therefore refers to a mid-task interruption, not a defect — the underlying work completed successfully.
+
+### Current repository state (verified 2026-09-02)
+
+```
+$ git count-objects -vH
+count: 0
+size: 0 bytes
+in-pack: 10383
+packs: 1
+size-pack: 90.19 MiB
+prune-packable: 0
+garbage: 0
+size-garbage: 0 bytes
+
+$ du -sh .git
+92M	.git
+```
+
+The cleanup result has held and improved since the 2026-08-26 verification (138M → 92M; 47 loose objects → 0; single pack). All metrics are well inside the healthy thresholds from CLAUDE.md (repo <500MB, loose objects <100MB, loose count <100).
+
+Note: the working tree totals 2.6G, but 2.5G of that is `.beads/` (gitignored, `.gitignore:66`), almost entirely `.beads/traces/` (2.4G of agent trace logs). It is not part of the git object store and does not affect git operation memory use.
+
+### Acceptance criteria
+
+- [x] bf-65lsdu confirmed as Closed
+- [x] Repository cleanup results documented (before ~18GB / after 138MB at 2026-08-26; 92MB at 2026-09-02)
+- [x] Verification report reviewed (this file and `bf-65lsdu-cleanup-verification.md`)
+- [x] Status summary recorded in notes (bead domchk-0c54af77)
+
+**Re-verified status:** ✅ FALSE POSITIVE — bf-65lsdu closed; cleanup successful and durable.
