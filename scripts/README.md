@@ -62,6 +62,45 @@ fi
 
 **Documentation:** See `docs/crash-mitigation-strategies.md` (Proposal 1.3)
 
+## Work Completion Verification (`verify-work-completion.sh`)
+
+**Purpose:** The last step before `bead close` — verifies the work actually landed
+and records a durable marker so crash triage can tell "crashed after verified
+completion" apart from "crashed mid-task". This closes both failure directions of
+the exit-code -1 incidents: agents closing beads whose work never got pushed, and
+agents crashing after successful work with no record that it was done.
+
+**Quick Start:**
+```bash
+# After committing and pushing, before closing the bead
+./scripts/verify-work-completion.sh <bead-id> \
+  --require-path docs/plan/plan.md \
+  --summary "implemented X, committed in <sha>"
+
+# On success (exit 0):
+bead close <bead-id> --reason "work verified via verify-work-completion.sh"
+```
+
+**What It Checks:**
+1. **Pushed commits** — HEAD must be on its upstream/origin ref (FAIL if ahead; `--allow-unpushed` downgrades to WARN). Falls back to the last known origin ref with a warning when offline.
+2. **Uncommitted changes** — WARN by default (this workspace is shared; other agents' dirty files are normal), FAIL with `--strict-clean`
+3. **Bead state** — bead exists in the store; completion notes present (WARN if empty, `--fail-on-empty-notes` to fail); already-closed beads verify as post-hoc WARN
+4. **Expected artifacts** — `--require-path`, `--require-grep FILE:PATTERN`, `--require-command` (all repeatable)
+5. **Box health** — memory/disk/1-min load, same limits as the pre-flight check, env-overridable (`VWC_MIN_AVAIL_MEM_GB`, `VWC_MIN_DISK_FREE_GB`, `VWC_MAX_CPU_LOAD`); `--skip-health` to omit
+
+**Result Recording:** Every run writes `.beads/state/work-completion/<bead-id>.json`
+(VERIFIED/FAILED, timestamp, per-check detail) and appends to
+`.beads/logs/work-completion.log`. The marker is what crash triage should consult
+when a worker died with exit code -1: a VERIFIED marker means the task itself was
+complete and the crash is post-completion.
+
+**Exit Codes:**
+- `0` — work verified, safe to close
+- `1` — verification failed, do NOT close the bead
+- `2` — usage error
+
+**Tests:** `./scripts/test-verify-work-completion.sh` (self-contained; fixture repos with local bare origins, no network or live bead mutation needed)
+
 ## Git Maintenance
 
 ### Safe Git GC (`safe-git-gc.sh`)

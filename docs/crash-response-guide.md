@@ -107,6 +107,43 @@ tail -f .beads/logs/resource-alerts.log
 
 ---
 
+## Work Completion Verification (Pre-Close Gate)
+
+Before closing any bead — and especially after any long-running operation
+(git gc, bulk checks, large refactors) — verify the work actually landed:
+
+```bash
+./scripts/verify-work-completion.sh <bead-id> \
+  --require-path <artifact-the-task-was-supposed-to-produce> \
+  --summary "what was done, committed in <sha>"
+
+# Exit 0 → safe: bead close <bead-id> --reason "work verified"
+# Exit 1 → do NOT close: commits unpushed / artifacts missing / box unhealthy
+```
+
+The gate fails when commits are not pushed, expected artifacts are missing, or
+the box is under memory/disk/load pressure. It records the outcome to
+`.beads/state/work-completion/<bead-id>.json` either way.
+
+**Using markers during crash triage:** when a worker died with exit code -1,
+check for a marker before investigating:
+
+```bash
+cat .beads/state/work-completion/<bead-id>.json 2>/dev/null
+```
+
+- `"result": "VERIFIED"` — the task itself was complete when the worker died;
+  treat the crash as post-completion (usually a false positive), close or re-verify the bead
+- `"result": "FAILED"` — verification found real gaps (unpushed commits,
+  missing artifacts); the work needs finishing, not just re-dispatch
+- no marker — the worker died before reaching verification; fall through to
+  the Investigation Checklist below
+
+Full usage: `scripts/README.md` → Work Completion Verification. Tests:
+`./scripts/test-verify-work-completion.sh`.
+
+---
+
 ## Investigation Checklist
 
 ### Phase 1: Immediate Classification (2 minutes)

@@ -170,6 +170,8 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
 - Mitigation Strategies: `docs/crash-mitigation-strategies.md`
 - Specific Crashes: `docs/crash-analysis-domchk-c9641ac5-2026-09-01.md`, `docs/investigation-summary-bf-173o7e-2026-09-01.md`
 
+**Pre-Close Work Verification:** Run `./scripts/verify-work-completion.sh <bead-id> --summary "..."` before `bead close` — it fails if commits are unpushed or expected artifacts are missing, and writes `.beads/state/work-completion/<bead-id>.json` so crash triage can tell post-completion crashes from mid-task ones. Usage: `scripts/README.md`.
+
 ### Crash Alert System (2026-09-02 Implementation)
 
 **Implemented Fixes:** Comprehensive crash alert system improvements prevent false positives and duplicate alerts:
