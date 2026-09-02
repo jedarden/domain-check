@@ -8,6 +8,7 @@
 | **Determination date** | 2026-09-02 · bead `domchk-9e2aa740` |
 | **Confidence** | **HIGH** for the mechanism; **MEDIUM-HIGH** for the Aug-14 kill itself (kernel logs for that date are rotated away — see Evidence Limits) |
 | **Canonical companion** | [`bf-4x12ec-final-crash-report.md`](bf-4x12ec-final-crash-report.md) (consolidated narrative; this file is the formal root-cause statement) |
+| **Corroborating analysis** | [`../analysis/signal-analysis.md`](../analysis/signal-analysis.md) (bead `domchk-2539cf8c`) — source-level decode of `exit −1` (`ExitStatus::code().unwrap_or(-1)`), live `MemoryMax=12 GiB` scope verification, OOM victim-selection analysis; independently reaches the same root cause |
 
 ---
 
@@ -83,7 +84,7 @@ Re-queried live 2026-09-02 (`journalctl -k`):
 | `oom-kill:constraint=CONSTRAINT_MEMCG` lines | **420** (414 on Aug 16, 6 on Sep 02) — **zero host-wide** |
 | Constraint lines naming `task=git` | **257, all on 2026-08-16** |
 | `oom_score_adj` of every git kill | **200** (preferred victim — these scopes are flagged OOM-able by design) |
-| `anon-rss` at kill, 257 events | median **12,301,364 kB**, max **12,555,188 kB** — a hard ~12 GiB memcg ceiling |
+| `anon-rss` at kill, 257 events | median **12,301,364 kB**, max **12,555,188 kB** — hugging the scope cap, directly verified as `MemoryMax=12884901888` (12 GiB) on agent-dispatch scopes |
 | `oom_memcg` path | a **distinct** `…/app.slice/run-p*.scope` per kill — one fresh needle-dispatched scope per retry |
 
 Sample (first Aug-16 git kill):
@@ -125,13 +126,18 @@ objections are non sequiturs for memcg kills.
   bytes**. That is why every killed attempt left the repo byte-identical:
   4,649 loose objects / 17.20 GiB before *and* after each kill — zero
   progress per attempt, 44 times.
-- The process ran under needle's transient `run-*.scope` with a memory
-  ceiling (same class as the observed ~12 GiB kills) and
-  `oom_score_adj=200`. When git's anon-rss reached the ceiling, the kernel
-  killed `git` — the agent child then lost its process and exited on a
-  signal, producing needle's `exit_code = -1` (`crash`), not `137`, because
-  the CLI wrapper died with the killed child rather than reporting its wait
-  status.
+- The process ran under needle's transient `run-p*.scope`, whose memory cap
+  is **directly verified** at `MemoryMax=12884901888` (12 GiB) for
+  agent-dispatch scopes (6 GiB for test-runner scopes), with
+  `oom_score_adj=200` and `memory.oom.group=0`. With single-task victim
+  selection, the kernel killed the highest-badness task in the hitting
+  memcg — on Aug-14, at 39–116 s into each attempt, that was the **agent
+  process itself** (or its `bash -c` parent), not yet `git`; that is why
+  needle recorded `exit_code = -1` for the agent rather than a git exit
+  code. On Aug-16, when gc processes lived long enough to outgrow the
+  agent's RSS, the victim was usually `git` — same memcg exhaustion,
+  different recorded victim. (`memory.oom.group=0` makes *which* task dies
+  nondeterministic while the *cause* stays constant.)
 - Two further attempts (10:21:41, 10:22:09) were lost *before* the crash
   loop to a stale `gc.aggressivewindow='1.hour'` config (git exit 128 ×2),
   fixed at 10:22:18 with `git config --unset` (still unset today — verified).
