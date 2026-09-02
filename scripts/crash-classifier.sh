@@ -80,9 +80,26 @@ classify_crash() {
     fi
 
     # Check for exit code -1 (SIGKILL/SIGHUP)
+    # IMPORTANT: Check if bead ultimately completed successfully (FALSE_POSITIVE pattern)
+    # Root cause analysis from bf-4k2ws showed SIGHUP cascades often result in successful auto-retry
     if echo "$bead_data" | grep -q '"exit_code":-1'; then
+        # Check bead status to determine if this is a false positive
+        BEAD_STATUS=$(bead show "$bead_id" 2>/dev/null | grep -i "^Status" || echo "unknown")
+
+        if [[ "$BEAD_STATUS" =~ [Cc]losed ]]; then
+            # Bead completed successfully despite SIGHUP - this is a FALSE_POSITIVE
+            # Pattern: System-wide SIGHUP cascade triggered automatic retry, bead succeeded
+            echo "FALSE_POSITIVE"
+            echo "Reason: Exit code -1 (SIGHUP/SIGKILL) but bead completed successfully"
+            echo "Pattern: System-wide SIGHUP cascade with automatic recovery (bf-4k2ws pattern)"
+            echo "Action: No investigation needed - automatic retry succeeded"
+            echo "Note: 200+ beads affected during 2026-08-16 SIGHUP cascade, all recovered"
+            return 0
+        fi
+
+        # Bead still open/failed - this is a genuine infrastructure issue
         echo "INFRASTRUCTURE"
-        echo "Reason: Signal -1 termination (SIGKILL or SIGHUP)"
+        echo "Reason: Signal -1 termination (SIGHUP/SIGKILL) - bead not recovered"
         echo "Pattern: Possible infrastructure event (OOM, memory pressure, SIGHUP cascade)"
         echo "Action: Check system resources and logs for infrastructure events"
         return 0
