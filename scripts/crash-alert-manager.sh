@@ -24,6 +24,9 @@ ALERT_STATE_FILE="$LOG_DIR/alert-state.json"
 ALERT_COOLDOWN_SECONDS=300  # 5 minutes cooldown for same alert type
 PROCESSED_ALERTS_FILE="$LOG_DIR/processed-alerts.txt"  # Track processed alert beads
 
+# Resolution tracking integration
+RESOLUTION_TRACKER="$SCRIPT_DIR/crash-resolution-tracker.sh"
+
 # Initialize processed alerts file
 if [[ ! -f "$PROCESSED_ALERTS_FILE" ]]; then
     touch "$PROCESSED_ALERTS_FILE"
@@ -187,6 +190,21 @@ if [[ ! -f "$TRACE_DIR/$BEAD_ID/trace.jsonl" ]]; then
     exit 3
 fi
 
+# RESOLUTION TRACKING: Check if crash is already resolved
+log_alert "INFO" "Checking resolution status for bead: $BEAD_ID"
+if [[ -x "$RESOLUTION_TRACKER" ]]; then
+    if RESOLUTION_CHECK=$("$RESOLUTION_TRACKER" "$BEAD_ID" check 2>&1); then
+        if [[ "$RESOLUTION_CHECK" =~ RESOLVED ]]; then
+            log_alert "INFO" "Crash $BEAD_ID is already resolved - no alert generated"
+            echo "Reason: Crash already resolved"
+            echo "$RESOLUTION_CHECK"
+            exit 0
+        fi
+    fi
+else
+    log_alert "WARN" "Resolution tracker not found or not executable - skipping resolution check"
+fi
+
 # CRITICAL FIX 1: Check bead closure status BEFORE generating alert
 log_alert "INFO" "Checking bead closure status for: $BEAD_ID"
 BEAD_STATUS=$(bead show "$BEAD_ID" 2>/dev/null | grep -i "status" | head -1 || echo "unknown")
@@ -263,7 +281,14 @@ log_alert "INFO" "Classification: $CLASSIFICATION"
 
 # Handle false positives - no alert needed
 if [[ "$CLASSIFICATION" == "FALSE_POSITIVE" ]]; then
-    log_alert "INFO" "False positive detected - no alert generated"
+    log_alert "INFO" "False positive detected - marking as resolved"
+
+    # Auto-mark as resolved since false positives are resolved crashes
+    if [[ -x "$RESOLUTION_TRACKER" ]]; then
+        "$RESOLUTION_TRACKER" "$BEAD_ID" mark-resolved >/dev/null 2>&1 || true
+        log_alert "INFO" "Marked bead $BEAD_ID as resolved (false positive)"
+    fi
+
     echo "Reason: $(echo "$CLASSIFICATION_OUTPUT" | grep "Reason:" | cut -d: -f2-)"
     exit 0
 fi
