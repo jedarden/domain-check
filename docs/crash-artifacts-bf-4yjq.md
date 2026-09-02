@@ -289,6 +289,144 @@ All acceptance criteria for the crash artifacts gathering task have been met:
 
 ---
 
+## Root Cause Analysis
+
+### Proximate Cause Identification
+
+**Exit Code Analysis:**
+- **Observed Exit Code:** -1
+- **Signal Interpretation:** Signal -1 = Signal 9 (SIGKILL)
+- **Signal Source:** Linux OOM (Out Of Memory) killer
+- **Mechanism:** Immediate process termination without graceful shutdown or core dump generation
+
+**Evidence:**
+- Line 7-8: Exit code -1, Signal 9 (SIGKILL from OOM killer)
+- Line 76-89: Crash alert bead bf-2weev shows exit code -1
+- Line 100: All 9 crashes over 2.5 hours showed exit code -1 (consistent SIGKILL pattern)
+
+### Ultimate Cause Chain
+
+**Causal Chain:**
+```
+Repository Bloat (18GB with 17GB loose objects)
+    ↓
+Git Operations Memory Footprint (processing 17GB unpacked objects)
+    ↓
+System Memory Exhaustion (available memory insufficient)
+    ↓
+Linux OOM Killer Activation (systemd-oomd threshold: 94.71%)
+    ↓
+SIGKILL Signal Delivery (Signal 9)
+    ↓
+Process Termination (Exit code -1)
+```
+
+**Root Cause Repository Bloat:**
+- Line 114: Total Repository Size: 18GB (should be <500MB)
+- Line 115: Loose Objects: 17.16GB (4,482 unpacked objects)
+- Line 116: Pack Files: Only 9.60MB (inverted ratio - should be opposite)
+- Line 118: `.beads/issues.jsonl`: 248MB (should be <5MB)
+- Line 174-176: Bead bf-2ildm created 17+ identical commits with 237MB `.beads/` JSONL files
+
+**Why Git Operations Triggered OOM:**
+- Git must read all 17GB of loose objects into memory for most operations
+- Even simple commands like `git status` or `git log` require object graph traversal
+- Memory-intensive operations (fetch, merge, status checks) exceeded available memory
+- OOM killer terminated processes consuming the most memory
+
+### Crash Type Classification
+
+**Classification:** **Infrastructure Event (70%)**
+
+**Decision Tree Applied (per `docs/crash-response-guide.md`):**
+
+```
+Exit Code -1?
+├─ Yes → Infrastructure Event ✓
+│  ├─ Work completed within 30s before crash?
+│  │  └─ NO (9 crashes over 2.5 hours, no successful commits)
+│  └─ System logs show memory pressure/OOM?
+│     └─ YES (SIGKILL from OOM killer, 18GB repository bloat)
+│
+Final Classification: INFRASTRUCTURE EVENT - Memory Pressure/OOM
+```
+
+**Classification Rationale:**
+
+1. **Exit Code -1 (SIGKILL) Pattern** ✓
+   - Crash response guide line 15: Exit code -1 = Infrastructure event
+   - All 9 crashes showed consistent exit code -1 pattern
+   - SIGKILL indicates external termination, not application error
+
+2. **Infrastructure Event Characteristics** ✓
+   - Crash response guide line 63-65: Memory Pressure / OOM Killer events
+   - Repository bloat (18GB) → OOM killer → SIGKILL is textbook infrastructure event
+   - No application error or code defect involved
+
+3. **NOT a False Positive** ✗
+   - Crash response guide line 180-194: False positive requires work completion within 30s
+   - Bead bf-4yjq crashed 9 times over 2.5 hours with no successful work completion
+   - No git commits show task completion before any crash
+
+4. **NOT a Workflow Failure** ✗
+   - Crash response guide line 72-103: Workflow failures show error_max_turns
+   - Exit code -1 is NOT error_max_turns (which is exit code 1)
+   - Crashes were not due to agent 30-turn limit exhaustion
+
+5. **NOT a Service Failure** ✗
+   - Crash response guide line 105-147: Service failures show HTTP 503/502
+   - No HTTP 5xx errors in crash artifacts
+   - Inference gateway availability not relevant to local git operations
+
+6. **NOT a Code Defect** ✗
+   - Crash response guide line 596: Code defects = 2% of crashes
+   - Domain-check code not involved in crash (git operations only)
+   - Crash mechanism (OOM killer) is external to application code
+
+**Evidence Citations:**
+
+| Evidence Type | Source | Significance |
+|--------------|--------|--------------|
+| Exit Code -1 | Line 7, 76, 100 | Confirms SIGKILL/OOM killer pattern |
+| Repository Size | Line 114-118 | 18GB with 17GB loose objects (bloated) |
+| Loose Objects | Line 115 | 17.16GB (4,482 unpacked objects) |
+| Pack Ratio | Line 116 | Only 9.60MB packed (inverted ratio) |
+| Root Cause Bead | Line 174-176 | bf-2ildm created 17+ large commits |
+| Crash Count | Line 98 | 9 crashes over ~2.5 hours |
+| Crash Pattern | Line 100 | All exit codes -1 (consistent) |
+
+### Git Remotes Were NOT the Cause
+
+**Verification:**
+- Line 122-125: Git remote configuration post-crash shows correct setup
+- Line 130-131: Both remotes (Forgejo and GitHub) show same tip commit (63ba024)
+- Line 151-154: Bead crashed "not because of what it was doing, but because" repository bloat caused ANY git operation to trigger OOM
+
+**Why Git Remotes Were Irrelevant:**
+- The bead's task (fixing git remotes) was valid and correctly implemented
+- Repository bloat caused OOM during git operations, regardless of which operation
+- Same crash would have occurred with ANY significant git operation (fetch, push, status, log)
+- Post-crash investigation confirms remotes were properly configured
+
+### Crash Type: Infrastructure Event - Memory Pressure/OOM (70%)
+
+**Confidence Level:** **HIGH**
+
+**Supporting Evidence:**
+- Exit code -1 (SIGKILL) consistent across all 9 crashes
+- Repository bloat quantified: 18GB with 17GB loose objects
+- OOM killer signature: Signal 9 (SIGKILL)
+- No work completion evidence (rules out false positive)
+- No HTTP 5xx errors (rules out service failure)
+- No error_max_turns (rules out workflow failure)
+- No application errors (rules out code defect)
+
+**Classification Matches Statistics:**
+- Crash response guide line 593: Infrastructure events = 70% of crashes
+- This crash (exit code -1, memory pressure, OOM killer) matches the 70% pattern exactly
+
+---
+
 ## Conclusion
 
 Bead bf-4yjq was attempting to fix git remote configuration (GitHub → Forgejo) as part of establishing the Forgejo-primary workflow convention. The bead crashed with signal -1 (SIGKILL) due to repository bloat (18GB with 17GB loose objects) triggering OOM killer intervention during git operations.
