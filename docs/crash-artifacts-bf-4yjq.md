@@ -433,12 +433,37 @@ Bead bf-4yjq was attempting to fix git remote configuration (GitHub → Forgejo)
 
 **The crash was a symptom of severe repository bloat, not a failure of the bead's git remote operations.**
 
-**Current Status:** Git remote configuration is correct, but repository bloat issue remains unresolved.
-
-**Priority:** Address repository bloat before continuing development work to prevent further crashes and performance degradation.
+**Current Status (updated 2026-09-02):** Resolved. Both the crash cause and the original work are closed out — see Retry Strategy below. (An earlier version of this section said the bloat "remains unresolved"; that predated the 2026-08-13 cleanup.)
 
 ---
 
-**Investigation Status:** ✅ ARTIFACTS GATHERED  
-**Confidence Level:** HIGH - All crash artifacts located and documented  
-**Next Steps:** Complete repository cleanup and implement prevention measures
+## Retry Strategy and Resolution (domchk-a0c4bab7, 2026-09-02)
+
+**Strategy chosen: no retry of the original work — it had already landed.**
+
+Decision logic, based on this RCA and the sibling child beads:
+
+| Question | Finding | Consequence |
+|----------|---------|-------------|
+| Was the crash transient, or caused by the work? | Infrastructure event — OOM SIGKILL from 18GB repo bloat, not from the remote-reconciliation work (see classification above) | Work bead bf-4yjq did not need to change |
+| Did the original work (bf-4yjq) complete? | Yes — closed 2026-08-17, and its outcome is verifiable live today | Retry-as-is is moot; nothing to re-run |
+| Was the crash cause remediated durably? | Yes — repo 18GB → 92MB, 0 loose objects, 100% packed (verified 2026-09-02) | No re-decomposition of bf-29rca needed; it is an alert umbrella, not work |
+| What still blocked the umbrella bf-29rca? | Only `domchk-a6c4bbf3` (final remote-convergence + mirror verification), still open | Execute that verification, then close the chain |
+
+**Verification executed 2026-09-02 (completes domchk-a6c4bbf3):**
+
+- `origin` → `https://git.ardenone.com/jedarden/domain-check.git` (Forgejo); `github-mirror` → GitHub (fetch-only locally)
+- Forgejo tip = GitHub tip = local HEAD = `93d087f` on `main` — histories converged, no divergence left to reconcile
+- Forgejo server-side push mirror `remote_mirror_Qu82zicukq` → `github.com/jedarden/domain-check` active: `sync_on_commit: true`, `last_error: ""`, `last_update: 2026-09-02T12:32:35Z`
+- End-to-end mirror test: the commit adding this section was pushed to Forgejo and confirmed present on GitHub via `git ls-remote github-mirror` (sync-on-commit path exercised, not just the 8h interval)
+- Host headroom at verification: 49G RAM available, 97G disk free
+
+**Post-crash safeguards in place:** `scripts/safe-git-gc.sh` (checkpoint/resume, memory-limited), `scripts/check-repo-health.sh` + cron monitoring, `.gitignore` exclusion of `.beads/` payloads, pre-commit large-file blocking — per the repository maintenance guide.
+
+**Chain closure:** with `domchk-a6c4bbf3` verified, all blockers of umbrella `bf-29rca` (`bf-1wy6q3`, `domchk-a6c4bbf3`) are closed; the alert is closed as resolved-no-retry. Note: `bf-2367pd` (alert on the crash *of an agent working bf-29rca*, 2026-08-26) was blocked by `domchk-a0c4bab7` and unblocks when this strategy bead closes — it is a duplicate-scope alert on the same storm and needs no new work.
+
+---
+
+**Investigation Status:** ✅ RESOLVED — artifacts gathered, RCA complete, remediation verified, retry strategy executed  
+**Confidence Level:** HIGH — all conclusions above re-verified against live system state 2026-09-02  
+**Next Steps:** None for this incident. Ongoing: keep repo-health monitoring active; do not commit `.beads/` payloads.
