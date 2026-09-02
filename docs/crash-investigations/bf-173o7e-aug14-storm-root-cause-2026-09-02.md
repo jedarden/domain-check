@@ -24,6 +24,19 @@ kill; second confirmed example from the same storm: the alert cited in
 time from `agent.completed` in
 `~/.needle/logs/claude-code-glm-4.7-lab-<worker>-<date>.jsonl`.
 
+Known assigned-timestamp → actual-kill mappings for this storm (re-derive any
+new one the same way; do not treat the assigned value as the kill):
+
+| Assigned timestamp | Event it serializes | Actual kill (`agent.completed`, exit −1) | Attempt |
+|---|---|---|---|
+| 13:21:05.530Z | `HANDLING_RELEASE_DONE` heartbeat | 13:20:31.223Z (119.6 s run) | 1st hour-13Z kill analysed by domchk-17ca8b7d |
+| **14:06:16.551Z** | `HANDLING_RELEASE_DONE` heartbeat (seq 4562) | **14:06:08.828Z** (69.7 s run; dispatched 14:04:58.872Z, seq 4550) | **dispatch #41 of the storm** |
+| 21:44:27.262Z | crash-alert creation | 21:42:29.847Z (36.3 s run) | hour-21Z attempt |
+
+The 14:06:08 kill is isolated: the only other fleet completion within
+±30 s is `lab-s1` finishing `bf-3ev0q` at 14:06:01 with **exit 124** (the
+600 s cap) — an unrelated timeout on a different worker, not a second crash.
+
 ## 2. What `exit −1` means
 
 Not a signal number. Needle records `ExitStatus::code().unwrap_or(-1)` — the
@@ -48,7 +61,11 @@ times UTC):
 | 23Z | 17 | 38.7 – 198.9 s |
 
 **Total: 131 attempts — 129 × exit −1 (21.6–216.6 s), 1 × exit 124 (607.6 s,
-the 600 s cap, at 22:19:04Z), 1 × exit 0 (40.1 s, 23:25:35Z).** The bead was
+the 600 s cap, at 22:19:04Z), 1 × exit 0 (40.1 s, 23:25:35Z).**
+Dispatch/completion reconciliation (verified 2026-09-02): the log holds **132
+`agent.dispatched` vs 131 `agent.completed` events for `bf-173o7e`** — one
+dispatch never recorded a completion; the exit breakdown otherwise matches
+exactly. The bead was
 then `bead.orphaned` at 23:25:49 — released unassigned on success, the same
 worker-side defect documented for bf-4x12ec. The storm opened **13 s after**
 sibling bead `bf-4x12ec`'s 53rd attempt exited 0 (12:58:45Z): bf-173o7e was a
