@@ -6,6 +6,12 @@
 **Alert:** Agent crash on bead bf-173o7e
 **Status:** ✅ RESOLVED - Duplicate False Positive
 
+> **⚠️ 2026-09-02 addendum appended below.** The mechanism attribution in this
+> report ("turn limit exhaustion", "NOT an OOM kill") was based on the wrong
+> dispatch's trace and is superseded by the definitive 2026-09-02 root-cause
+> determination: **INFRASTRUCTURE — kernel memcg OOM SIGKILL**. The disposition
+> is unchanged: the kill was real, the work completed, and no retry was needed.
+
 ## Summary
 
 The crash alert bf-28su5u was generated to investigate an agent crash on bead bf-173o7e. **This alert is a duplicate false positive.** The target crash has been thoroughly investigated and resolved. The reported "crash" was actually a turn limit exhaustion during administrative operations, not a technical failure.
@@ -135,3 +141,91 @@ The underlying git gc task on bead bf-173o7e **completed successfully**:
 **Classification:** Duplicate False Positive - Already resolved crash
 **Related Beads:** bf-173o7e (closed, successful), bf-28su5u (this duplicate alert)
 **Related Alerts:** bf-26sup4, bf-2e7xrf, bf-4byenr, bf-2s53ez, bf-4cxa1d, bf-4iviwf, bf-ac23zs
+
+---
+
+## Addendum 2026-09-02 — Mechanism reclassified: INFRASTRUCTURE (kernel memcg OOM SIGKILL)
+
+**Addendum by:** claude-code-glm-4.7-lab-roam-4 (verification dispatch `domchk-e1792d54`)
+**Supersedes:** the "Actual Events", "What This Was NOT / WAS", and "Primary
+Evidence" sections above — on the mechanism question only.
+**Disposition unchanged:** the kill was real, the gc work completed, bead
+bf-173o7e was correctly closed 2026-08-17, and **no retry was ever needed**.
+
+### Why this report misattributed the mechanism
+
+This report (2026-08-26) cited `.beads/traces/bf-173o7e/` (exit 1,
+`error_max_turns`, 2026-08-17T17:06:59Z) as "the real event". Needle traces are
+**single-slot — they hold only the most recent dispatch**. By Aug-26 the trace
+belonged to the bead's *final* Aug-17 dispatch, not to the Aug-14 kill that
+generated alert bf-28su5u (created 2026-08-14T14:02:25Z). The evidence cited
+was real but belonged to a different event eleven days later.
+
+### Corrected mechanism (definitive, HIGH confidence)
+
+Per
+[`docs/investigations/bf-173o7e-root-cause-determination-domchk-2e371a2c-2026-09-02.md`](investigations/bf-173o7e-root-cause-determination-domchk-2e371a2c-2026-09-02.md)
+(commit `07ab240`), consolidating the 2026-09-02 investigation cycle:
+
+- bf-28su5u's kill is one of the **129 × exit −1** events of bf-173o7e's
+  **132-dispatch Aug-14 retry storm** (12:58:58Z → 23:25:35Z). Its alert
+  timestamp 14:02:25Z is a `HANDLING_RELEASE_DONE` heartbeat trailing the real
+  `agent.completed` kill by seconds-to-minutes — alert timestamps are never
+  kill times.
+- `exit −1` is needle's sentinel for a dispatch that died without recording an
+  exit code; it is **not a signal number**. The underlying death was
+  **SIGKILL from the kernel memory-cgroup controller**: the bead-prescribed
+  bare `git gc --aggressive --prune=now` over 17.20 GiB of loose objects built
+  delta chains in memory with no `pack.windowMemory` bound and exhausted the
+  dispatch scope's `MemoryMax=12 GiB` (`oom_score_adj=200`) — pack-objects RSS
+  hugging the 12 GiB cap in the kernel OOM records, all `CONSTRAINT_MEMCG`.
+  Host RAM was healthy (~45 GiB free): a scope-budget kill, not host
+  exhaustion.
+- Retracted for this alert's event: "❌ An OOM kill during task execution
+  (peak memory was only 1.1GB)" — the 1.1 GB / "~7 minutes" figures come from
+  a *successful* gc run measured later on the already-packed repository, and
+  cannot describe the killed Aug-14 attempts, which died mid-pack at scope
+  budget. Likewise "Real exit code: 1" — the killed dispatches never recorded
+  an exit code (sentinel −1); exit 1 / `error_max_turns` belongs to the
+  separate Aug-17 final dispatch.
+
+### Task completion (conclusion unchanged, now correctly explained)
+
+The gc did **not** complete in the killed attempts — the 129 flat kill
+durations of 21.6–216.6 s spread over 10.5 h prove the object set never shrank
+between attempts. It completed via the storm's final **exit-0 attempt at
+23:25:35Z Aug-14** (40.1 s), and was consolidated by the Aug-17 closure
+("17.20GB loose objects packed into 444MB pack file, repository valid" —
+re-verified 2026-09-02 from the bf-173o7e closed event in
+`.beads/checkpoint/forensic.jsonl`).
+
+**Repository health re-verified 2026-09-02 for this addendum:** 161 loose
+objects / 1.26 MiB, 1 pack / 90.18 MiB, `.git` = 94 MB, `git fsck` clean
+(dangling objects only). No bloat regression.
+
+### Corrected classification
+
+**INFRASTRUCTURE (kernel memcg OOM SIGKILL) — alert-level false positive only.**
+The kill was real; "false positive" applies only to the alert's implied
+conclusion that the task failed and needed retry. Sibling precedent:
+[`docs/verification-report-domchk-673b47e3-bf-173o7e-alert-resolution-2026-09-02.md`](verification-report-domchk-673b47e3-bf-173o7e-alert-resolution-2026-09-02.md)
+(commit `6210dbf`) resolves the equivalent stale alert `domchk-673b47e3` with
+the same classification.
+
+### Remediation now in force (post-dates the original event)
+
+| Fix | Artifact |
+|---|---|
+| Bare `git gc` bounded at the config layer (`pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` → ≈3 GiB worst case; crash command re-run under a 768 MiB cgroup, peak pack-objects RSS ≈ 312 MiB, exit 0) | `scripts/setup-git-gc-config.sh --verify`, `scripts/test-gc-memory-bounds.sh` |
+| Staged, memory-limited, resumable replacement for bare gc | `scripts/safe-git-gc.sh` + systemd timers |
+| Closed-bead filtering, duplicate detection, cooldown — prevents stale alerts like this one from being re-fired against resolved beads | `scripts/crash-alert-manager.sh` |
+
+### Note on the archived copy
+
+`docs/archive/bead-verification-reports/BEAD_BF-28SU5U_VERIFICATION_REPORT.md`
+(the root-level report from commits `7bdb217`/`8eb2af0`, later archived)
+retains its original uncorrected text; this addendum supersedes it on
+mechanism as well.
+
+**Addendum verification date:** 2026-09-02
+**Corrected classification:** INFRASTRUCTURE — memcg OOM SIGKILL; work complete; no retry
