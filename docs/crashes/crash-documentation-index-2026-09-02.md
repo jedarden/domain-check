@@ -155,7 +155,8 @@
 
 #### Other Crash Reports
 
-- `docs/crashes/bf-4yjq-crash-report.md` - Comprehensive crash report
+- `docs/crash-investigations/bf-4yjq-crash-investigation.md` - **Canonical bf-4yjq report** (2026-09-02; verified 50 crashes, storm context, reproducibility assessment — supersedes the 9-crash figures in the reports below)
+- `docs/crashes/bf-4yjq-crash-report.md` - Comprehensive crash report (partially superseded; see banner)
 - `docs/crashes/bf-4yjq-crash-evidence-summary.md` - Evidence summary
 - `docs/crashes/bf-4nmj66-duplicate-alert-resolved-bf-4x12ec-crash.md` - Duplicate alert
 - `docs/crashes/bf-5a3q4w-duplicate-alert-resolved-bf-4x12ec-crash.md` - Duplicate alert
