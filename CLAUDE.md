@@ -193,6 +193,8 @@ fi
 
 **Critical:** Repository bloat is a leading cause of infrastructure crashes in this workspace. The bf-1s6c3 crash (2026-08-12) was caused by an 18GB repository with 17GB of loose objects, triggering OOM killer during git operations.
 
+**Quick Reference:** See [Repository Maintenance Guide](docs/maintenance/repository-maintenance-guide.md) for daily maintenance procedures and emergency cleanup steps.
+
 **Repository Size Limits:**
 | Metric | Healthy | Warning | Critical | Action Required |
 |--------|---------|---------|----------|-----------------|

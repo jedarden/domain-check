@@ -529,8 +529,11 @@ SAFE_GC_MEMORY_MAX=2g ./scripts/safe-git-gc.sh --full
 
 ## Related Documentation
 
+### Quick Reference
+- `docs/maintenance/repository-maintenance-guide.md` - **START HERE: Quick daily maintenance procedures**
+- `docs/bf-1s6c3-investigation-summary.md` - Repository bloat crash case study (18GB → 138MB)
+
 ### Operational Guides
-- `docs/repository-maintenance-best-practices.md` - Comprehensive best practices
 - `docs/cleanup-and-recovery-procedures.md` - Detailed cleanup procedures
 - `docs/crash-response-guide.md` - Quick crash classification guide
 - `docs/crash-mitigation-strategies.md` - Prevention strategies
