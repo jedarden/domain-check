@@ -136,6 +136,34 @@ No further action required. Scheduled maintenance (daily incremental gc, weekly 
 see the `domain-check-git-gc*` systemd timers) continues to keep the repository in this
 state.
 
+## Re-Verification (2026-09-02 ~14:32 EDT, bead domchk-b9ca02c8)
+
+Independent re-run of the same acceptance criteria ~3 hours after the verification above.
+**Result: unchanged and healthy.** No criterion regressed; every delta is routine
+post-commit residue from the four documentation commits landed between the two checks
+(`HEAD` `9992c8e` → `0a61037`).
+
+| Check | 11:35 run | This run | Delta |
+|-------|-----------|----------|-------|
+| `git fsck --full` | exit 0, zero output | exit 0, zero output | none |
+| `git count-objects -vH` loose | 43 obj / 372 KiB | 58 obj / 488 KiB | +15 obj / +116 KiB — commits since last pack rewrite |
+| in-pack / packs | 10,478 / 1 | 10,478 / 1 | none |
+| `size-pack` | 90.18 MiB | 90.18 MiB | none |
+| `garbage` / `prune-packable` | 0 / 0 | 0 / 0 | none |
+| `du -sh .git` | 92 MB | 93 MB | +1 MB (loose residue) |
+| Pack file set | pack + idx + bitmap + rev | identical (mtime 2026-09-02 11:09:09) | none |
+| `git verify-pack -s` | (not run) | OK — non-delta 5,697, delta chains to depth 29 | additional evidence |
+| Reachable objects (`rev-list --objects --all`) | 10,493 | 10,526 | +33 — new commits |
+| Operation latency | 21–112 ms | 16–51 ms (log 16 ms, status 27 ms, rev-list 51 ms) | normal |
+| `git cat-file -t HEAD` | OK | `commit` | normal |
+| Disk free | 94 GB | 94 GB | none |
+
+The pack is byte-identical to the one verified at 11:35 (same SHA-1
+`pack-98054595755f56a27981ce0fa7ff3860f4b5ae3e`, same mtime), so this run adds a check
+that run did not have: `git verify-pack -s` validates the pack's index and delta chains
+end to end — deepest chain 29, no corrupt entries. All five acceptance criteria for
+domchk-b9ca02c8 pass.
+
 ## References
 
 - `docs/research/git-gc-oom-crash-analysis.md` — OOM SIGKILL analysis (2026-08-14 event)
