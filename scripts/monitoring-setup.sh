@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Setup continuous monitoring for crash prevention
 # This script configures cron jobs for automated monitoring
 
