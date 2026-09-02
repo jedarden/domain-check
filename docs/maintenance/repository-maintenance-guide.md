@@ -125,6 +125,11 @@ Applied `--global` on this box on 2026-09-02, so every repo for the `coding` use
 protected — including the other repos whose dispatch scopes produced the bf-4x12ec-family
 kills. Re-run `--verify` if a repo reports fresh exit-code -1 crashes during git operations.
 
+`--verify` checks the **effective** bound — the system → global → local chain a bare gc
+actually sees — and reports which scope supplies each key, so a repo protected only by the
+box-wide global config verifies clean instead of false-alarming. `--verify --global`
+checks `~/.gitconfig` itself; it exits 1 if the global scope has no bound.
+
 Tested by `scripts/test-gc-memory-bounds.sh`: it runs the exact crash command at reduced
 scale (8×64MiB incompressible blobs) under a 768MiB cgroup — 1/16th of the dispatch scope —
 and asserts exit 0 with peak RSS ≈ 313MiB. Before the bound, the same command needed >12GiB

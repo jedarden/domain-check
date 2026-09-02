@@ -63,6 +63,15 @@ verify_in() {  # verify_in <repo> -> 0 iff --verify passes there
   ( cd "$repo" && "$SETUP" --verify ) >/dev/null 2>&1
 }
 
+# Same, but hide this box's global/system gitconfig. The negative tests below
+# assert rejection of MISSING bounds; without isolation the box-wide global
+# bound (setup-git-gc-config.sh --global) would satisfy the effective-bound
+# lookup and mask the absence.
+verify_isolated_in() {
+  local repo=$1
+  ( cd "$repo" && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 "$SETUP" --verify ) >/dev/null 2>&1
+}
+
 get_rss_kb() {  # "$1" = /usr/bin/time -v stderr log
   grep -oE 'Maximum resident set size \(kbytes\): [0-9]+' "$1" | grep -oE '[0-9]+$'
 }
@@ -101,12 +110,22 @@ setup_in "$r2" >/dev/null 2>&1 || fail "setup exited nonzero in pre-tuned repo"
 
 echo "=== unit: verify rejects unbounded and thread-multiplied states ==="
 r3=$(newrepo) || exit 1   # no setup run at all
-verify_in "$r3" && fail "--verify accepted a repo with no bounds" || ok "--verify rejects an unbounded repo"
+verify_isolated_in "$r3" && fail "--verify accepted a repo with no bounds" || ok "--verify rejects an unbounded repo"
 r4=$(newrepo) || exit 1
 git -C "$r4" config pack.windowMemory 4g
 git -C "$r4" config pack.deltaCacheSize 1g
 # pack.threads deliberately unset: git auto-sizes to all cores, multiplying the window
-verify_in "$r4" && fail "--verify accepted unset pack.threads" || ok "--verify rejects unset pack.threads (per-thread multiplication)"
+verify_isolated_in "$r4" && fail "--verify accepted unset pack.threads" || ok "--verify rejects unset pack.threads (per-thread multiplication)"
+
+echo "=== unit: verify sees the box-wide global bound when the repo has none ==="
+r6=$(newrepo) || exit 1
+gtmp="$WORKROOT/global-gitconfig"
+git config --file "$gtmp" pack.windowMemory 2g
+git config --file "$gtmp" pack.deltaCacheSize 1g
+git config --file "$gtmp" pack.threads 1
+( cd "$r6" && GIT_CONFIG_GLOBAL="$gtmp" GIT_CONFIG_NOSYSTEM=1 "$SETUP" --verify ) >/dev/null 2>&1 \
+  && ok "--verify passes via the global bound alone (effective chain)" \
+  || fail "--verify rejects a repo protected only by the global bound"
 
 [[ "${1:-}" == "--unit" ]] && { echo; echo "=== unit only: $PASS passed, $FAIL failed ==="; exit $(( FAIL > 0 )); }
 
@@ -150,8 +169,8 @@ if [[ -n "$TIME_BIN" ]]; then
 else
   echo "   (GNU time not found; RSS assertion skipped, cgroup/exit assertions still ran)"
 fi
-packed=$(git -C "$r5" count-objects -v | awk '/^count:/{print $2}')
-[[ "$packed" == "0" ]] && ok "repo fully packed after gc" || fail "loose objects remain: $packed"
+loose_after=$(git -C "$r5" count-objects -v | awk '/^count:/{print $2}')
+[[ "$loose_after" == "0" ]] && ok "repo fully packed after gc" || fail "loose objects remain: $loose_after"
 
 echo
 echo "=== $PASS passed, $FAIL failed ==="
