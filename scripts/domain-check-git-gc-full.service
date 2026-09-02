@@ -1,7 +1,6 @@
 [Unit]
 Description=Domain Check Repository Full Git GC
 Documentation=https://git.ardenone.com/jedarden/domain-check
-After=network.target
 
 [Service]
 Type=oneshot
@@ -9,13 +8,3 @@ WorkingDirectory=/home/coding/domain-check
 ExecStart=/home/coding/domain-check/scripts/safe-git-gc.sh --full
 StandardOutput=append:/home/coding/domain-check/.beads/logs/git-gc-full.log
 StandardError=append:/home/coding/domain-check/.beads/logs/git-gc-full.log
-
-# Resource limits to prevent OOM (higher for full GC)
-MemoryMax=4G
-MemorySwapMax=0
-CPUQuota=300%
-
-# Safety settings
-Nice=15
-IOSchedulingClass=idle
-IOSchedulingPriority=7
