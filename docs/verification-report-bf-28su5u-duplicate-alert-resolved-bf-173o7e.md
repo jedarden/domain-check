@@ -168,10 +168,12 @@ Per
 (commit `07ab240`), consolidating the 2026-09-02 investigation cycle:
 
 - bf-28su5u's kill is one of the **129 × exit −1** events of bf-173o7e's
-  **132-dispatch Aug-14 retry storm** (12:58:58Z → 23:25:35Z). Its alert
-  timestamp 14:02:25Z is a `HANDLING_RELEASE_DONE` heartbeat trailing the real
-  `agent.completed` kill by seconds-to-minutes — alert timestamps are never
-  kill times.
+  **132-dispatch Aug-14 retry storm** (12:58:58Z → 23:25:35Z), mapped by the
+  primary-log correlation in `docs/crash-reports/bf-173o7e.md` (db1acb3) to
+  **storm attempt #38**: the alert timestamp 14:02:25.576Z is a
+  `HANDLING_RELEASE_DONE` heartbeat for the real `agent.completed` kill at
+  **14:02:01.202Z** (exit −1 after 24.4 s — the shortest trail mapped).
+  Alert timestamps are never kill times.
 - `exit −1` is needle's sentinel for a dispatch that died without recording an
   exit code; it is **not a signal number**. The underlying death was
   **SIGKILL from the kernel memory-cgroup controller**: the bead-prescribed
