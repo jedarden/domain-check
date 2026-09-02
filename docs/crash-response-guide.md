@@ -20,9 +20,106 @@ When investigating a crash, first classify the type:
 
 ---
 
+## Automated Crash Alert System (Implemented 2026-09-02)
+
+### Quick Start: Automated Crash Processing
+
+**NEW:** Use the automated crash alert system before manual investigation:
+
+```bash
+# Process a crash alert with full automation
+./scripts/crash-alert-manager.sh <bead-id>
+
+# Auto-process recent crashes
+./scripts/crash-alert-manager.sh --auto-process
+
+# Classify a crash type
+./scripts/crash-classifier.sh <bead-id>
+
+# Test crash alert fixes
+./scripts/test-crash-alert-fixes.sh
+```
+
+### What the Automated System Does
+
+The crash alert manager automatically implements all 6 critical fixes:
+
+1. **Closed Bead Filtering** - Skips alerts for beads that already completed successfully
+2. **Duplicate Detection** - Prevents multiple investigation beads for same crash
+3. **Exit Code Validation** - Checks exit code 0 (success) vs actual crash
+4. **Completion Awareness** - Detects post-completion termination vs crash during task
+5. **Alert Cooldown** - 5-minute cooldown prevents alert spam during system-wide events
+6. **Crash Classification** - Categorizes crashes as FALSE_POSITIVE, SERVICE_FAILURE, INFRASTRUCTURE, or CODE_DEFECT
+
+### Classification Types
+
+| Classification | Description | Action Required |
+|----------------|-------------|-----------------|
+| **FALSE_POSITIVE** | Post-completion cleanup failure, max_turns, or completed bead | No action - close bead |
+| **SERVICE_FAILURE** | External service unavailable (HTTP 503/502) | Retry with backoff when service restored |
+| **INFRASTRUCTURE** | OOM, SIGHUP cascade, resource exhaustion | Check system resources, verify work completion |
+| **CODE_DEFECT** | Actual application error | Standard investigation required |
+| **UNKNOWN** | Unable to classify | Manual investigation required |
+
+### Example Usage
+
+```bash
+# Investigate crash alert bf-3561g
+./scripts/crash-alert-manager.sh bf-3561g
+
+# Output:
+# INFO: Checking bead closure status for: bf-3561g
+# INFO: Checking for existing alert beads for target: bf-4k2ws
+# INFO: Validating exit code before generating alert
+# INFO: Classifying crash type...
+# Classification: FALSE_POSITIVE
+# Reason: Bead bf-4k2ws already closed (completed successfully)
+# Action: No alert generated - false positive filtered
+```
+
+### Monitoring System Integration
+
+The automated crash system integrates with continuous monitoring:
+
+```bash
+# Install continuous monitoring
+./scripts/monitoring-setup.sh
+
+# Monitor logs
+tail -f .beads/logs/crash-alert-manager.log
+tail -f .beads/logs/crash-monitor.log
+tail -f .beads/logs/resource-alerts.log
+```
+
+### When to Use Manual vs Automated
+
+**Use Automated System (crash-alert-manager.sh) for:**
+- All standard crash alerts
+- Post-completion cleanup failures
+- System-wide event detection
+- Duplicate alert filtering
+
+**Use Manual Investigation (this guide) for:**
+- Unusual crash patterns not classified by automation
+- Code defects requiring debugging
+- Complex multi-factor crashes
+- Verification of automated classification
+
+---
+
 ## Investigation Checklist
 
 ### Phase 1: Immediate Classification (2 minutes)
+
+**Automated First Step:**
+```bash
+# Try automated classification first
+./scripts/crash-classifier.sh <bead-id>
+
+# If classification is CODE_DEFECT or UNKNOWN, proceed with manual investigation
+```
+
+**Manual Classification (if automated system insufficient):**
 
 ```bash
 # 1. Get bead metadata
@@ -675,17 +772,24 @@ Other Exit Code?
 
 ## Related Documentation
 
+- **Automated Crash Alert System (2026-09-02):**
+  - `docs/crash-alert-fix-implementation-2026-09-02.md` - Complete crash alert system documentation
+  - `docs/monitoring-implementation-summary-2026-09-02.md` - Monitoring system implementation
+  - `docs/verification-report-bf-4k2ws-crash-investigation-2026-09-02.md` - bf-4k2ws crash verification
+
 - **Comprehensive Investigation:** `docs/comprehensive-crash-investigation-report-2026-09-01.md`
 - **Mitigation Strategies:** `docs/crash-mitigation-strategies.md`
+
 - **Specific Crashes:** 
   - `docs/crash-analysis-domchk-c9641ac5-2026-09-01.md` (Service availability)
   - `docs/investigation-summary-bf-173o7e-2026-09-01.md` (False positive)
   - `docs/crash-artifacts-bf-4yjq.md` (Repository bloat - 9 OOM crashes from 18GB repo)
+
 - **Git GC Safety:** `docs/safe-git-gc-implementation.md`, `docs/safer-git-gc-strategy.md`
 
 ---
 
 **Guide Status:** ✅ Complete  
-**Last Updated:** 2026-09-01  
+**Last Updated:** 2026-09-02 (Added automated crash alert system section)  
 **Target Audience:** Agents investigating crash alerts  
 **Purpose:** Fast crash classification and response decisions
