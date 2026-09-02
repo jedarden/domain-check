@@ -1,7 +1,7 @@
 # Crash Investigation: Agent Signal -1 on Bead bf-4x12ec
 
 ## Summary
-Bead bf-4x12ec experienced an agent crash with exit code -1 (signal -1) at 2026-08-14T10:25:30.457683731+00:00. Per established crash investigation protocol, this investigation determines the crash context, verifies work completion status, and documents findings.
+Bead bf-4x12ec experienced an agent crash with exit code -1 (signal -1) on 2026-08-14, as part of a 64-minute retry storm: 44 attempts were SIGKILLed between 10:23:02Z and 11:27:26Z, each surviving only 39–116 seconds, before the `git gc --aggressive --prune=now` operation completed on the 53rd attempt at 12:58:45Z. Per established crash investigation protocol, this investigation determines the crash context, verifies work completion status, and documents findings.
 
 ## Crashed Bead Details
 - **Bead ID:** bf-4x12ec
@@ -9,8 +9,8 @@ Bead bf-4x12ec experienced an agent crash with exit code -1 (signal -1) at 2026-
 - **Type / Priority:** task / P2
 - **Status:** Closed (work completed by retry agents)
 - **Purpose:** Phase 1.2 emergency stabilization — pack 17.20GB of loose git objects into compressed pack files, eliminating OOM risk during git operations
-- **Crash Timestamp:** 2026-08-14T10:25:30Z (6:25 AM EDT), ~8 minutes after the bead was created at 10:17:26Z
-- **Signal:** -1 (environment-level process kill, SIGKILL from OOM killer)
+- **Crash Window:** 2026-08-14 10:23:02–11:27:26Z — 44 attempts killed at 39–116 s each (primary event log; see Addendum 2); the bead had been created at 10:17:26Z
+- **Signal:** -1 (environment-level process kill, SIGKILL; source most consistent with the OOM killer — see Signal Analysis and Addendum 2)
 
 > Note: the bead record was not retrievable when this report was first written
 > (the crash predates the bead-forge → bead-rs migration). It has since been
@@ -181,7 +181,7 @@ this report are preserved as of their original 2026-08-17 investigation date.
 
 **Investigation Date:** August 17, 2026
 **Last Reviewed:** September 2, 2026
-**Report Version:** 1.2 (Addendum 2 below)
+**Report Version:** 1.3 (Addenda 2–3 below)
 
 ## Addendum 2 — Primary-Source Retry-Storm Analysis (2026-09-02, bead domchk-661c2dc6)
 
@@ -293,3 +293,39 @@ unused, repository 92 MB with 20 loose objects — healthy, matching Addendum 1.
 **Addendum 2 Investigation Date:** September 2, 2026
 **Addendum 2 Sources:** needle event log 2026-08-14 (primary), live bead record, current-boot dmesg, journalctl coverage check
 **Classification:** Technical Investigation - Infrastructure Failure
+
+## Addendum 3 — Re-verification and Summary Correction (2026-09-02, bead domchk-90640785)
+
+Alert bead `domchk-90640785` (created 2026-08-26T21:13:53Z, dispatched
+2026-09-02) tasked a fresh investigation of this crash. Findings:
+
+- **bf-4x12ec is Closed** (2026-08-17T14:50:41Z); the work completed
+  2026-08-14T12:58:45Z on the 53rd attempt. The alert fired **nine days after
+  both** — this is another instance of the duplicate-alert pattern documented
+  in a dozen prior verification reports (bf-qz9mov, bf-1uh46l, bf-48vwac,
+  bf-4h2mqq, bf-4xbt4g, bf-4oblul, bf-2m532x, bf-3cy3vk, bf-44upi7, bf-2u3dzu,
+  bf-5f9xqg, domchk-661c2dc6). Classification: **FALSE POSITIVE**.
+- **Primary event log independently re-verified**
+  (`claude-code-glm-4.7-lab-domain-check-2026-08-14.jsonl`): 53 claims, 53
+  dispatched, 53 completed — **44 × exit -1, 8 × exit 124, 1 × exit 0**,
+  matching Addendum 2's three-phase table exactly.
+- **Current repository health confirmed** (2026-09-02): 92MB `.git`, 35 loose
+  objects, 10,408 in-pack, 0 garbage — the cleanup has held, with further
+  reductions delivered by the scheduled safe-git-gc timers.
+
+### Correction: reverted a reintroduced debunked claim
+
+An uncommitted working-tree edit (2026-09-02 ~10:32 EDT) rewrote this report's
+Summary to "first alert at 10:41:13Z" and "the `git gc` operation itself
+SIGKILLed at 11:14:39Z after ~57 minutes" — both refuted by Addendum 2's
+primary-source analysis (no attempt survived 115.8 s; 10:41:13 was attempt
+#13's alert, not the first; 11:14:39 was attempt #31's). The 57-minute figure
+is simply bead creation (10:17:26Z) to the attempt-#31 alert (11:14:39Z), not
+a gc runtime. The Summary and Crash Window were restored to the
+event-log-supported narrative; the body's v1.0/v1.1 sections are retained as
+historical record, with Addendum 2's timestamp table resolving them.
+
+---
+**Addendum 3 Investigation Date:** September 2, 2026
+**Addendum 3 Sources:** needle event log 2026-08-14 (primary), live bead record, live `git count-objects`
+**Classification:** FALSE POSITIVE — duplicate alert on an already-resolved, closed bead
