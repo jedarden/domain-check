@@ -313,21 +313,25 @@ git fsck --full
 
 **Continuous Monitoring Setup:**
 
-Automated monitoring can be enabled via cron jobs:
+Automated monitoring runs as **systemd user timers** (this box is NixOS — there is no `crontab`; the cron-based `scripts/monitoring-setup.sh` does not work here):
 
 ```bash
-# Install continuous monitoring (runs automatically via cron)
-./scripts/monitoring-setup.sh
+# Install/refresh the repo-health + git-gc timers (runs daemon-reload + enable --now)
+./scripts/setup-repo-maintenance.sh
 
-# Remove monitoring when no longer needed
-./scripts/monitoring-remove.sh
+# Verify every timer has a future Trigger time
+systemctl --user list-timers 'domain-check-*' --all
 ```
 
-**Installed Jobs:**
-- Crash pattern detection: every 10 minutes
-- Resource monitoring: every 5 minutes
-- Service monitoring: every 2 minutes
-- Repository health monitoring: every hour
+**Installed Timers (verified 2026-09-02):**
+- Crash pattern detection: every 10 minutes (`domain-check-monitoring.timer`)
+- Resource monitoring: every 5 minutes (`domain-check-resource-monitor.timer`)
+- Service monitoring: every 2 minutes (`domain-check-service-monitor.timer`)
+- Repo health + auto-gc check: daily 02:00 (`domain-check-repo-health.timer`)
+- Incremental git gc: daily 03:00 (`domain-check-git-gc.timer`)
+- Full git gc: weekly Sun 04:00 (`domain-check-git-gc-full.timer`, MemoryMax=4G)
+
+**Gotcha:** after editing any `~/.config/systemd/user/domain-check-*` unit file, run `systemctl --user daemon-reload` — otherwise the manager keeps the stale unit state and the timer silently never fires (this bit the weekly full-gc on 2026-09-02).
 
 **Manual Monitoring Scripts:**
 

@@ -162,8 +162,8 @@ export CRASH_RATE_THRESHOLD=5
 
 **Integration with Monitoring:**
 ```bash
-# Run hourly via cron
-0 * * * * /home/coding/domain-check/scripts/crash-pattern-detection.sh --quiet
+# Scheduled via systemd user timer (every 10 min) — not cron; this box has no crontab
+systemctl --user list-timers domain-check-monitoring.timer
 
 # Alert if pattern detected
 if ! ./scripts/crash-pattern-detection.sh --quiet; then
@@ -201,8 +201,8 @@ Monitors system resources and generates alerts before crashes occur.
 
 **Usage Pattern:**
 ```bash
-# Continuous monitoring via cron
-*/5 * * * * /home/coding/domain-check/scripts/resource-monitor.sh --continuous --interval 300
+# Scheduled via systemd user timer (every 5 min): domain-check-resource-monitor.timer
+systemctl --user list-timers domain-check-resource-monitor.timer
 ```
 
 **Documentation:** See `docs/crash-monitoring-implementation.md` (Proposal 4.2)
@@ -236,8 +236,8 @@ Monitors external service availability and detects outages.
 
 **Usage Pattern:**
 ```bash
-# Continuous monitoring via cron
-* * * * * /home/coding/domain-check/scripts/service-monitor.sh --continuous --interval 60
+# Scheduled via systemd user timer (every 2 min): domain-check-service-monitor.timer
+systemctl --user list-timers domain-check-service-monitor.timer
 ```
 
 **Documentation:** See `docs/crash-monitoring-implementation.md` (Proposal 4.1)

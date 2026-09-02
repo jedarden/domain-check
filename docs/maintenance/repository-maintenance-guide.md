@@ -1,7 +1,7 @@
 # Repository Maintenance Guide
 
 **Purpose:** Prevent repository bloat and maintain system stability  
-**Last Updated:** 2026-09-01  
+**Last Updated:** 2026-09-02  
 **Status:** ✅ Active
 
 ---
@@ -31,6 +31,42 @@
 # Monitor in another terminal
 ./scripts/safe-git-gc-monitor.sh --watch
 ```
+
+---
+
+## Automated Scheduling (systemd user timers)
+
+All scheduled maintenance and monitoring runs as **systemd user timers**, not
+cron — this box is NixOS and has no `crontab`. Installed by
+`scripts/setup-repo-maintenance.sh` (repo-health + gc units) and
+`scripts/install-monitoring.sh` / `scripts/install-git-gc-timers.sh`
+(monitoring units); unit sources live in `scripts/domain-check-*.{service,timer}`.
+
+| Timer | Schedule | What it runs |
+|-------|----------|--------------|
+| `domain-check-service-monitor.timer` | every 2 min | `service-monitor.sh --once` |
+| `domain-check-resource-monitor.timer` | every 5 min | `resource-monitor.sh --once` |
+| `domain-check-monitoring.timer` | every 10 min | `crash-pattern-detection.sh` |
+| `domain-check-repo-health.timer` | daily 02:00 | `auto-gc-trigger.sh --dry-run` |
+| `domain-check-git-gc.timer` | daily 03:00 | `safe-git-gc.sh` (stages 1-2) |
+| `domain-check-git-gc-full.timer` | weekly Sun 04:00 | `safe-git-gc.sh --full` (MemoryMax=4G) |
+
+**Verify the fleet is healthy:**
+```bash
+systemctl --user list-timers 'domain-check-*' --all
+```
+Every timer should show a future `Trigger` time. A timer showing `n/a` or
+`-` is not going to fire — investigate before assuming coverage.
+
+**Known failure mode (bit 2026-09-02):** editing a unit file in
+`~/.config/systemd/user/` without `systemctl --user daemon-reload` leaves the
+manager holding the previous (possibly fatal) unit state. The timer then
+silently never fires while `list-timers` still lists it. After changing any
+unit file — by hand or by re-running the installers — always:
+```bash
+systemctl --user daemon-reload && systemctl --user start domain-check-*.timer
+```
+The installers do this; bare `cp` into `~/.config/systemd/user/` does not.
 
 ---
 
