@@ -181,7 +181,7 @@ this report are preserved as of their original 2026-08-17 investigation date.
 
 **Investigation Date:** August 17, 2026
 **Last Reviewed:** September 2, 2026
-**Report Version:** 1.3 (Addenda 2–3 below)
+**Report Version:** 1.6 (Addenda 2–6 below; Addendum 4 re-verified by second dispatch)
 
 ## Addendum 2 — Primary-Source Retry-Storm Analysis (2026-09-02, bead domchk-661c2dc6)
 
@@ -294,7 +294,215 @@ unused, repository 92 MB with 20 loose objects — healthy, matching Addendum 1.
 **Addendum 2 Sources:** needle event log 2026-08-14 (primary), live bead record, current-boot dmesg, journalctl coverage check
 **Classification:** Technical Investigation - Infrastructure Failure
 
-## Addendum 3 — Re-verification and Summary Correction (2026-09-02, bead domchk-90640785)
+## Addendum 3 — Independent Verification & New Kernel Evidence (2026-09-02, bead domchk-0f9eb93a)
+
+A further alert bead (`domchk-0f9eb93a`, crash timestamp cited as
+`2026-08-14T11:01:40Z`) re-opened the same question. This addendum records an
+independent re-verification of Addendum 2 against primary sources, plus
+materially stronger kernel evidence that was missed the first time.
+
+### The 11:01:40Z timestamp resolved
+
+It is a fifth event inside the same phase-1 storm, not a separate crash. The
+needle event log shows attempt **#26** died at `11:01:31.948Z`
+(`agent.completed`, `exit_code: -1`, 76.1 s), the worker classified and
+released the bead at `11:01:43.919` and re-claimed it at `11:01:46` — the
+cited 11:01:40 falls inside that release/re-claim handling window.
+
+### Verification results (all primary-source)
+
+- **Retry storm reproduced exactly:** 53 attempts on Aug-14 — 44× `exit -1`
+  (38.9–115.8 s) in 10:23–11:27, 8× `exit 124` (exactly 600.0 s) in
+  11:38–12:50, 1× `exit 0` (491.8 s) at 12:58:45. Matches Addendum 2.
+- **`journalctl -u needle` for the requested window returns "No entries".**
+  The journal holds a single boot beginning 2026-08-15 19:26:03 EDT, so no
+  kernel or system log covers Aug-14. Addendum 2's evidence-window limitation
+  is confirmed.
+- **Isolation extended to all workers:** a sweep of all six Aug-14 worker logs
+  (`domain-check`, `drawrace`, `roam-1`, `roam-2`, `s1`, `test-fix`) finds 45
+  signal-deaths in the 10:20–13:00 window: 44× bf-4x12ec plus 1× bf-173o7e
+  (12:59:48, the separately-documented neighbouring crash). Zero deaths on any
+  other worker — the storm never left bf-4x12ec's retry cycle.
+
+### NEW: the death loop ran under heavy load saturation
+
+`fleet.cpu_saturated` fired on essentially every dispatch of the death loop.
+Readings inside 10:23–11:28: **load 10.4–30.92 on 9 reported cores, mean
+~13.8** — peak 30.92 at 11:21:25. By 12:50:33 load was 7.84, and the
+successful attempt at 12:58:45 ran at 9.86. The storm began as memory-limited
+deaths while the box was also CPU-saturated, and both eased together into the
+timeout loop and then success — the same "easing pressure" signature Addendum
+2 describes, now with direct telemetry.
+
+### NEW: 257 git OOM-kills on Aug-16 — the mechanism on full display
+
+Addendum 2 cited a single kernel OOM event as corroboration. The current
+boot's kernel journal actually contains **419 `Killed process` events: 413 on
+Aug-16 (257 `git`, 156 `node (vitest)`), 6 `bash` on Sep-02**. All are
+`CONSTRAINT_MEMCG` with `oom_score_adj=200` inside transient
+`run-p*.scope` memcgs — correction: the "13 events" figure in Addendum 2 is
+off by ~30×, and its cited single event (13:29:49 EDT, ~7.8 GB) corresponds to
+the `13:29:51` git oom-kill (pid 2790353, anon-rss 7,788,052 KiB), one of 257,
+not a lone occurrence.
+
+The Aug-16 git kills are the same cleanup effort this bead was created for,
+two days after the crash, with kernel logging available. Their shape:
+
+- git anon-rss at kill: **1.2–11.97 GB, mean 10.14 GB**; 163 of 257 in the
+  11–12 GB bucket — dying at a hard ceiling. (Refinement to Addendum 6's
+  "11.7–12.6 GB" characterisation below: that range covers only the
+  ceiling-hugging majority — 94 of the 257 kills fall below it, e.g. pid
+  1947564 at 12:02:31 EDT, anon-rss 7,139,020 kB. Same killer, lower fill
+  levels.)
+- That ceiling is now identified from the live scopes: **agent dispatch scopes
+  run with `MemoryMax=12GiB`** (12884901888 bytes); test scopes get 6 GiB and
+  `CPUQuota=200%`. (The `needle-worker@*.service` units themselves are
+  unlimited — Addendum 4 §5; the cap that kills the work bites inside the
+  transient `run-p*.scope` each dispatch creates.) A `git gc --aggressive`
+  over ~17 GB of loose objects cannot fit under a 12 GiB cap, so the kernel
+  killed it — 257 times in one day — until the repo was finally repacked.
+- `memory.oom.group=0` on these scopes, so the kernel kills a single task: the
+  highest-badness one in the hitting memcg. On Aug-16 that was usually `git`
+  itself; on Aug-14 it was the agent process (hence `exit -1` on the worker
+  record). Same cause, different victim — whichever task held the most RSS
+  when the scope hit its cap.
+
+### Root-cause determination (unchanged conclusion, materially stronger evidence)
+
+**Cgroup memory exhaustion, not system OOM, not timeout, not a code defect.**
+`git gc --aggressive` on a 17–18 GB loose-object repository exceeds the 12 GiB
+`MemoryMax` of the agent's transient scope; the kernel OOM killer SIGKILLs a
+task inside that scope; the needle worker records `exit_code: -1`, classifies
+`crash`, and re-claims the bead — 44 times in 64 minutes while the box was
+also CPU-saturated. Phase-2's exactly-600 s deaths prove a harness timeout
+existed and phase-1 died far earlier than it; phase-3's success at 12:58:45,
+after load fell to ~8–10, closes the loop.
+
+"Was git gc actually running at crash time?" is not directly observable from
+the event log (no Aug-14 kernel logs; it stores only a `prompt_hash`), but it
+is bounded: no attempt survived 115.8 s, so no long-running gc existed at
+11:01:40 — the deaths were early-run, consistent with the agent launching the
+gc and the scope hitting its cap within minutes, as the Aug-16 kills show it
+doing repeatedly. Addendum 4's session transcripts have since supplied the
+direct evidence this bound inferred: each phase-1 transcript ends with the
+`git gc --aggressive --prune=now` tool call unanswered — killed mid-gc.
+
+Repository state at review time (2026-09-02 ~10:53 EDT): `.git` 92 MB, 43
+loose objects (360 KiB) + 10,408 packed in a single 90.18 MiB pack, zero
+garbage — the cleanup held. (Loose-object counts drift between scheduled gc
+runs; every reading this day, 20/35/43, is far below the 100 threshold.)
+
+---
+**Addendum 3 Investigation Date:** September 2, 2026
+**Addendum 3 Sources:** needle event log 2026-08-14 (all six workers), current-boot kernel journal (`journalctl -k`), live cgroup inspection of needle/run-p scopes, `git count-objects`
+**Classification:** Technical Investigation - Infrastructure Failure
+
+## Addendum 4 — Session transcripts, gc config defect, and what the 53rd attempt actually did (2026-09-02, bead domchk-d986ce54)
+
+Alert bead `domchk-d986ce54` (alert timestamp `2026-08-14T10:52:14.447218059Z`
+= the `HANDLING_RELEASE_DONE` heartbeat during teardown of attempt #20 —
+dispatched 10:51:03Z, exit -1 at 10:51:49Z after 46.2 s). Same duplicate-alert
+class as Addenda 2–3. Net-new findings beyond them:
+
+1. **Per-attempt session transcripts survive.** Each of the 53 attempts has a
+   Claude Code transcript under `~/.claude/projects/-home-coding-domain-check/`,
+   its mtime matching the corresponding `agent.completed` event to the second.
+   Every phase-1 transcript shows the same shape — `git count-objects -vH` →
+   `count: 4649, size: 17.20 GiB, size-pack: 9.60 MiB`; `du -sh .git` → `18G`;
+   then `git gc --aggressive --prune=now` (tool timeout 600000) — and the
+   transcript **ends with no tool result**. The agents were doing exactly what
+   the bead asked and were killed mid-gc; the gc never completed within any
+   phase-1 attempt. (Example: session `38af9cbf-addd-430f-8568-4837f7dcc0dd`,
+   the attempt whose teardown produced this investigation's alert timestamp.)
+2. **Attempt #1 also hit an invalid git config.** `.git/config` held
+   `gc.aggressivewindow = 1.hour`; gc failed instantly with
+   `fatal: bad numeric config value '1.hour' for 'gc.aggressivewindow' …
+   invalid unit` (exit 128). The agent tried `1h` (also invalid), then unset
+   the key at 10:22:18Z, so later attempts reached real gc execution.
+   Follow-up commit `de7af48` (Aug 17) documented a numeric value, but its
+   message ("value of 1 represents 1 hour") misreads the setting —
+   `gc.aggressivewindow` is a delta-window object count, not a duration.
+3. **The 53rd attempt did not run the gc — it executed needle's auto-split.**
+   Its prompt opens "This bead has failed 8 times … Decompose This Bead", and
+   its transcript (session `31800ee3-de7c-4619-abe8-07468fb7de32`) shows it
+   creating three chained children (`bf create` → **bf-173o7e, bf-5jhvpk,
+   bf-im2sl1**; `bf dep add` chaining them; umbrella label on bf-4x12ec), then
+   printing `SPLIT_COMPLETE`. `verification.passed` fired at 12:58:45Z and
+   `bead.orphaned` at 12:58:55Z. **The actual `git gc --aggressive
+   --prune=now` ran under child bf-173o7e**, which recorded the final metrics
+   (18 GB → 753 MB, 4,649 → 141 loose) before closing 2026-08-17. The
+   Summary's "gc completed on the 53rd attempt" is therefore corrected to:
+   *the bead was decomposed on the 53rd attempt; the gc completed under
+   bf-173o7e.*
+4. **The storm continued on the child.** bf-173o7e recorded **131 completions
+   on Aug 14 alone — 129 × exit -1 between 12:59:48Z and 23:25:35Z, plus one
+   124 and one 0** — the same 39–116 s mid-gc kill pattern for another ~10.5
+   hours. Addendum 2's "uncorrelated" note understates this: bf-173o7e was
+   created by bf-4x12ec's own 53rd attempt, bringing Aug-14 totals to **173
+   SIGKILLed attempts of the same gc command on the same repository** across
+   parent and child.
+5. **No per-worker memory containment exists.** Live inspection of
+   `needle-worker@*.service` (2026-09-02): `MemoryMax=infinity`,
+   `MemoryHigh=infinity`, `CPUQuotaPerSecUSec=infinity`. Combined with
+   Addendum 2's CONSTRAINT_MEMCG findings for other scopes on this box, a
+   bounded per-worker memory limit is the generic fix for this kill class;
+   `scripts/safe-git-gc.sh` addresses it for gc specifically.
+6. **Reproduction: deliberately not attempted.** The trigger state is gone
+   (35 loose objects / 300 KiB today). Recreating an 18 GB loose-object repo
+   to induce OOM on a shared box running 13+ needle workers risks killing
+   unrelated agents' work, and with Aug-14 kernel logs unrecoverable (current
+   boot began 2026-08-15 19:26 EDT) even a reproduced kill could not be
+   validated against contemporaneous system records.
+7. **Loose ends:** children bf-5jhvpk (repack) and bf-im2sl1 (verify) remain
+   **Open** while the parent and bf-173o7e are Closed — housekeeping
+   candidates for a later pass.
+
+Classification for `domchk-d986ce54`: **FALSE POSITIVE** duplicate alert
+(bf-4x12ec Closed since 2026-08-17), with the transcript-level evidence above
+as this investigation's contribution to the record.
+
+### Verification of this addendum (2026-09-02, second dispatch of domchk-d986ce54)
+
+The first dispatch of this alert bead wrote the findings above but exited
+before committing (two ~50-minute dispatches, both exit 1 — the
+orphaned-after-success pattern this repo documents). This second dispatch
+re-verified every claim above against primary sources before committing:
+
+- **Attempt #20 / alert timestamp:** the needle event log shows dispatch at
+  `10:51:03.234Z`, `agent.completed` `exit_code: -1` at `10:51:49.607Z`
+  (46.4 s), and the `HANDLING_RELEASE_DONE` teardown heartbeat at
+  `10:52:14.447Z` — exactly the alert timestamp that generated this
+  investigation.
+- **Transcript `38af9cbf`:** 22 lines; the agent measured 4,649 loose objects
+  / 17.20 GiB / 18G `.git` and the transcript's final event is the
+  `git gc --aggressive --prune=now` tool call with no tool result — killed
+  mid-gc.
+- **Transcript `31800ee3`:** opens with needle's auto-split prompt ("failed 8
+  times in a row"), creates bf-173o7e / bf-5jhvpk / bf-im2sl1, ends
+  `SPLIT_COMPLETE`.
+- **bf-173o7e Aug-14 completions recomputed from the event log:** 131 =
+  129× exit -1 + 1× 124 + 1× 0, as claimed. Children bf-5jhvpk (repack) and
+  bf-im2sl1 (verify) confirmed still Open; bf-173o7e Closed.
+- **`de7af48`** (2026-08-17): "fix: correct gc.aggressiveWindow to proper
+  numeric format (1 hour)" — confirming the misreading described in point 2;
+  `gc.aggressivewindow` is absent from `.git/config` today.
+- **Refinement to point 5:** `needle-worker@.service` itself carries no
+  Memory*/CPUQuota settings (defaults, i.e. unlimited), but the shared
+  `needle.slice` is capped by drop-in at **`MemoryMax=32G` /
+  `CPUQuota=700%`** — fleet-level containment does exist; what does not exist
+  is per-worker or per-dispatch containment beyond the transient
+  `run-p*.scope` `MemoryMax=12GiB` that killed the gc runs.
+- **Current system state (2026-09-02 11:15 EDT):** 62G RAM / 51G available,
+  load 7.9, 94G disk free, uptime 18 days (boot 2026-08-15 — confirming no
+  Aug-14 kernel logs survive, per Addendum 2); repository 5 loose objects /
+  44 KiB plus a single 90.18 MiB pack — healthy.
+
+---
+**Addendum 4 Investigation Date:** September 2, 2026
+**Addendum 4 Sources:** per-attempt session transcripts (`~/.claude/projects/-home-coding-domain-check/`), needle event log 2026-08-14, live bead records (bf-173o7e, bf-5jhvpk, bf-im2sl1), systemd unit inspection, git history (`de7af48`, `8d7ce53`)
+**Classification:** FALSE POSITIVE — duplicate alert; contributed transcript-level evidence and child-bead storm continuation analysis
+
+## Addendum 5 — Re-verification and Summary Correction (2026-09-02, bead domchk-90640785)
 
 Alert bead `domchk-90640785` (created 2026-08-26T21:13:53Z, dispatched
 2026-09-02) tasked a fresh investigation of this crash. Findings:
@@ -326,6 +534,60 @@ event-log-supported narrative; the body's v1.0/v1.1 sections are retained as
 historical record, with Addendum 2's timestamp table resolving them.
 
 ---
-**Addendum 3 Investigation Date:** September 2, 2026
-**Addendum 3 Sources:** needle event log 2026-08-14 (primary), live bead record, live `git count-objects`
+**Addendum 5 Investigation Date:** September 2, 2026
+**Addendum 5 Sources:** needle event log 2026-08-14 (primary), live bead record, live `git count-objects`
 **Classification:** FALSE POSITIVE — duplicate alert on an already-resolved, closed bead
+
+## Addendum 6 — OOM-Corroboration Count Correction (2026-09-02, bead domchk-4adc1a55)
+
+A third independent re-verification (alert bead `domchk-4adc1a55`, created
+2026-08-26T20:44:44Z, dispatched 2026-09-02) reproduced Addenda 2 and 3
+exactly from the primary log: 53 `agent.completed` events for bf-4x12ec,
+all on 2026-08-14 — **44 × exit -1 (38.9–115.8 s, 10:23:02–11:27:26Z), 8 ×
+exit 124 (exactly 600.0 s, 11:38:07–12:50:14Z), 1 × exit 0 (491.8 s,
+12:58:45Z)**; 0/44 correlated completions on any other bead within ±3 s;
+`journalctl --list-boots` confirms the current boot began 2026-08-15
+19:26:03 EDT and `.beads/logs/resource-metrics.log` begins
+2026-09-01T22:49Z, so no direct Aug-14 memory telemetry exists.
+
+### Correction: the memcg OOM record is 30× larger than Addendum 2 stated
+
+Addendum 2 wrote: *"All 13 `Killed process` events in the current boot
+(6 node/vitest, 6 bash, 1 git) are CONSTRAINT_MEMCG."* The actual count:
+
+| comm | Killed-process events |
+|------|----------------------|
+| `git` | **257** |
+| `node (vitest …)` | 156 |
+| `bash` | 6 |
+| **total** | **419** (420 `invoked oom-killer` reports, all `constraint=CONSTRAINT_MEMCG`) |
+
+All 257 git kills fall on **2026-08-16, 00:27:35–13:29:51 EDT** — inside the
+Aug-14→Aug-17 bloat-cleanup window (`docs/cleanup-resolution-2026-08-17.md`)
+— at **11.7–12.6 GB anon-rss** (peak 12,555,188 kB), the memory profile of
+pack-objects grinding an 18GB loose-object repository. **No git OOM kill
+occurs on any other day of the current boot.** Kernel logs do not record
+cwd, so individual kills cannot be attributed to bf-4x12ec's own gc
+attempts, but the window, magnitude, and one-sided distribution make
+bloat-era git operations the overwhelmingly likely driver. The cited
+corroboration event is at 13:29:**51** EDT, not 13:29:49.
+
+This correction **strengthens** the OOM determination: it is no longer one
+same-period example but 257 same-window instances of the identical
+mechanism (memcg limit, `oom_score_adj=200` preferred-victim marking) that
+best explains the 44 phase-1 deaths.
+
+Residual current-boot OOM activity outside Aug 16: only 6 `bash` kills on
+2026-09-02 (07:15–08:32 EDT), each ~63 MB anon-rss — tiny victims inside
+memory-limited transient `run-p*.scope`s, unrelated to repository bloat.
+The repo-era risk is gone; the scope-limit pattern remains occasionally
+active but harmless at current workload levels.
+
+**Bottom line for dispatchers:** root cause confirmed as memcg OOM during
+the bloat era, resolved by the Aug-17 cleanup; bf-4x12ec's workload (the
+aggressive gc itself) was the crash trigger and is complete — no retry.
+
+---
+**Addendum 6 Investigation Date:** September 2, 2026
+**Addendum 6 Sources:** needle event log 2026-08-14 (primary), `journalctl -k` current-boot full scan, `journalctl --list-boots`, live bead record, live `git count-objects`/`git fsck`
+**Classification:** FALSE POSITIVE — duplicate alert; root cause memcg OOM (bloat era), resolved
