@@ -7,6 +7,13 @@ user systemd journals, live `/proc` state, and monitor scripts. Nothing was muta
 **Revised (domchk-24032f23, 2026-09-02T15:05Z):** added §4.2.1 — kill-moment anatomy of
 the final crash (`bf-12gb0r`) from the journal and bead store. All other content is
 unchanged from the domchk-15516836 collection.
+**Re-verified (domchk-24032f23 retry, 2026-09-02T15:13Z):** snapshot below re-checked
+against live state and holds. Still **247 crash events, none after 2026-08-26T22:54:48Z**
+— zero new signal crashes. Sep 2 counters at 15:13Z: 731 completes, 213 exit-1 fails,
+1 timeout → 29.1% fail rate (same elevated band as the 28.1% captured at 14:39Z).
+System: 50 Gi mem available, load 8.11/7.93/7.88, disk 94 G free, `.git` 92 MB with
+**5 loose objects** (down from 35 at collection — daily gc ran clean). No findings in
+§6 (monitor false positives) required revision.
 
 All timestamps are **UTC** unless suffixed EDT (local = EDT, UTC−4).
 
