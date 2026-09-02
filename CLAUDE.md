@@ -170,6 +170,39 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
 - Mitigation Strategies: `docs/crash-mitigation-strategies.md`
 - Specific Crashes: `docs/crash-analysis-domchk-c9641ac5-2026-09-01.md`, `docs/investigation-summary-bf-173o7e-2026-09-01.md`
 
+### Crash Alert System (2026-09-02 Implementation)
+
+**Implemented Fixes:** Comprehensive crash alert system improvements prevent false positives and duplicate alerts:
+
+1. **Closed Bead Filtering:** Checks if target bead is CLOSED before creating alerts (prevents false positives like bf-3561g investigating completed bead bf-4k2ws)
+2. **Duplicate Detection:** Prevents multiple investigation beads for same crash event
+3. **Completion Awareness:** Detects post-completion cleanup termination vs. crash during task
+4. **Alert Cooldown:** 5-minute cooldown prevents alert spam during system-wide events
+5. **Crash Classification:** Accurate categorization (FALSE_POSITIVE, SERVICE_FAILURE, INFRASTRUCTURE, CODE_DEFECT)
+
+**Scripts:**
+- `scripts/crash-alert-manager.sh` - Main alert processing with all 6 critical fixes
+- `scripts/crash-classifier.sh` - Crash categorization
+- `scripts/alert-deduplication.sh` - Duplicate detection
+- `scripts/test-crash-alert-fixes.sh` - Test suite (12/12 passing)
+
+**Usage:**
+```bash
+# Process a crash alert
+./scripts/crash-alert-manager.sh <bead-id>
+
+# Auto-process recent crashes
+./scripts/crash-alert-manager.sh --auto-process
+
+# Classify a crash
+./scripts/crash-classifier.sh <bead-id>
+
+# Test alert fixes
+./scripts/test-crash-alert-fixes.sh
+```
+
+**Documentation:** `docs/crash-alert-fix-implementation-2026-09-02.md`
+
 ### Resource Limits
 
 **Safe Operating Limits:**
