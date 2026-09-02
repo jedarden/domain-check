@@ -76,11 +76,11 @@ run_check() {
 
   if eval "$check_command" > /dev/null 2>&1; then
     echo -e "   ${GREEN}✓${NC} $check_name passed"
-    ((CHECKS_PASSED++))
+    ((CHECKS_PASSED+=1))
     return 0
   else
     echo -e "   ${RED}✗${NC} $check_name failed"
-    ((CHECKS_FAILED++))
+    ((CHECKS_FAILED+=1))
     return 1
   fi
 }
@@ -89,13 +89,13 @@ run_check() {
 echo -e "${BLUE}Service Availability${NC}"
 if bash "$SERVICE_MONITOR" --once > /tmp/service-monitor.$$ 2>&1; then
   echo -e "   ${GREEN}✓${NC} Inference gateway available"
-  ((CHECKS_PASSED++))
+  ((CHECKS_PASSED+=1))
 else
   echo -e "   ${RED}✗${NC} Inference gateway unavailable"
   if [[ "$VERBOSE" == true ]]; then
     cat /tmp/service-monitor.$$
   fi
-  ((CHECKS_FAILED++))
+  ((CHECKS_FAILED+=1))
 fi
 rm -f /tmp/service-monitor.$$
 echo ""
@@ -111,10 +111,10 @@ if [[ -f "$REPO_HEALTH_CHECK" ]]; then
     echo -e "   ${YELLOW}Recommended actions:${NC}"
     echo "     1. Run repository cleanup: ./scripts/safe-git-gc.sh --full"
     echo "     2. Investigate large files: git ls-files | xargs du -h | sort -rh | head -20"
-    ((CHECKS_FAILED++))
+    ((CHECKS_FAILED+=1))
   else
     echo -e "   ${GREEN}✓${NC} Repository health check passed (${REPO_SIZE}GB)"
-    ((CHECKS_PASSED++))
+    ((CHECKS_PASSED+=1))
 
     if [[ "$VERBOSE" == true ]]; then
       bash "$REPO_HEALTH_CHECK" 2>&1 | head -20
@@ -122,6 +122,44 @@ if [[ -f "$REPO_HEALTH_CHECK" ]]; then
   fi
 else
   echo -e "${YELLOW}⚠${NC} Repository health check script not found (skipping)"
+fi
+echo ""
+
+# Check 3: Dispatch scope cgroup memory headroom
+# System-wide free memory is not the kill domain — the kernel OOM-kills the
+# tightest bounded cgroup (this scope's 12G MemoryMax, or the needle.slice
+# ancestor it shares with every other worker). See
+# docs/research/root-cause-analysis-signal-minus-one-crashes.md.
+echo -e "${BLUE}Dispatch Scope Memory Headroom${NC}"
+MEMORY_GUARD="$SCRIPT_DIR/cgroup-memory-guard.sh"
+if [[ -f "$MEMORY_GUARD" ]]; then
+  GUARD_RC=0
+  GUARD_OUT=$(bash "$MEMORY_GUARD" --check 2>&1) || GUARD_RC=$?
+  if [[ $GUARD_RC -eq 0 ]]; then
+    echo -e "   ${GREEN}✓${NC} Cgroup headroom healthy"
+    ((CHECKS_PASSED+=1))
+    if [[ "$VERBOSE" == true ]]; then
+      echo "$GUARD_OUT" | sed 's/^/   /'
+    fi
+  elif [[ $GUARD_RC -eq 1 ]]; then
+    echo -e "   ${YELLOW}⚠${NC} Cgroup headroom degraded — proceed with caution, avoid memory-heavy work"
+    echo "$GUARD_OUT" | sed 's/^/   /'
+    ((CHECKS_PASSED+=1))
+  elif [[ $GUARD_RC -eq 2 ]]; then
+    echo -e "   ${RED}✗${NC} Insufficient cgroup headroom — memory-heavy work would risk a memcg OOM kill"
+    echo "$GUARD_OUT" | sed 's/^/   /'
+    echo -e "   ${YELLOW}Recommended actions:${NC}"
+    echo "     1. Wait for concurrent workers to drain (needle.slice shared headroom)"
+    echo "     2. Defer git gc / bulk operations: ./scripts/safe-git-gc.sh --check-only"
+    ((CHECKS_FAILED+=1))
+  else
+    # Unknown cgroup state — fail-open so the pre-flight check itself never
+    # blocks a task on an unreadable cgroupfs.
+    echo -e "   ${YELLOW}⚠${NC} Cgroup state unreadable (skipping scope headroom check)"
+    ((CHECKS_PASSED+=1))
+  fi
+else
+  echo -e "${YELLOW}⚠${NC} cgroup-memory-guard.sh not found (skipping)"
 fi
 echo ""
 

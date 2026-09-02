@@ -24,6 +24,7 @@ This directory contains utility scripts for the domain-check project.
 3. **Disk Space** - Checks sufficient free space (default: 20GB)
 4. **CPU Load** - Verifies system load is acceptable (default: <10 on 1min average)
 5. **Git Repository Health** - Validates repository integrity
+6. **Dispatch Scope Cgroup Headroom** - Verifies the caller's own cgroup tree has room (see below)
 
 **Exit Codes:**
 - `0` - All checks passed (or `--warn-only` mode)
@@ -61,6 +62,40 @@ fi
 ```
 
 **Documentation:** See `docs/crash-mitigation-strategies.md` (Proposal 1.3)
+
+## Cgroup Memory Guard (`cgroup-memory-guard.sh`)
+
+**Purpose:** Closes the one gap every other memory check misses — **cgroup-scoped headroom**. The signal -1 crash root cause (bf-4x12ec, bf-173o7e; see `docs/research/root-cause-analysis-signal-minus-one-crashes.md`) is a **memcg OOM kill against a cgroup limit**, not system-wide memory exhaustion. A NEEDLE worker runs in a `run-*.scope` capped at **12G MemoryMax** under `needle.slice` (**32G**, shared with every concurrent worker). The kernel kills when the *tightest bounded cgroup in the ancestry* runs out of headroom — `free -g` and `/proc/pressure/memory` can look perfectly healthy while that happens.
+
+**Quick Start:**
+```bash
+# Report headroom for every bounded cgroup in this scope's ancestry
+./scripts/cgroup-memory-guard.sh --check
+
+# Machine-readable (for automation)
+./scripts/cgroup-memory-guard.sh --json
+
+# Gate a memory-heavy command behind the check (refuses instead of running)
+./scripts/cgroup-memory-guard.sh -- git gc --auto
+
+# Refuse (instead of warn) when cgroup state is unreadable
+./scripts/cgroup-memory-guard.sh --strict --check
+```
+
+**Decision Model:**
+- Walks the caller's cgroup v2 ancestry (leaf → root) and evaluates **every** bounded level
+- The **binding level** is the bounded ancestor with the least headroom — an ancestor's `memory.current` includes every sibling worker, so a nearly-full `needle.slice` kills this scope even when the scope itself is nearly empty
+- `pass` → `warn` → `refuse` thresholds: ≥2G headroom required at every bounded level (warn below 4G); leaf usage refusable at ≥85%, warnable at ≥70%
+- Unbounded tree falls back to system-wide `MemAvailable` (10G floor, matching the CLAUDE.md pre-task check)
+- Also reports lifetime `memory.events` `oom_kill` counts as a diagnostic
+
+**Exit Codes:** `0` pass · `1` warn · `2` refuse (command NOT run) · `3` unknown state (fail-open; `--strict` makes it refuse)
+
+**Environment Overrides:** `MEMGUARD_MIN_HEADROOM` (default `2g`), `MEMGUARD_WARN_PCT` (70), `MEMGUARD_MAX_USED_PCT` (85), `MEMGUARD_CGROUP_ROOT` / `MEMGUARD_PROC_CGROUP` (fixture injection for tests), `MEMGUARD_SYS_AVAIL_MIN` (10g)
+
+**Tests:** `./scripts/test-cgroup-memory-guard.sh` — fixture-tree decision matrix plus two live checks, including running the guard inside a real `systemd-run --scope -p MemoryMax=64M` to prove the actual crash mechanism is caught.
+
+**Documentation:** See `docs/notes/cgroup-memory-guard.md`
 
 ## Work Completion Verification (`verify-work-completion.sh`)
 
