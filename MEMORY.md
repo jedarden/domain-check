@@ -1,0 +1,21 @@
+# Domain Check Project Memory
+
+This directory stores persistent project memory for the domain-check workspace.
+
+## Memory Files
+
+- [SIGHUP Git Merge Crash Pattern](memory/crash-pattern-sighup-git-merge.md) — Exit code -1 during long-running git operations with 661+ divergent commits under high load
+
+## Memory Format
+
+Each memory file contains:
+- **Frontmatter:** name, description, metadata (type: user|feedback|project|reference)
+- **Body:** The fact being documented
+- **Links:** Connections to related memories via [[name]] syntax
+
+## Memory Types
+
+- **user:** Who the user is (role, expertise, preferences)
+- **feedback:** Guidance on how agents should work (corrections, confirmed approaches)
+- **project:** Ongoing work, goals, or constraints not derivable from code/git history
+- **reference:** Pointers to external resources (URLs, dashboards, tickets)
