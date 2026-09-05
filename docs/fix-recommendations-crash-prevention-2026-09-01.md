@@ -798,3 +798,113 @@ The domain-check codebase is robust and properly implemented:
 - System logs (journalctl, systemd-oomd)
 - Code analysis (domain-check signal handling, resource management)
 - Historical crash data (826 crashes on worst day, 201+ during SIGHUP cascade)
+
+---
+
+## Part 9: Implementation Validation (2026-09-05, domchk-60407475)
+
+Each recommendation was checked against what actually ships on this box today (verified
+2026-09-05). Summary: **5 implemented (mostly by different means than written), 1 partially
+implemented, 2 not actionable as written, 1 must NOT be implemented, 2 still open.**
+
+| Fix | Status as written | Verified state on 2026-09-05 |
+|-----|-------------------|------------------------------|
+| 1.1 oomd thresholds | ❌ Not actionable as written | Superseded: consumers bounded instead of retuning the killer |
+| 1.2 memory alerting | ✅ Implemented, different mechanism | `scripts/resource-monitor.sh` + `domain-check-resource-monitor.timer` |
+| 1.3 CPU guard | ⚠️ Partially implemented; details invalid | Dispatch env caps + `check-cpu-load.sh` + `crash-circuit-breaker.sh` |
+| 2.1 crash classification | ✅ Implemented 2026-09-02 | `scripts/crash-classifier.sh`, `crash-alert-manager.sh` |
+| 2.2 alert deduplication | ✅ Implemented, not via Redis | `scripts/alert-deduplication.sh` |
+| 2.3 completion detection | ✅ Implemented 2026-09-02 | `scripts/verify-work-completion.sh` |
+| 3.1 bead close fallbacks | 🚫 Must NOT be implemented as written | See 9.4 |
+| 3.2 dynamic turn limits | ⬜ Open, legitimate | Not implemented; lands in needle dispatch config |
+| 4.1 memory-pressure runbook | ⬜ Partially open | Crash-response + repo-maintenance guides exist; no dedicated pressure runbook |
+| 4.2 scheduled gc windows | ✅ Implemented | `domain-check-git-gc.timer`, `-gc-full.timer` (MemoryMax=4G), `safe-git-gc.sh` |
+
+### 9.1 Fix 1.1 — not actionable as written; superseded by a better mechanism
+
+Two problems. First, the snippet is invalid systemd: `MemoryMax`, `MemoryMaxSwap`, and
+`ManagedOOMMemoryPressure` are **unit-level** settings and do nothing under
+`system.conf`'s `[Manager]`/`[Service]` sections. Second, this box is **NixOS** — `/etc`
+drop-ins are generated/managed by the NixOS activation, so the hand-edited-file procedure
+does not apply.
+
+The shipped answer attacks the problem from the other side: bound the *consumers* so the
+killer never fires. `scripts/setup-git-gc-config.sh` sets persistent
+`pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` (repo-local **and**
+global — the chain a bare `git gc` actually sees), worst case ≈3 GiB per pack run, against a
+12 GiB dispatch scope. That is what actually prevents a repeat of the bf-173o7e/bf-4x12ec
+kills. `ManagedOOMMemoryPressure` tuning remains a valid *optional* follow-up, expressed as a
+NixOS declaration.
+
+### 9.2 Fix 1.2 — implemented, different mechanism
+
+No Prometheus/node_exporter path was deployed; alerting ships as
+`scripts/resource-monitor.sh` on `domain-check-resource-monitor.timer` (every 5 min,
+verified firing 2026-09-05), logging to `.beads/logs/resource-monitor.log` at the 70%
+warning / 10 GB thresholds from the workspace CLAUDE.md. The two-tier alert idea is
+preserved; the transport differs.
+
+### 9.3 Fix 1.3 — partially implemented; the written details are invalid
+
+- **`systemctl stop needle-dispatch@*.service`** — no such units exist (0 `needle-*` units).
+  Dispatches run as `systemd-run` **scopes** under `user@1001.service/needle.slice`.
+- **`pkill -SIGUSR1 needle-worker`** — no process of that name; actual comm values are
+  `needle` and `needle-transfor…`. `pkill` on a wrong name is a footgun.
+- **The Python dispatch hook** targets a Rust codebase (needle-rs); the check would land in
+  Rust dispatch code, not Python.
+
+Already in place, and sufficient for the stated goal: every dispatch exports per-worker caps
+(`GOMAXPROCS=4`, `GOFLAGS=-p=2`, `CARGO_BUILD_JOBS=2`, `RUST_TEST_THREADS=2`,
+`VITEST_MAX_THREADS=2`), and `scripts/check-cpu-load.sh` computes load against `nproc` with
+80/90% thresholds, alongside `scripts/crash-circuit-breaker.sh`. The residual gap is
+*dispatch gating* on load — worth doing, in the dispatcher, not as a separate
+SIGUSR1-signalling shell daemon.
+
+### 9.4 Fix 3.1 — must NOT be implemented as written
+
+`closeDirectDB` issues `UPDATE beads SET status='closed' …` against the store. This violates
+the workspace's hard rule that nothing under `.beads/` is hand-edited, and it would desync
+`.beads/beads.db` from the git-tracked `.beads/checkpoint/` (nothing flushes implicitly, and
+a direct write is invisible to the checkpoint model). The snippet is also doubly wrong for
+this codebase: bead-rs is **Rust over SQLite**, while the sample is Go with PostgreSQL
+placeholders (`$1`) and `NOW()`.
+
+The premise is also corrected by the preserved trace (see the addendum in
+`docs/root-cause-analysis-bf-173o7e-2026-09-01.md` §11.7): the bf-173o7e close failures had a
+clear cause — the close script resolved the repo from the shell's cwd (`pdftract`) and the
+iad-ci kubeconfig was missing so verification aborted — with the `--skip-verify` bypass
+printed in the same output. bead-rs already reports actionable errors. The legitimate
+residual work is: resolve the bead's workspace from the bead record rather than cwd,
+preflight verification prerequisites, and improve upstream error wording.
+
+### 9.5 Fix 3.2 — open, and the change point is needle's dispatch config
+
+`--max-turns 30` is a per-dispatch parameter on the agent command line, so a complexity-based
+limit is a dispatcher-side change, not an agent-side one. Note the practical alternative seen
+since: needle's auto-split (template=split) already handles oversized tasks by bead mitosis,
+which addresses the same failure without raising limits.
+
+### 9.6 Fix 4.2 — implemented; drop the cron/YAML framing
+
+This box is NixOS — there is no `crontab`. The shipped mechanism is systemd **user** timers:
+`domain-check-git-gc.timer` (daily 03:00) and `domain-check-git-gc-full.timer` (Sun 04:00,
+unit `MemoryMax=4G`), driving `scripts/safe-git-gc.sh` with checkpoint/resume and
+`SAFE_GC_MEMORY_MAX`. All six `domain-check-*` timers verified active on 2026-09-05. The
+YAML "maintenance schedule" block is illustrative only. Operational gotcha worth recording:
+after editing a timer unit, `systemctl --user daemon-reload` is required or the timer
+silently keeps stale state.
+
+### 9.7 Premise correction
+
+Fix 4.2's justification ("bf-173o7e used 1.3GB, can scale higher") understates the observed
+failure: the Aug-14 kills were `pack-objects` exceeding the **12 GiB** dispatch scope on
+17.20 GiB of loose objects, ~10× the 1.3 GB figure. Sizing guidance should start from the
+git-config bounds (§9.1) and the scope `MemoryMax`, not from the 1.3 GB measurement, which
+came from a much smaller consolidation.
+
+### 9.8 Success criteria — not yet measurable here
+
+"False positive rate < 10%, duplicate rate < 5%" has no measurement pipeline behind it; the
+closest artifact is `scripts/test-crash-alert-fixes.sh` (12/12 per the workspace CLAUDE.md).
+Recording classification/duplicate counters in the resource-monitor log would make Part 5's
+criteria checkable.

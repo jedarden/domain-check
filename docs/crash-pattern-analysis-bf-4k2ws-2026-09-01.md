@@ -536,3 +536,85 @@ Aug 16 12:01:15 kernel: Out of memory: Killed process 1933332 (git)
 **Pattern analysis:** COMPLETE
 **Failure triggers:** IDENTIFIED
 **Root cause classification:** INFRASTRUCTURE + TOOL (not task)
+
+---
+
+## Validation Addendum (2026-09-05, domchk-60407475)
+
+Re-validated against the bead store (`.beads/checkpoint/forensic.jsonl`), the systemd journal
+(first entry 2026-08-15 19:46:33 EDT), and the committed Sep-2026 fleet analyses.
+
+### Verified (unchanged)
+
+- **bf-4k2ws created 2026-08-13T01:57:53Z, closed 2026-08-16T15:35:42Z** — both match the
+  forensic record exactly; the "original bead completed and closed" conclusion holds, as does
+  the derived fix (closed-bead filtering before alert creation, now in
+  `scripts/crash-alert-manager.sh`).
+- A real memory event occurred on 2026-08-16: the journal records 414 kernel OOM kills that
+  day plus 10+ `systemd-oomd` kills, with global `/user.slice` pressure repeatedly above the
+  80% threshold (observed 80.46%–96.01%).
+
+### Corrected
+
+**1. "Exit code -1 (SIGHUP)" is wrong on two counts.** Needle records `-1` as a sentinel —
+`code().unwrap_or(-1)` — for a death whose signal was not captured; it is not a signal number.
+Fleet-wide correlation ties the exit −1 deaths to **memcg OOM SIGKILL inside the 12 GiB
+dispatch scopes**, not to SIGHUP (`docs/crash-investigations/bf-173o7e-aug14-storm-root-cause-2026-09-02.md`;
+`docs/signal-analysis-exit-code-negative-one.md`). No evidence of a SIGHUP source is
+on record for the Aug-16 window.
+
+**2. The quoted kill evidence is real but merged and mis-transcribed.** The report's
+`Aug 16 12:01:15 kernel: Out of memory: Killed process 1933332 (git)` is actually:
+
+```
+Aug 16 12:01:15 lab kernel: Memory cgroup out of memory: Killed process 1933332 (git)
+  oom-kill:constraint=CONSTRAINT_MEMCG ... oom_memcg=.../needle.slice/run-p1904404-i211592759.scope
+```
+
+— a **scope-local** kill inside a needle dispatch scope, not a system-wide kill, and the words
+"Memory cgroup" were dropped from the quote. The `94.71%` oomd line is also real but is a
+**different kill 16 seconds earlier** (Aug 16 12:00:59 EDT, killed an `app.slice` scope). Two
+events were fused into one narrative: global pressure killed one scope; a dispatch scope's own
+memory limit killed the 12 GB git process.
+
+**3. "System-wide memory pressure" as the workers' cause of death is not what the journal
+shows.** All 414 Aug-16 kernel kills are `constraint=CONSTRAINT_MEMCG`; there are **zero**
+global (`CONSTRAINT_NONE`) OOM kills that day. Global pressure and scope-limit kills
+co-occurred, but the worker deaths are attributable to their own scope limits — the same
+mechanism later documented for bf-173o7e and bf-4x12ec.
+
+**4. Core count.** The report's CPU analysis uses "7 cores" (31.21 load = 4.46×). The box has
+**12 cores** (`nproc` = 12; the spec in the workspace CLAUDE.md; the shipped
+`scripts/check-cpu-load.sh` also divides by `nproc`). At 12 cores, 31.21 is **2.6×**, and the
+"4.46× saturation" figure depends entirely on the unverified 7-core denominator.
+
+**5. "System stable, 0 crashes for 16+ days (as of 2026-09-01)" is false.** Exit −1 deaths
+continued at least through Aug-26 (including 18 needle release-conflict worker deaths), and
+2026-09-02 recorded 432 exit = 1 failures in synchronized cross-workspace waves. The current
+fleet failure signature is **service-class exit = 1 waves**, not exit −1
+(`docs/research/root-cause-analysis-signal-minus-one-crashes.md`; commit f9af254).
+
+**6. The pattern percentages are unsourced.** ~40% / ~30% / ~60% / ~10% overlap by
+construction (a duplicate alert is also a post-completion false positive) and cite no
+dataset. Treat them as order-of-magnitude indications only. The "~40%" figure is reproduced
+in `docs/root-cause-analysis-bf-173o7e-2026-09-01.md` §6 and `docs/fix-recommendations-crash-prevention-2026-09-01.md`
+with the same caveat.
+
+**7. Minor ordering error:** bf-s14st is labeled "first crash alert" but its creation
+timestamp (05:40:55Z) postdates bf-3561g (03:58:25Z).
+
+### Evidence that can no longer be verified
+
+The journal's first entry is 2026-08-15 19:46:33 EDT. Everything earlier on this box —
+including the claimed 2026-08-13T05:40:55Z SIGHUP termination of bf-4k2ws's first worker —
+**cannot be re-verified from logs** and rests solely on this report and the needle event log
+excerpts it drew from. Pre-Aug-15 claims should be cited as uncorroborated.
+
+### Validation verdict
+
+The four-pattern taxonomy and the bf-4k2ws conclusion (task completed; alerts were false
+positives) **stand**, and the tool-side recommendations were implemented on 2026-09-02
+(`scripts/crash-alert-manager.sh`: closed-bead filter, duplicate detection, completion
+awareness, 5-minute cooldown). The **infrastructure mechanism attribution is corrected** as
+above: memcg scope-limit kills, not a system-wide oomd → SIGHUP cascade; exit −1 is a
+sentinel, not a signal; the crash-free-streak claim is stale.
