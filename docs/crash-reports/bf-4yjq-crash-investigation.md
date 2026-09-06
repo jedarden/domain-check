@@ -1,5 +1,28 @@
 # Crash Investigation Report: bf-4yjq
 
+> **⚠ Superseded on scope; the "Timestamp Discrepancy" section below is RESOLVED (2026-09-06).**
+> The Aug-12 disruption was a single storm of **50 crashes**, 17:53:53 → 20:30:38 UTC — this
+> report analyzed it as one event and lists only 9 of the 50 alert beads. Canonical report:
+> [`docs/crash-investigations/bf-4yjq-crash-investigation.md`](../crash-investigations/bf-4yjq-crash-investigation.md);
+> live-verified evidence inventory:
+> [`docs/crash-investigations/bf-4yjq-artifact-catalog-2026-09-06.md`](../crash-investigations/bf-4yjq-artifact-catalog-2026-09-06.md).
+>
+> The two timestamps this report framed as competing claims about one event are two **distinct
+> deaths** of that storm, each trailing its own worker-log death by ~6 s (re-verified live
+> 2026-09-06 against the surviving worker log
+> `~/.needle/logs/needle-claude-code-glm-4_7-lab-domain-check.log.2` and
+> `.beads/checkpoint/forensic.jsonl`). No clock skew, no task-description mismatch:
+>
+> | Timestamp this report quotes | Alert bead it came from | Actual death in worker log |
+> |---|---|---|
+> | `2026-08-12T18:27:01.995975627Z` ("from task description") | **bf-44x3a** (closed) | `18:26:56.097018Z`, `exit_code=-1 Crash(-1)` |
+> | `2026-08-12T19:04:11.819822892+00:00` ("per crash alert bead") | **bf-x5ynu** (still in_progress) | `19:04:05.473758Z`, `exit_code=-1 Crash(-1)` |
+>
+> The §"Missing Information" list is also partly superseded: per-attempt stderr/stdout, core
+> dumps, and Aug-12 kernel logs are indeed gone, but worker *outcome* telemetry for all 50
+> deaths survives in the `.log.2` rotation slot (catalog §2) — exit codes, agent, workspace,
+> and the alert bead each death produced.
+
 **Report Generated:** 2026-08-25  
 **Bead ID:** bf-4yjq  
 **Agent:** claude-code-glm-4.7-lab-domain-check  

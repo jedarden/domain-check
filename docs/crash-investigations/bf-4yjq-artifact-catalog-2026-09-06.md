@@ -162,7 +162,11 @@ exit-1 failures.
   `docs/crash-root-cause-bf-4yjq.md`, `docs/crash-pattern-analysis-bf-4yjq.md`, `docs/crash-data-extraction-bf-4yjq.md`,
   `docs/research/crash-data-extraction-bf-4yjq.md`, `docs/research/crash-context-analysis-bf-4yjq-2026-09-01.md`,
   `docs/crash-context-bf-4yjq-comprehensive.md`, `docs/crash-context-report-bf-4yjq-comprehensive.md`,
-  `docs/remediation-strategy-bf-4yjq.md`
+  `docs/remediation-strategy-bf-4yjq.md`,
+  `docs/crash-reports/bf-4yjq-crash-investigation.md` (added 2026-09-06, domchk-479d7eaf — the only
+  doc holding the Aug-25 single-event analysis; banner-linked here, and its §"Timestamp
+  Discrepancy" is resolved in that banner: `18:27:01.995975627Z` = alert bf-44x3a after death
+  `18:26:56.097018Z`, `19:04:11.819822892+00:00` = alert bf-x5ynu after death `19:04:05.473758Z`)
 
 **Duplicate-alert verification reports** (the auto-split/re-dispatch cycle's paper trail)
 - `docs/verification-report-bf-1vuk2-duplicate-alert-resolved-bf-4yjq-crash.md`,
