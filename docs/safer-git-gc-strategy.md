@@ -1,5 +1,12 @@
 # Safer Git GC Strategy
 
+> **Superseded (2026-09-05)** by [`docs/maintenance/stepwise-git-gc-strategy.md`](maintenance/stepwise-git-gc-strategy.md)
+> (domchk-adb15fe5), which replaces this document's asserted memory figures with measured
+> ones and fixes the stage commands: this doc's Stage 2/3 are incremental repacks that have
+> nothing to do after Stage 1 packs everything, and its Stage 3 narrows the window to 10 —
+> weaker than its own Stage 2's 50 — so "deep compression" could only produce a worse pack.
+> Keep this file for the history of the approach; use the stepwise doc for parameters.
+
 **Created:** 2026-09-01  
 **Purpose:** Memory-efficient git garbage collection strategy that prevents OOM and provides resumability
 
