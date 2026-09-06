@@ -142,7 +142,7 @@ overlap, none left unclosed, so the pairing is unambiguous):
 
 | Statistic | Value |
 |-----------|-------|
-| Survival | min **65 s**, p25 108 s, **median 155 s**, p75 217 s, max **375 s** (mean 174 s) |
+| Survival | min **65 s**, p25 109 s, **median 149 s**, p75 216 s, max **375 s** (mean 174 s) |
 | Time between deaths | min 76 s, **median 156 s**, max 577 s |
 | Longest run | claimed 18:43:30.993 → died 18:49:45.806 (374.8 s) |
 | Shortest run | claimed 19:53:34.318 → died 19:54:38.951 (64.6 s) |
@@ -242,3 +242,16 @@ alert-bead bodies read from `.beads/checkpoint/forensic.jsonl`, stderr-slot cove
 `head`/`wc -c`, box timezone from `readlink /etc/localtime` (America/New_York). No figure inherited
 from a prior report; where this page overlaps the artifact catalog (death timestamps, alert-id order,
 event tally) the two agree.
+
+**Re-verified in full the same day by the owner retry** (bead domchk-e5404cd7, after the extraction
+was committed on its behalf by d9c4622): every figure in §1–§6 reproduced exactly from the still
+present, still 134,207,883-byte `.log.2` slot — the 225-record and 50/169/6 level tallies, the
+50/1/4/1 exit-code split, first/last death timestamps to the microsecond, all 50 §5 rows (death time
+and survival, zero differences), longest/shortest runs, auto-split and WARN lines, the alert-body
+text and its earliest `Timestamp`, the three stderr slots (note their filenames use `glm-4.7` with a
+dot while the worker-log slots use `glm-4_7`), coredumpctl/journal/traces absence, and the timezone.
+One correction: the original §4 summary row reported the survival **median as 155 s — that figure is
+`median_high`** (the 26th of 50 sorted values). The median is **149 s** (the 25th/26th values are
+143.4/155.0 s), with p25 109 s and p75 216 s; corrected in place above. No other figure changed, and
+no conclusion is affected — every run still died 1–6 minutes in, far under the 600 s dispatch
+timeout.
