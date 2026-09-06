@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jedarden/domain-check/internal/config"
@@ -65,6 +66,10 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, ra
 
 	// Health check - no rate limiting.
 	mux.HandleFunc("GET /health", healthHandler(log, bootstrap, monitor, metrics))
+
+	// Crash history (diagnostics, stacks included) - no rate limiting, like
+	// /health and /metrics.
+	mux.HandleFunc("GET /api/v1/crashes", crashesHandler(GetCrashRecorder()))
 
 	// Static assets - no rate limiting, cached by browsers.
 	mux.Handle("GET /static/", http.StripPrefix("/static/", StaticHandler()))
@@ -134,14 +139,51 @@ func healthHandler(log *slog.Logger, bootstrap BootstrapProvider, monitor *Servi
 			checksServed = monitor.ChecksServed()
 		}
 
+		// Crash history: this process's own record of recovered panics,
+		// caught signals and failed shutdowns. A crash loop degrades the
+		// status but keeps it 200 — restarting a crash-looping process from a
+		// health probe would multiply the problem; the alert rules in
+		// monitoring/alerts-domain-check-crashes.yml own that decision.
+		crashes := GetCrashRecorder().Snapshot()
+		if crashes.LoopDetected && status == "ok" {
+			status = "degraded"
+		}
+
 		health := map[string]interface{}{
 			"status":        status,
 			"bootstrap_age": formatDuration(bootstrapAge),
 			"uptime":        formatDuration(uptime),
 			"checks_served": checksServed,
+			"crashes":       crashes,
 		}
 
 		writeJSONResponse(w, statusCode, health)
+	}
+}
+
+// crashesHandler reports the process's captured crash events in full — stacks
+// included, newest first. ?limit=n (default 20, capped at the retention limit)
+// bounds the response.
+func crashesHandler(crashes *CrashRecorder) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit := 20
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 0 {
+				writeAPIError(w, http.StatusBadRequest, "invalid_limit",
+					"limit must be a non-negative integer.")
+				return
+			}
+			if n > 0 {
+				limit = n
+			}
+		}
+
+		writeJSONResponse(w, http.StatusOK, map[string]interface{}{
+			"loop_detected": crashes.LoopDetected(),
+			"total":         crashes.Total(),
+			"events":        crashes.Events(limit),
+		})
 	}
 }
 

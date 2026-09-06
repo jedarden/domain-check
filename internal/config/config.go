@@ -45,8 +45,17 @@ type Config struct {
 	WatchMaxTTL       time.Duration // Maximum TTL for a watch (default 2160h = 90 days)
 	WatchMaxPerIP     int           // Maximum watches per IP per 24h (default 10)
 
+	// Crash monitoring. DumpDir/MaxDumps control crash dump capture and
+	// retention; LoopThreshold/LoopWindow decide when the health endpoint
+	// reports a crash loop. Defaults mirror the Default* constants in
+	// internal/server (config cannot import server without a cycle).
+	CrashDumpDir       string        // Crash dump directory (default "data/crash-dumps")
+	CrashDumpMax       int           // Crash dumps kept on disk (default 10)
+	CrashLoopThreshold int           // Crashes within the window that count as a loop (default 3)
+	CrashLoopWindow    time.Duration // Window for crash-loop detection (default 5m)
+
 	// Boolean flags (parsed from strings)
-	TrustProxyVal string // Internal string value for TrustProxy
+	TrustProxyVal  string // Internal string value for TrustProxy
 	MetricsVal     string // Internal string value for Metrics
 	EnableWatchVal string // Internal string value for EnableWatch
 }
@@ -81,6 +90,10 @@ func Defaults() Config {
 		WatchPollInterval:  15 * time.Minute,
 		WatchMaxTTL:        90 * 24 * time.Hour, // 90 days
 		WatchMaxPerIP:      10,
+		CrashDumpDir:       "data/crash-dumps",
+		CrashDumpMax:       10,
+		CrashLoopThreshold: 3,
+		CrashLoopWindow:    5 * time.Minute,
 		// Boolean defaults (as strings)
 		TrustProxyVal:  "false",
 		MetricsVal:     "true", // Default is true
@@ -119,6 +132,14 @@ func Load(args []string) (*Config, error) {
 	fs.DurationVar(&cfg.WatchPollInterval, 0, "watch-poll-interval", cfg.WatchPollInterval, "poll interval for watched domains")
 	fs.DurationVar(&cfg.WatchMaxTTL, 0, "watch-max-ttl", cfg.WatchMaxTTL, "maximum TTL for a watch")
 	fs.IntVar(&cfg.WatchMaxPerIP, 0, "watch-max-per-ip", cfg.WatchMaxPerIP, "maximum watches per IP per 24h")
+
+	// Crash monitoring flags (DOMCHECK_CRASH_* env vars work too). The
+	// recorder they configure is installed in runServer; see
+	// internal/server/crashrecorder.go.
+	fs.StringVar(&cfg.CrashDumpDir, 0, "crash-dump-dir", cfg.CrashDumpDir, "directory for crash dump files (empty disables dumps)")
+	fs.IntVar(&cfg.CrashDumpMax, 0, "crash-dump-max", cfg.CrashDumpMax, "crash dumps kept on disk, oldest pruned")
+	fs.IntVar(&cfg.CrashLoopThreshold, 0, "crash-loop-threshold", cfg.CrashLoopThreshold, "crashes within the window that count as a crash loop")
+	fs.DurationVar(&cfg.CrashLoopWindow, 0, "crash-loop-window", cfg.CrashLoopWindow, "window crash-loop detection looks inside")
 
 	if err := ff.Parse(fs, args,
 		ff.WithEnvVarPrefix("DOMCHECK"),

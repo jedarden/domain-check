@@ -85,6 +85,10 @@ Serve flags:
   --watch-poll-interval   Poll interval for watched domains (default 15m)
   --watch-max-ttl         Maximum TTL for a watch (default 2160h = 90 days)
   --watch-max-per-ip      Maximum watches per IP per 24h (default 10)
+  --crash-dump-dir string Directory for crash dump files (default "data/crash-dumps"; empty disables dumps)
+  --crash-dump-max int    Crash dumps kept on disk, oldest pruned (default 10)
+  --crash-loop-threshold int Crashes within the window that count as a crash loop (default 3)
+  --crash-loop-window duration Window crash-loop detection looks inside (default 5m)
 
 Check flags:
   <domain>                Domain name to check
@@ -422,6 +426,26 @@ func runServer(args []string) {
 
 	// Initialize Prometheus metrics.
 	metrics := server.GetMetrics()
+
+	// Install the crash recorder before any handler can run, so recovered
+	// panics, caught signals and failed shutdowns land in /health,
+	// /api/v1/crashes and the on-disk dump ring. DumpDir sits under the same
+	// data/ volume as the watch database; an empty --crash-dump-dir disables
+	// dumps and keeps only the in-memory history.
+	server.InitCrashRecorder(server.CrashConfig{
+		Logger:        log,
+		Metrics:       metrics,
+		DumpDir:       cfg.CrashDumpDir,
+		MaxDumps:      cfg.CrashDumpMax,
+		LoopThreshold: cfg.CrashLoopThreshold,
+		LoopWindow:    cfg.CrashLoopWindow,
+	})
+	log.Info("crash recorder enabled",
+		"dump_dir", cfg.CrashDumpDir,
+		"max_dumps", cfg.CrashDumpMax,
+		"loop_threshold", cfg.CrashLoopThreshold,
+		"loop_window", cfg.CrashLoopWindow.String(),
+	)
 
 	domainChecker, bootstrap, err := setupDomainChecker(ctx, cfg, log, metrics)
 	if err != nil {

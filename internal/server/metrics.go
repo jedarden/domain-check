@@ -4,6 +4,7 @@ package server
 import (
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -12,17 +13,24 @@ import (
 
 // Metrics holds all Prometheus metrics for the service.
 type Metrics struct {
-	requestsTotal   *prometheus.CounterVec
-	requestDuration *prometheus.HistogramVec
-	rdapRequests    *prometheus.CounterVec
-	rdapDuration    *prometheus.HistogramVec
-	cacheHits       *prometheus.CounterVec
-	activeChecks    prometheus.Gauge
-	bulkCheckSize   *prometheus.HistogramVec
-	checksServed    prometheus.Counter
-	bootstrapAge    *prometheus.GaugeVec
-	panicsRecovered prometheus.Counter
-	requestTimeouts prometheus.Counter
+	requestsTotal     *prometheus.CounterVec
+	requestDuration   *prometheus.HistogramVec
+	rdapRequests      *prometheus.CounterVec
+	rdapDuration      *prometheus.HistogramVec
+	cacheHits         *prometheus.CounterVec
+	activeChecks      prometheus.Gauge
+	bulkCheckSize     *prometheus.HistogramVec
+	checksServed      prometheus.Counter
+	bootstrapAge      *prometheus.GaugeVec
+	panicsRecovered   prometheus.Counter
+	requestTimeouts   prometheus.Counter
+	crashesTotal      *prometheus.CounterVec
+	signalReceived    *prometheus.CounterVec
+	signalHandlerRuns *prometheus.CounterVec
+	signalHandlerDur  *prometheus.HistogramVec
+	shutdowns         *prometheus.CounterVec
+	shutdownDur       prometheus.Histogram
+	crashLoop         prometheus.Gauge
 }
 
 var (
@@ -112,6 +120,59 @@ func newMetrics() *Metrics {
 				Help: "Total number of requests that exceeded the request timeout",
 			},
 		),
+		crashesTotal: promauto.With(reg).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "domcheck_crashes_total",
+				// Signals are deliberately absent: a deploy sends SIGTERM and a
+				// crash total that rises on every deploy would trip naive
+				// alerts. Receptions are counted in
+				// domcheck_signal_receptions_total instead.
+				Help: "Total number of crash events captured by the process, by kind (panic, shutdown_error)",
+			},
+			[]string{"kind"},
+		),
+		signalReceived: promauto.With(reg).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "domcheck_signal_receptions_total",
+				Help: "Total number of OS signals received by the process, by signal name",
+			},
+			[]string{"signal"},
+		),
+		signalHandlerRuns: promauto.With(reg).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "domcheck_signal_handler_executions_total",
+				Help: "Total number of completed signal handler executions - a caught signal whose graceful shutdown finished - by signal and drain outcome. SIGHUP shares the shutdown path with SIGINT/SIGTERM; a SIGHUP cascade shows up as signal=\"SIGHUP\".",
+			},
+			[]string{"signal", "outcome"},
+		),
+		signalHandlerDur: promauto.With(reg).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "domcheck_signal_handler_duration_seconds",
+				Help:    "Time from signal receipt to the end of the graceful shutdown it triggered",
+				Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15},
+			},
+			[]string{"signal"},
+		),
+		shutdowns: promauto.With(reg).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "domcheck_graceful_shutdowns_total",
+				Help: "Total number of server shutdowns, by outcome (graceful, forced, error)",
+			},
+			[]string{"outcome"},
+		),
+		shutdownDur: promauto.With(reg).NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "domcheck_shutdown_duration_seconds",
+				Help:    "Time spent draining connections during graceful shutdown",
+				Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15},
+			},
+		),
+		crashLoop: promauto.With(reg).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "domcheck_crash_loop_detected",
+				Help: "1 when the configured number of crashes occurred within the crash-loop window, else 0",
+			},
+		),
 	}
 
 	// Register Go runtime metrics.
@@ -192,6 +253,51 @@ func (m *Metrics) RecordPanicRecovered() {
 // disconnects early is not a timeout and is not counted.
 func (m *Metrics) RecordRequestTimeout() {
 	m.requestTimeouts.Inc()
+}
+
+// RecordCrash increments the crash-event counter for the given kind. The
+// CrashRecorder calls it once per captured event; panics are additionally
+// counted by RecordPanicRecovered, which predates the crash family.
+func (m *Metrics) RecordCrash(kind string) {
+	m.crashesTotal.WithLabelValues(kind).Inc()
+}
+
+// RecordSignalReceived increments the signal counter for the named signal
+// (e.g. "SIGTERM"). Server.Run calls it when the process catches a signal.
+func (m *Metrics) RecordSignalReceived(sig string) {
+	m.signalReceived.WithLabelValues(sig).Inc()
+}
+
+// RecordSignalHandled records one completed signal handler execution: which
+// signal it served, how the drain it triggered ended, and how long the whole
+// handler took from signal receipt to shutdown completion. Server.Run calls
+// it after the drain, so a SIGHUP cascade - the recurring infrastructure
+// failure mode in this fleet - is observable on /metrics as it happens rather
+// than only in post-mortem logs. Prometheus counters and histograms are
+// goroutine-safe, which matters here because a signal lands on whichever
+// goroutine ends up selecting on the signal channel.
+func (m *Metrics) RecordSignalHandled(sig, outcome string, d time.Duration) {
+	m.signalHandlerRuns.WithLabelValues(sig, outcome).Inc()
+	m.signalHandlerDur.WithLabelValues(sig).Observe(d.Seconds())
+}
+
+// RecordShutdown records one server shutdown: its outcome ("graceful" when
+// every connection drained inside the budget, "forced" when the drain timed
+// out, "error" when Shutdown itself failed) and how long the drain took.
+func (m *Metrics) RecordShutdown(outcome string, d time.Duration) {
+	m.shutdowns.WithLabelValues(outcome).Inc()
+	m.shutdownDur.Observe(d.Seconds())
+}
+
+// SetCrashLoopDetected publishes the crash-loop verdict as a 0/1 gauge so a
+// single Prometheus rule can alert on it. The CrashRecorder calls it every
+// time the verdict could have changed.
+func (m *Metrics) SetCrashLoopDetected(detected bool) {
+	if detected {
+		m.crashLoop.Set(1)
+		return
+	}
+	m.crashLoop.Set(0)
 }
 
 // statusCodeToString converts an HTTP status code to a string category.

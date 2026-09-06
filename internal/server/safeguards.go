@@ -54,9 +54,10 @@ func Recover(log *slog.Logger, metrics *Metrics) Middleware {
 					panic(rec)
 				}
 
+				stack := string(debug.Stack())
 				log.Error("panic recovered in request handler",
 					"panic", fmt.Sprint(rec),
-					"stack", string(debug.Stack()),
+					"stack", stack,
 					"method", r.Method,
 					"path", r.URL.Path,
 					"request_id", GetRequestID(r.Context()),
@@ -65,6 +66,9 @@ func Recover(log *slog.Logger, metrics *Metrics) Middleware {
 				if metrics != nil {
 					metrics.RecordPanicRecovered()
 				}
+				// The process-wide recorder keeps the event for /health,
+				// /api/v1/crashes and the crash dump ring.
+				GetCrashRecorder().RecordPanic(rec, r, stack)
 
 				if rw.status == 0 {
 					// Nothing written yet: the client gets a clean 500.
