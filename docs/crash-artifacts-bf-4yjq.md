@@ -1,5 +1,13 @@
 # Crash Artifacts Catalog: Bead bf-4yjq
 
+> **⚠ Superseded inventory (2026-09-06).** The path list below was written 2026-08-16 and no
+> longer matches the workspace: `.beads/issues.jsonl` (retired bf-shaped store),
+> `.beads/traces/bf-4yjq/`, `.beads/traces/bf-3b9rv/`, and
+> `bf-5e1jao-investigation-summary.md` (project root) **do not exist today**. The live-verified
+> inventory — including the crash-era needle worker-log evidence this doc predates — is
+> [`docs/crash-investigations/bf-4yjq-artifact-catalog-2026-09-06.md`](crash-investigations/bf-4yjq-artifact-catalog-2026-09-06.md).
+> Crash counts in this doc (9 crashes) are superseded by the canonical report (50).
+
 **Crash Date:** 2026-08-12  
 **Investigation Date:** 2026-08-16  
 **Bead ID:** bf-4yjq  

@@ -1,4 +1,10 @@
 # Raw Crash Artifacts: Bead bf-4yjq
+
+> **⚠ Inventory superseded (2026-09-06).** This collection missed the one surviving Aug-12
+> primary source — the needle worker-log rotation slot `.log.2` (`~/.needle/logs/`), which holds
+> all 50 crash records — and predates the corrected 50-crash count. Live-verified inventory:
+> [`docs/crash-investigations/bf-4yjq-artifact-catalog-2026-09-06.md`](crash-investigations/bf-4yjq-artifact-catalog-2026-09-06.md).
+
 **Collected:** 2026-09-01  
 **Task Bead:** domchk-95ee940f  
 **Target Bead:** bf-4yjq
