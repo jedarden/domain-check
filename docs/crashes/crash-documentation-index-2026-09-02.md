@@ -152,6 +152,10 @@ committed by their own authors and are not part of the step-4 batch. Documents d
 #### Repository Bloat Crashes
 
 **bf-1s6c3 Repository Bloat (2026-08-12)**
+- `docs/crashes/bf-1s6c3-remediation-2026-09-06.md` - **Remediation execution record** (2026-09-06; classification table re-verified live, work-loss check via `46293c5` + zero divergence `e299c48` across Forgejo/GitHub, disposition: closed / no retry; supersedes the Sep-1 conditional-retry guidance; bead domchk-9822e378)
+- `docs/crashes/bf-1s6c3-crash-classification-2026-09-06.md` - Classification layer (INFRASTRUCTURE / repository-bloat Pattern 3, ~95% confidence; exit-code mapping + FP rules 1-3; bead domchk-56b5ba67, commit 9b92cd9)
+- `docs/crashes/bf-1s6c3-crash-storm-timeline-2026-09-06.md` - Raw-log timeline (76 dispatches / 71 exit -1 kills over 265 min, attempt 4's merge `42a7b07` + 59.6 s death gap; corrects the "9 crashes" figure and dead SHAs; bead domchk-1fb4ad35, commit c562ca3)
+- `docs/crashes/bf-1s6c3/` - Evidence: byte-exact raw needle events (Aug-12/13), 76 crash-window session transcripts (tar), per-attempt index, sha256 manifest (extraction bead domchk-fcac734a)
 - `docs/crashes/bf-1s6c3-crash-evidence-report.md` - Evidence collection
 - `docs/crashes/bf-1s6c3-investigation.md` - Complete investigation
 - `docs/crashes/bf-1s6c3-oom-investigation.md` - OOM analysis
@@ -164,8 +168,9 @@ committed by their own authors and are not part of the step-4 batch. Documents d
 - Repository grew to 18GB (should be <500MB) - 36x normal size
 - 17.16GB loose objects (99% of repository) - should be packed
 - OOM killer triggered during git reconciliation (exit code -1)
-- Resolution: Repository cleanup 18GB → 138MB (99.2% reduction)
-- Task completed successfully after cleanup
+- Resolution: Repository cleanup 18GB → 138MB (99.2% reduction), re-verified holding at 98 MB on 2026-09-06
+- ~~Task completed successfully after cleanup~~ — **corrected by the raw-log extraction**: all 49 Aug-12 attempts died mid-task, 71 of 76 at `git push` (pack-objects memcg OOM); the bead's own task never completed through it — main's reconciliation is the later `46293c5` (2026-08-17), not `2832106`/`7dd79eb` (dead pre-squash SHAs)
+- The Sep-1 "fix implementation report" (`docs/crash-fix-implementation-report-bf-1s6c3-2026-09-01.md`) rests on the superseded SIGHUP-cascade mechanism; its conditional-retry guidance is superseded by the remediation record above (closed, nothing to retry)
 - No code defects found
 
 **bf-2xygo Repository Bloat (2026-08-12)**
