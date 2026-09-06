@@ -18,6 +18,10 @@ upload a 720-commit backlog whose tree still contained **5.6 GB of retired bead-
 (`.beads/.bf_history`, 4.7 GB, plus 508 stale checkpoint shards); that state was dropped 22 seconds
 after the wave's last kill, and the crashes stopped.
 
+**Kernel kill records for both deaths were recovered from journald on 2026-09-06** (§5.1) —
+originally thought rotated away. Both show `usage 12582912kB, limit 12582912kB`: the scope at its
+exact hard bound, `task=git`, within the same second as the death each time.
+
 **Classification: INFRASTRUCTURE** (memory-pressure memcg OOM), per `docs/crash-response-guide.md`
 §Phase 2A. No code defect. Work was not lost.
 
@@ -51,8 +55,9 @@ What survives for the 13:30:50Z crash, and what does not.
 
 | Artifact | Path | What it proves |
 |---|---|---|
-| Needle dispatch log | `~/.needle/logs/claude-code-glm-4.7-lab-drawrace-70478ac5-2026-08-16.jsonl` (1,178 events, 13:05:37–15:22:10Z) | Complete dispatch history of bf-198ne: 7 dispatches, exit codes, outcome classifications, alert-creation timestamps |
-| Crashed session transcript | `~/.claude/projects/-home-coding-domain-check/522efe9a-e68c-4f2e-9274-5ad8ec299b82.jsonl` (159 records; first 13:24:39.630Z, last write 13:30:49.450Z) | The agent's actual final act: commit, then `git push`, then nothing |
+| Needle dispatch log | `~/.needle/logs/claude-code-glm-4.7-lab-drawrace-70478ac5-2026-08-16.jsonl` (1,178 events, 13:05:37–15:22:10Z) | Complete dispatch history of bf-198ne: 8 dispatch records (5 `pluck` attempts, 2 `mitosis` evals, 1 `split`), exit codes, outcome classifications |
+| Kernel kill records | journald, `journalctl -k` at 2026-08-16 09:24:33 and 09:30:49 **local** (= 13:24:33Z / 13:30:49Z; journald stamps local time, America/New_York) | The two actual kills: `task=git`, `CONSTRAINT_MEMCG`, `usage 12582912kB, limit 12582912kB`, scope IDs, anon-rss 11.7 / 11.9 GiB — see §5.1 |
+| Crashed session transcript | `~/.claude/projects/-home-coding-domain-check/522efe9a-e68c-4f2e-9274-5ad8ec299b82.jsonl` (159 records; first 13:24:39.630Z, last write 13:30:49.451Z) | The agent's actual final act: commit, then `git push`, then nothing |
 | Earlier crashed session transcript | `~/.claude/projects/-home-coding-domain-check/cdb2b90a-2a40-4439-b86e-bafff202f2c1.jsonl` (133 records, ends 13:24:33.724Z) | Same pattern on the previous attempt — makes the mechanism reproducible, not incidental |
 | Pre-crash commit | `7a50353` "chore: update needle predispatch sha after Domain Watch verification" (13:29:49Z) | Work committed 61 s before death; preserved on branch `pre-squash-history-20260816` |
 | Companion commit (attempt 3) | `26dab61` "feat: complete Domain Watch implementation (ADR-001)" (13:23:39Z) | The substantive work of the crashed task |
@@ -65,7 +70,7 @@ What survives for the 13:30:50Z crash, and what does not.
 
 | Source | Status |
 |---|---|
-| journald for Aug 16 | **Absent** — earliest surviving entry is 2026-08-17 15:33:14 [LIVE]. The Aug-16 kernel kill records were captured by the sibling corpus before rotation and are cited from there **[COMMIT c700252]** |
+| journald for Aug 16 | **Present as of the 2026-09-06 re-check** — earliest surviving entry is now 2026-08-15 19:46:33 local, so the kernel records for both deaths are directly recoverable (**§5.1**). This document originally reported journald absent past 2026-08-17 15:33:14; that was true at write time and the Aug-16 kill records were cited from the sibling corpus **[COMMIT c700252]** — the journal has since been re-vacuated to a longer horizon and the citation is superseded by live evidence |
 | `.beads/traces/bf-198ne/` | Absent — no trace directory for this bead (traces exist for Aug-17+ beads) [LIVE] |
 | Per-agent event log | `…drawrace-bf-198ne.agent.jsonl` was zero-activity-cleaned at 15:25:31Z the same day [LIVE, `mend.zero_activity_log_cleaned` in the roam-1 log] |
 | Coredumps | None before Aug 25 [COMMIT, corpus] |
@@ -79,25 +84,28 @@ independently establish the sequence.
 
 ## 4. Verified timeline of bf-198ne on 2026-08-16
 
-From the drawrace dispatch log [LIVE]. Every dispatch used template `pluck` with the identical
-prompt hash `c96fcfcd…` (64,223 bytes) unless noted.
+From the drawrace dispatch log [LIVE]. Work dispatches used template `pluck` with the identical
+prompt hash `c96fcfcd…` (64,223 bytes) unless noted; the two `mitosis` evals used a 1,460-byte
+prompt (`ac23833f…`) and the final `split` dispatch a 2,582-byte prompt (`6b78fe29…`). The first
+re-derivation of this table missed one row (the 13:20:21 mitosis eval); corrected 2026-09-06.
 
 | # | Dispatched | transform.completed | `agent.completed` exit | Outcome | Result |
 |---|---|---|---|---|---|
 | 1 | 13:06:25 | 13:12:13 (348 s, 66 ev) | 1 | failure | released |
 | 2 | 13:12:16 | 13:20:20 (484 s, 96 ev) | 1 | failure | released; mitosis: not splittable |
-| 3 | 13:20:41 | 13:24:33 (232 s, 59 ev) | **−1** | **crash** | alerted → `domchk-3042abf1` (13:24:35.094) |
-| 4 | 13:24:36 | 13:30:49 (373 s, 62 ev) | **−1** | **crash** | alerted → **`domchk-d46ec441` (13:30:50.879)** ← this investigation |
-| 5 | 13:30:52 | 13:38:15 (444 s, 65 ev) | 1 | failure | released |
-| 6 | — | 13:38:27 (9 s) | 0 | mitosis eval | not splittable |
-| 7 | 13:38:29 (`split`) | 13:40:24 (114 s, 41 ev) | 0 | success | `bead.orphaned` |
+| 3 | 13:20:21 (`mitosis`) | 13:20:40 (19 s) | 0 | mitosis eval | not splittable (`proposed_children: 0`) |
+| 4 | 13:20:41 | 13:24:33 (232 s, 59 ev) | **−1** | **crash** | alerted → `domchk-3042abf1` (13:24:35.094) |
+| 5 | 13:24:36 | 13:30:49 (373 s, 62 ev) | **−1** | **crash** | alerted → **`domchk-d46ec441` (13:30:50.879)** ← this investigation |
+| 6 | 13:30:52 | 13:38:15 (444 s, 65 ev) | 1 | failure | released |
+| 7 | 13:38:18 (`mitosis`) | 13:38:27 (9 s) | 0 | mitosis eval | not splittable |
+| 8 | 13:38:29 (`split`) | 13:40:24 (114 s, 41 ev) | 0 | success | `bead.orphaned` |
 
 The alert timestamp is the `HANDLING_RELEASE_DONE` heartbeat (13:30:50.879210Z), 0.44 s after the
 real `agent.completed` (13:30:50.436803Z) — for this event the alert time *is* the death time,
 unlike the bf-173o7e pattern where alerts lagged 8–120 s.
 
-The `exit 1` outcomes (#1, #2, #5) are ordinary workflow failures — the agent ran to completion and
-failed; only #3 and #4 are signal deaths.
+The `exit 1` outcomes (#1, #2, #6) are ordinary workflow failures — the agent ran to completion and
+failed; only #4 and #5 are signal deaths.
 
 ---
 
@@ -118,6 +126,48 @@ Attempt 4's own last reasoning, recorded at 13:30:00.346Z, immediately before th
 No tool result ever returned; the transcript ends there. Two independent processes, same task shape,
 same object set, dying 49.9 s and 50.1 s after the same command — that regularity is a memory ramp
 reaching a fixed bound, not a random fault.
+
+### 5.1 The kernel kill records — recovered 2026-09-06 [LIVE]
+
+This section was added on a later pass, after the journal was found to still hold Aug 16; the
+original write believed these records rotated away and cited them from the corpus instead. Note
+journald stamps **local** time (America/New_York, UTC−4): kernel `09:24:33` = 13:24:33Z, kernel
+`09:30:49` = 13:30:49Z.
+
+| | Attempt 3 | Attempt 4 |
+|---|---|---|
+| Kernel kill (local / UTC) | 09:24:33 / 13:24:33Z | 09:30:49 / 13:30:49Z |
+| Task killed | `git`, pid 930471 | `git`, pid 974979 |
+| Constraint | `oom-kill:constraint=CONSTRAINT_MEMCG` | same |
+| Scope | `…/app.slice/run-p906653-i210595008.scope` | `…/app.slice/run-p933759-i210622114.scope` |
+| memcg at kill | `usage 12582912kB, limit 12582912kB, failcnt 54751` | `usage 12582912kB, limit 12582912kB, failcnt 95438` |
+| anon-rss of victim | 12,299,132 kB (11.73 GiB) | 12,245,348 kB (11.68 GiB) |
+| vs push issued | +49.0 s | +48.6 s |
+| vs `agent.completed` (−1) | −1.04 s | −1.44 s |
+
+Both scopes sit at their **exact 12 GiB hard limit** (`12582912 kB` usage = limit) when the kernel
+SIGKILLs their `git` process — the bound the corpus identified, now proven for these two deaths
+first-hand rather than cited. The ordering within each second is: kernel kills `git` → the agent
+transcript's final record (mtimes 13:24:33.724Z and 13:30:49.451Z — same second as the kills) →
+needle's `transform.completed` → `agent.completed` with the −1 sentinel.
+
+**Attribution caveat:** needle's dispatch log carries no scope id or pid, so the scope→dispatch
+binding is by timing, not by identifier. It is nonetheless about as tight as second-resolution
+attribution allows: each kill lands in the same second as its attempt's `transform.completed` and
+1.0–1.4 s before its `agent.completed`, the victim is `task=git` while both transcripts' final tool
+call is `git push`, and the other workers' nearby `git` kills (13:24:04Z, 13:25:18Z, 13:30:12Z —
+the wave was killing several per minute) belong to different scopes with different pids and land
+nowhere near an `agent.completed` of this bead.
+
+The wave's tail is also visible first-hand now: further `git` kills at 17:23:14Z (anon-rss
+12,306,448 kB) and 17:29:51Z (7,788,052 kB), plus unrelated `vitest`/node kills in other scopes —
+same constraint, same victim class, up to the wave's final kill at 17:40:32Z **[COMMIT c700252]**.
+
+Full-day re-derivation from the same journal (2026-09-06): **414** `CONSTRAINT_MEMCG` kills on
+Aug-16 with the last at **17:40:32Z** — both corpus figures reproduced exactly [LIVE, upgrading
+[COMMIT c700252]]. The "332 in the 12:00–17:00Z wave" figure also reconciles: hours 12–17 inclusive
+give 289 (12:00–16:59Z) + 43 (17:00–17:59Z) = 332. `b2d8233`, which removed the 5.6 GB, landed at
+17:40:54Z — 22 s after that final kill.
 
 ### Why the push was heavy
 
@@ -192,7 +242,8 @@ Per `docs/crash-response-guide.md` §Quick Reference and §Phase 2A:
 
 - **Exit code −1 → Infrastructure event.** Confirmed at kernel level by the corpus's journald
   re-derivation: 414 memcg kills on Aug-16, every one `CONSTRAINT_MEMCG` inside a dispatch scope,
-  332 of them in the 12:00–17:00Z wave that contains both deaths.
+  332 of them in the 12:00–17:00Z wave that contains both deaths — and now confirmed **directly**
+  for these two deaths (§5.1: `usage 12582912kB, limit 12582912kB`, `task=git`, `CONSTRAINT_MEMCG`).
 - **Not a workflow failure** — the two `exit 1` attempts on the same bead are that class, and they
   look entirely different (agent ran to completion; no signal).
 - **Not a service failure** — no HTTP 5xx; the inference gateway is not in the causal path.
@@ -210,8 +261,9 @@ Per `docs/crash-response-guide.md` §Quick Reference and §Phase 2A:
 
 ## 9. Acceptance criteria
 
-- [x] **Exit code −1 understood and documented** — §2 (sentinel semantics) and §5 (actual kill
-      mechanism), with corrections to two misreading documents.
+- [x] **Exit code −1 understood and documented** — §2 (sentinel semantics), §5 (actual kill
+      mechanism), and §5.1 (the two kernel kill records, with corrections to two misreading
+      documents).
 - [x] **Crash artifacts collected** — §3, with paths, sizes, and the negative findings that bound
       what can still be known.
 - [x] **Pre-crash work completion verified** — §7, by object lookup rather than by trusting prior
@@ -226,13 +278,22 @@ historical rather than actionable: the 5.6 GB object mass is gone (`.beads/` unt
 `.gitignore` covers it, repo `.git` is ~92 MB with 1 pack), the memory bounds that make bare
 `git` safe are now mechanically enforced (`pack.windowMemory=2g`, `pack.deltaCacheSize=1g`,
 `pack.threads=1`, verified by `scripts/setup-git-gc-config.sh --verify` and the 768 MiB cgroup
-tests in `scripts/test-gc-memory-bounds.sh`), and the fleet has recorded **zero `exit_code=-1`
-since 2026-08-17** [COMMIT c700252 + LIVE 09-06]. No further mitigation is required for this bead;
+tests in `scripts/test-gc-memory-bounds.sh`), and the fleet's `exit_code=-1` rate has collapsed
+rather than stopped: **1 on Aug-17, zero Aug-18 → Aug-25, then 9 scattered events Aug-26 → Sep-06**
+— against 2,108 across all surviving logs [LIVE 09-06]. The committed corpus's "zero since
+2026-08-17" is corrected here: Aug-17 itself carried one (bf-4833lh, 16:00:26Z), and the post-Aug-26
+events carry synthetic `nd-*` dispatch ids on drawrace, the test-probe class. No further mitigation
+is required for this bead;
 the remaining value of this chain is closing the stale alert `domchk-d46ec441` accurately.
 
 ---
 
-*Report generated 2026-09-06 by domchk-507d18c4 (claude-code-glm-5.3-flash). Sources re-derived
-this session: needle dispatch log, two Claude session transcripts, git object database, fleet log
-census; Aug-16 kernel kill records cited from the committed corpus (c700252) because journald for
-that day has rotated.*
+*Report generated 2026-09-06 by domchk-507d18c4 (claude-code-glm-5.3-flash), then re-verified the
+same day on later attempts of the same bead, each of which found the report still uncommitted on
+disk and re-derived its claims from the primary sources. Verified across the passes: needle
+dispatch log (all 8 dispatch rows, prompt hashes, durations, event counts), both Claude session
+transcripts, the git object database, the fleet log census, and — recovered on the second pass —
+the journald kernel kill records for both deaths (§5.1), previously believed rotated and cited
+instead from the committed corpus (c700252). Corrections made along the way: the dispatch-table
+row count (a `mitosis` eval run had been omitted), one transcript mtime to the millisecond, and
+§10's fleet-tail figure, which the committed corpus overstated as "zero since 2026-08-17".*
