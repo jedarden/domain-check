@@ -18,8 +18,13 @@ and is confirmed working. Do not re-create it; verify with the commands in
    - `remote_address`: https://github.com/jedarden/domain-check.git
    - `sync_on_commit`: true, `interval`: 8h
    - `last_update`: 2026-09-06T14:31:44Z, `last_error`: (empty)
-4. Refs in sync: `main` = `1b21053` on Forgejo, GitHub, and local (byte-identical)
-5. Push path verified: `git push origin main` → `Everything up-to-date`, exit 0
+4. Refs in sync at verification time: `main` byte-identical on Forgejo, GitHub, and local.
+   Live end-to-end check: locally created commit `26472b5` reached Forgejo and then
+   GitHub within minutes — mirror `last_update` advanced 14:31:44Z → 14:51:25Z,
+   `last_error` empty, so `sync_on_commit` fired on the push.
+5. Push path verified: `git push origin main` → exit 0. Don't expect a pinned SHA in
+   this file to still match — `main` moves constantly here; run the ls-remote commands
+   above for current state.
 
 ## Verification
 
