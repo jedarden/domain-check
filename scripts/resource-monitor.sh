@@ -250,8 +250,12 @@ check_memory_pressure() {
     return 0
   fi
 
-  # Convert to percentage (using awk instead of bc)
-  local pressure_percent=$(awk -v p="$avg60" 'BEGIN { printf "%d", p * 100 }')
+  # PSI avg values are ALREADY percentages of time (0-100) — use them as-is.
+  # A previous version multiplied by 100 here, logging impossible readings
+  # like "299%" for a 2.99% stall and firing CRITICAL on any stall > 0.8%
+  # (docs/crash-prevention-monitoring-design.md §7.2). Thresholds
+  # PRESSURE_WARNING/PRESSURE_CRITICAL compare against true PSI percent.
+  local pressure_percent=$(awk -v p="$avg60" 'BEGIN { printf "%d", p }')
   pressure_percent=${pressure_percent:-0}
 
   verbose "  Memory pressure (60s avg): ${pressure_percent}%"
