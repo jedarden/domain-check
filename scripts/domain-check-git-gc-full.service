@@ -8,3 +8,20 @@ WorkingDirectory=/home/coding/domain-check
 ExecStart=/home/coding/domain-check/scripts/safe-git-gc.sh --full
 StandardOutput=append:/home/coding/domain-check/.beads/logs/git-gc-full.log
 StandardError=append:/home/coding/domain-check/.beads/logs/git-gc-full.log
+
+# Hard resource bounds; the weekly deep compression is the most memory-hungry
+# run. A ceiling breach OOM-kills the gc inside its own cgroup and the run can
+# be resumed with --resume from its last checkpoint.
+# NOTE: do not add User= here. This is a systemd --user unit, where User= is
+# invalid; an earlier installed copy carried User=%i, which left this unit in a
+# fatal "Invalid user/group name" state so the weekly gc silently never ran.
+# NixOS: the systemd --user manager PATH holds only the systemd store path,
+# so `#!/usr/bin/env bash` in safe-git-gc.sh resolves to 127 and every run
+# fails before git starts. Pin the system profile bin dir explicitly.
+Environment="PATH=/run/current-system/sw/bin:/usr/bin:/bin"
+MemoryMax=4G
+MemorySwapMax=0
+CPUQuota=300%
+Nice=15
+IOSchedulingClass=idle
+OOMScoreAdjust=500
