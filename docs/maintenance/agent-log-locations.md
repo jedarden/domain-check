@@ -8,7 +8,7 @@ sizes drift, the paths and naming rules do not.
 
 | What | Where | Naming | Retention |
 |------|-------|--------|-----------|
-| Needle agent dispatch logs (primary) | `~/.needle/logs/` | `<adapter>-<scope>-<dispatch-id>[-<date>][.agent].jsonl` | **None in practice** — pruner broken since 2026-08-17 |
+| Needle agent dispatch logs (primary) | `~/.needle/logs/` | `<adapter>-<scope>-<dispatch-id>[-<date>][.agent].jsonl` | Dated/legacy families: **none** (pruner broken since 2026-08-17); `.agent.jsonl`: rolling mend prune |
 | Repo-local monitoring logs | `<repo>/.beads/logs/` | `<monitor-name>.log` | Append-only, never rotated (6.7 MB since Sep 1) |
 | Claude Code session transcripts | `~/.claude/projects/-home-coding-domain-check/` | `<session-uuid>.jsonl` | ~30-day rolling (Claude Code default) |
 | System journal (kernel kills, unit logs) | `/var/log/journal/` | binary `.journal` segments | Persistent, unbounded (4 GB; starts 2026-08-15) |
@@ -22,9 +22,11 @@ fields. Timestamps here are **UTC** — system journald stamps the same events i
 
 Naming (current → legacy):
 
-- `claude-code-<model>-<scope>-<bead-id>.agent.jsonl` — current naming; embeds
-  the dispatched bead ID, e.g.
-  `claude-code-glm-5.3-flash-lab-roam-6-domchk-ad053346.agent.jsonl`
+- `claude-code-<model>-<scope>-<tag>.agent.jsonl` — current naming; `<tag>` is
+  a bead ID or short workspace tag (`domchk-…`, `sigil`, `pdftract`), e.g.
+  `claude-code-glm-5.3-flash-lab-roam-6-domchk-ad053346.agent.jsonl`.
+  Short-lived: mend prunes this family on a rolling basis (~162 files survive,
+  all within ~2 days of now — `mend.max_log_files: 100` targets these).
 - `claude-code-<model>-<scope>-<8hex>-YYYY-MM-DD.jsonl` — older naming; 8-hex
   dispatch ID + UTC date, e.g. `claude-code-glm-4.7-lab-roam-6-0c12f60b-2026-09-03.jsonl`
   (the dominant family: ~38,700 files, ~6.97 GB, ~6,200 files/day recently)
@@ -89,11 +91,14 @@ Actual state: **broken since 2026-08-17.** The service hardcodes
 dies at `status=200/CHDIR` (first failure 2026-08-17 23:00; last effective run
 ~2026-08-06, per `fabric.db` mtime). Consequences:
 
-- `~/.needle/logs/` has grown to 7.0 GB with zero deletion since Aug 6, at
-  ~6,200 files/day — the pre-commit/10MB hook and repo-health checks do not
-  cover this directory (it is outside any repo).
-- `mend.max_log_files: 100` in `~/.needle/config.yaml` is **not** enforced
-  against this directory (~39,900 files present).
+- The **dated and legacy families** (the ~40k files — one per dispatch, the
+  main crash-forensics source) have had **zero deletion since Aug 6**: 7.0 GB
+  and growing at ~6,200 files/day. The pre-commit/10MB hook and repo-health
+  checks do not cover this directory (it is outside any repo).
+- The **current `.agent.jsonl` family is the exception** — `mend`
+  (`mend.max_log_files: 100` in `~/.needle/config.yaml`) prunes it on a
+  rolling basis, so per-attempt files under that naming disappear within days;
+  capture them early if an investigation needs one.
 
 Fixing the pruner is an operator decision (the unit lives outside this repo and
 points at a deleted checkout); until then, expect the directory to keep growing
