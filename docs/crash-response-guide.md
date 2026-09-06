@@ -12,17 +12,23 @@ When investigating a crash, first classify the type:
 
 | Exit Code | Pattern | Classification | Action |
 |-----------|---------|----------------|--------|
-| **-1** | SIGKILL/SIGHUP | Infrastructure event | Check system resources, verify work completion |
+| **-1** | Signal death, code unrecorded (needle sentinel — see note 2) | Infrastructure event | Check system resources, verify work completion |
 | **-1** | Fixed-cadence re-dispatch deaths, `.git` > 5GB | **Infrastructure: Repository bloat** | Check repo size → `safe-git-gc.sh` cleanup (Pattern 3) |
 | **1** | error_max_turns | Workflow failure | Verify task completed, check bead closing issues |
 | **1** | HTTP 503/502 | Service unavailability | Check inference gateway status, retry with backoff |
 | **137** | SIGKILL (128+9) | OOM killer | Check memory pressure, verify git gc safety |
 | **Other** | Application error | Code/task issue | Standard debugging |
 
-> **Repository bloat is a distinct infrastructure sub-type**, not generic memory pressure: the
+> **1. Repository bloat is a distinct infrastructure sub-type**, not generic memory pressure: the
 > OOM trigger is the repository's own size, so it recurs on every dispatch until the repo is
 > cleaned — and unlike memory pressure, it is detectable *before* any crash (see
 > Pattern 3 below for detection heuristics and cleanup).
+
+> **2. `exit -1` is a sentinel, not a signal number.** Needle writes `-1` for any signal death
+> with no recorded code (`code().unwrap_or(-1)`); the correct Unix encoding of a SIGKILL death
+> is 137, and a SIGHUP death would surface as 129. Never assert a specific signal from `-1`
+> alone — read kernel/journald records first. bf-4yjq (2026-08-12) recorded all 50 deaths as
+> `-1`, and the mechanism was a memcg OOM SIGKILL, not the SIGHUP the first reports claimed.
 
 ---
 
@@ -194,6 +200,16 @@ uptime                     # Load average
   ```bash
   journalctl --since "<crash_timestamp-1hour>" --until "<crash_timestamp+1hour>" | grep -E "oom|kill|memory"
   ```
+- [ ] Check the **cgroup boundary, not just the host** — the binding limit for agent work is
+  the dispatch scope's `MemoryMax` (12 GiB), and the kill can land while the host has memory
+  to spare (bf-4yjq class: 50 kills inside the scope on a healthy host)
+  ```bash
+  # Real memcg kills carry kernel scope/task/rss lines. A systemd "killed by the OOM
+  # killer" notice with NO kernel oom-kill line in the same seconds is a NixOS
+  # switch-to-configuration re-execution replaying stale memory.events counters,
+  # not a kill.
+  journalctl --since "@<epoch>" | grep -E "oom-kill|constraint=CONSTRAINT_MEMCG|memory peak"
+  ```
 - [ ] Classify as false positive if work completed
   ```bash
   # If commit exists within 30 seconds before crash → FALSE POSITIVE
@@ -201,9 +217,14 @@ uptime                     # Load average
   ```
 
 **Common Infrastructure Events:**
+- **memcg OOM inside the dispatch scope (dominant, kernel-verified):** cgroup-scoped SIGKILL
+  when a git operation exceeds the scope's `MemoryMax` (12 GiB) — the host can have memory to
+  spare (bf-4yjq, bf-4x12ec, bf-198ne). See note 2 above and the cgroup check in this checklist
 - **Memory Pressure:** systemd-oomd activation (94.71% pressure threshold)
-- **SIGHUP Cascade:** System-wide signal to all workers
-- **OOM Killer:** Process termination (exit code 137)
+- **OOM Killer (host-wide):** Process termination (exit code 137)
+- **SIGHUP Cascade:** System-wide signal to all workers — historically asserted for the
+  Aug-12 storms but never kernel-confirmed; do not claim it without a 129 exit code or
+  other signal evidence
 
 **Action Required:**
 - ✅ NO CODE CHANGES NEEDED
@@ -481,14 +502,27 @@ bead show <id> --json | jq '.history[] | select(.outcome == "success")'
 ```
 
 ### Rule 3: System-Wide Event Check
+
+The committed detector (`scripts/crash-pattern-detection.sh`) fires an infrastructure event
+at **3 crashes within 5 minutes** (`CRASH_SURGE_THRESHOLD=3`) — lowered from the older
+10-in-10-minutes rule after bf-4yjq (2026-08-12) lost agents every ~3.1 minutes for 2.5 hours
+while peaking near 5 per 10 minutes, i.e. under any per-bead threshold until the whole
+workspace is measured:
+
 ```bash
-# If 10+ crashes within 10 minutes → INFRASTRUCTURE EVENT
-# Generate single system event alert, not individual bead alerts
-crash_count=$(bead list --since "10min ago" --status "crashed" --json | jq '. | length')
-if [ $crash_count -gt 10 ]; then
-  echo "INFRASTRUCTURE EVENT: $crash_count crashes in 10 minutes"
-fi
+./scripts/crash-pattern-detection.sh --since 1hour
+# exit 0 = stable (or degraded: stale source) · 1 = elevated · 2 = infrastructure event
 ```
+
+Two corollaries from bf-4yjq:
+
+- **Derive scale from the forensic checkpoint, not from alert beads.** Alert-bead sampling
+  recorded 9 crashes for bf-4yjq; the checkpoint scan shows 50, plus a 350-kill storm
+  (bf-31mno) recorded nowhere. Scan `.beads/checkpoint/forensic.jsonl` for Crash(-1) records
+  in the window — the canonical investigation documents the exact filter.
+- **A sustained low-and-slow cadence is still an environmental regime.** Fixed-cadence
+  exit −1 re-dispatch deaths across multiple beads means triage repo size / memory / load at
+  the workspace level before any per-bead debugging.
 
 ---
 
@@ -902,6 +936,10 @@ Other Exit Code?
 ---
 
 **Guide Status:** ✅ Complete  
-**Last Updated:** 2026-09-06 (Repository bloat as a distinct infrastructure classification: corrected crash counts to the verified 50-crash figure, detection heuristics incl. `.git/objects` > 10GB, repo-size pre-flight, safe-git-gc as the prescribed cleanup, mechanical pack limits, repaired-state record)  
+**Last Updated:** 2026-09-06 (second pass, from the bf-4yjq closing summary
+`docs/crash-summary-bf-4yjq-2026-09-06.md`: `exit -1` documented as needle's unrecorded-signal
+sentinel rather than a signal number, cgroup/dispatch-scope memory check added to Phase 2A,
+surge threshold corrected to the detector's committed 3-in-5-minutes with the slow-burn
+corollaries)  
 **Target Audience:** Agents investigating crash alerts  
 **Purpose:** Fast crash classification and response decisions
