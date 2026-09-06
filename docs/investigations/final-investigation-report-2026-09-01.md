@@ -10,7 +10,8 @@
 > The host was never out of memory, so host-wide alerting could not have caught it. The "94.71%"
 > figure is not a surviving record, and the Aug-16 window is 04:27:35Z–17:40:32Z (13.2 h, two waves).
 > Full corrected analysis and the complete superseded-claims table:
-> [`investigation-report-draft-2026-09-06-domchk-d6871df1.md`](investigation-report-draft-2026-09-06-domchk-d6871df1.md)
+> [`investigation-report-final-2026-09-06-domchk-e843c4f1.md`](investigation-report-final-2026-09-06-domchk-e843c4f1.md)
+> (final; supersedes the draft `investigation-report-draft-2026-09-06-domchk-d6871df1.md`, 9338e2b)
 > and [`findings-compilation-2026-09-05-domchk-65afcc88.md`](findings-compilation-2026-09-05-domchk-65afcc88.md) §2.4.
 > Volumetrics quoted below ("201+ crashes", "826 crashes") are attested figures that no surviving
 > primary source can re-derive — treat them as [REPORTED], not [LIVE].
