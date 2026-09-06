@@ -1,5 +1,20 @@
 # Crash Evidence Summary: Bead bf-4yjq
 
+> **⚠️ SUPERSEDED (2026-09-06).** This early summary is retained for history; its headline
+> figures were replaced by live verification against the worker log and
+> `.beads/checkpoint/forensic.jsonl`. It records **4 crashes at 18:38–20:05 UTC**; the verified
+> record is **50 crashes at ~3.1-minute cadence, 17:53:53.875–20:30:38.310 UTC**, inside a
+> same-day 455-event workspace-wide exit −1 storm. Its **`signal -1 (SIGKILL)`** identification
+> is wrong — `-1` is needle's sentinel for a death whose signal was not recorded, and no signal
+> name survives anywhere in this event's telemetry. Its **445 MB / 1.7 GB** post-cleanup figures
+> are intermediate states; the verified repository is **91–93 MB** (93 MB re-verified
+> 2026-09-06). And the deaths were **mid-task, not post-task** — every run survived 65–375 s
+> (median 149 s) of real work, and the git-remotes task completed only after the storm ended.
+> See **[`docs/crash-investigations/bf-4yjq-crash-evidence-summary-domchk-eb60ed60-2026-09-06.md`](../crash-investigations/bf-4yjq-crash-evidence-summary-domchk-eb60ed60-2026-09-06.md)**
+> (compiled evidence entry point, supersedes this document) and
+> [`docs/crash-investigations/bf-4yjq-crash-investigation.md`](../crash-investigations/bf-4yjq-crash-investigation.md)
+> (canonical report).
+
 **Date Collected:** 2026-09-01
 **Bead ID:** bf-4yjq
 **Original Task:** Git origin remote points to GitHub directly; Forgejo mirror has diverged/gone stale

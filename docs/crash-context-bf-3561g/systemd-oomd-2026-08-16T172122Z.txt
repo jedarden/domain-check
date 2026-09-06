@@ -1,0 +1,11 @@
+Aug 16 13:21:22 lab systemd-oomd[569]: Considered 20 cgroups for killing, top candidates were:
+Aug 16 13:21:22 lab systemd-oomd[569]:         Path: /user.slice/user-1001.slice/user@1001.service/app.slice/run-p2713992-i212402347.scope
+Aug 16 13:21:22 lab systemd-oomd[569]:                 Memory Pressure Limit: 0.00%
+Aug 16 13:21:22 lab systemd-oomd[569]:                 Memory Pressure Duration: 0
+Aug 16 13:21:22 lab systemd-oomd[569]:                 Pressure: Avg10: 82.93, Avg60: 41.36, Avg300: 11.06, Total: 36s
+Aug 16 13:21:22 lab systemd-oomd[569]:                 Current Memory Usage: 9.7G
+Aug 16 13:21:22 lab systemd-oomd[569]:                 Memory Min: 0B
+Aug 16 13:21:22 lab systemd-oomd[569]:                 Memory Low: 0B
+Aug 16 13:21:22 lab systemd-oomd[569]:                 Pgscan: 1953981
+Aug 16 13:21:22 lab systemd-oomd[569]:                 Last Pgscan: 1914237
+Aug 16 13:21:22 lab systemd-oomd[569]: Killed /user.slice/user-1001.slice/user@1001.service/app.slice/run-p2713992-i212402347.scope due to memory pressure for /user.slice being 94.29% > 80.00% for > 20s with reclaim activity
