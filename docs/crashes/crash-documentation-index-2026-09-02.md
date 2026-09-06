@@ -182,6 +182,21 @@ committed by their own authors and are not part of the step-4 batch. Documents d
 - Repository integrity verified
 - Safe-git-gc scripts provide even better safety
 
+#### bf-198ne Git Push OOM (2026-08-16)
+
+**bf-198ne memcg OOM of `git push` (2026-08-16T13:30:50Z)**
+- `docs/crashes/bf-198ne-crash-report.md` - **Canonical resolution & verification report** (2026-09-06; classification INFRASTRUCTURE, kernel kill records, nine mitigation checks re-executed live, closure record for parent alert domchk-d46ec441)
+- `docs/crash-investigation/bf-198ne-crash-2026-08-16-artifact-analysis.md` - Canonical RCA (artifact inventory, 8-dispatch timeline, both kernel kill records, fleet census)
+- `docs/crash-investigation/bf-198ne-mitigation-2026-09-06.md` - Mitigation verification (all countermeasures in force)
+- `docs/crash-investigation/bf-198ne-context.md` - The **different, earlier** 2026-08-12 bf-2xygo event the alert bead was created for (mechanism line superseded — see the crash report's sentinel correction)
+
+**Key Events:**
+- Two consecutive agents died ~50 s after `git push`; kernel killed `git` at the exact 12 GiB dispatch-scope bound (`CONSTRAINT_MEMCG`)
+- Push carried a 720-commit backlog including 5.6 GB of retired bead-forge state
+- `b2d8233` (".beads: 5.6G -> 16M") landed 22 s after the wave's last kill; crashes stopped
+- Post-completion kill — work committed before death and in `main`; zero data loss
+- Mechanism now bounded (`pack.windowMemory=2g`/`deltaCacheSize=1g`/`threads=1`; 12/12 cgroup tests, pack-objects peak RSS 320 MB)
+
 #### Exit Code -1 Analysis
 
 **Root Cause Analysis Documents:**
