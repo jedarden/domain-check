@@ -83,6 +83,28 @@ systemctl --user daemon-reload && systemctl --user start domain-check-*.timer
 ```
 The installers do this; bare `cp` into `~/.config/systemd/user/` does not.
 
+### CI/CD Pipeline Coverage (verified 2026-09-06)
+
+The crash context report
+([bf-4yjq](../crash-context-report-bf-4yjq-comprehensive.md)) recommended
+"repository size monitoring in the CI/CD pipeline". That recommendation was
+checked against the live template and is **not implemented, by design**:
+`domain-check-build` (`declarative-config/k8s/iad-ci/argo-workflows/domain-check-workflowtemplate.yml`)
+runs lint/test/fuzz plus a kaniko build, and every step `git clone`s a fresh
+copy from Forgejo into an ephemeral container. CI never holds a persistent
+`.git`, so it cannot observe — or gate on — the loose-object accumulation that
+caused the bf-1s6c3 / bf-4yjq OOMs. That accumulation happens in working
+clones on the lab box, which is why the enforcement points are the timers
+above, the gitignore rules, and the pre-commit hook rather than CI.
+
+**Residual gap this leaves:** the >10MB gate is a per-clone pre-commit hook
+(untracked in git, absent from a fresh clone), and Forgejo has no server-side
+push hook, so nothing mechanically rejects a large *tracked* file at push time
+— the same hole that let 17+ 237MB `.beads/*.jsonl` commits land. The
+repo-wide `*.jsonl` / `.beads/` gitignore rules close the known vector; a
+server-side size check (Forgejo push hook) would be the durable fix if another
+vector appears.
+
 ---
 
 ## Repository Size Thresholds
@@ -93,6 +115,24 @@ The installers do this; bare `cp` into `~/.config/systemd/user/` does not.
 | 500MB-1GB | ⚠️ Warning | Plan cleanup soon |
 | 1GB-5GB | 🚨 Critical | Run cleanup immediately |
 | >5GB | 🆘 Emergency | Run cleanup NOW |
+
+Thresholds as actually enforced (constants live in the scripts — if a number
+here disagrees with the script, the script wins):
+
+| Threshold | Value | Enforced by |
+|-----------|-------|-------------|
+| Auto-gc trigger | 10 GB `.git` size (`AUTO_GC_THRESHOLD_MB=10240`) | `scripts/auto-gc-trigger.sh` |
+| Size warning | 2 GB (`WARN_THRESHOLD_MB=2048`) | `scripts/auto-gc-trigger.sh` |
+| Large-file gate | >10MB staged file blocks the commit (`MAX_SIZE_MB=10`) | `.git/hooks/pre-commit` |
+| Large-file audit | >10MB blob in history or working tree flags a warning | `scripts/check-repo-health.sh` |
+| Gc resource gates | mem ≥ ceiling + 1g, disk ≥ max(5G, 1.5× repo), load ≤ 15 | `scripts/safe-git-gc.sh` (`--check-only` to preview) |
+| Gc memory ceiling | `MemoryMax=4G` on the timer units; `pack.windowMemory=2g` / `pack.deltaCacheSize=1g` / `pack.threads=1` on every repo | `domain-check-git-gc*.service` + `scripts/setup-git-gc-config.sh --verify` |
+
+**Recommended gc frequency** (installed via `./scripts/setup-repo-maintenance.sh`,
+schedule table above): daily incremental at 03:00, weekly full gc Sunday 04:00,
+threshold check daily 02:00. Run a manual `./scripts/safe-git-gc.sh --full` only
+when `--check-only` says gc is needed — "GC not needed" lines in
+`.git/safe-gc.log` are the daily check reporting a healthy repo, not a failure.
 
 ---
 
@@ -227,6 +267,18 @@ independent of that rework.
 - [ ] Review git history for large files
 - [ ] Update monitoring thresholds if needed
 
+**After any fresh clone** (enforcement is per-clone and does not travel with
+git; without these the clone is unguarded — see
+[CI/CD Pipeline Coverage](#cicd-pipeline-coverage-verified-2026-09-06) above):
+- [ ] Restore the >10MB pre-commit hook from `scripts/pre-commit-repo-size-hook` (source copy has drifted from the last installed version — review before copying)
+- [ ] `./scripts/setup-git-gc-config.sh --global --verify` → exit 0 (the box-wide pack-memory bound must cover bare gc/push here too)
+- [ ] `./scripts/setup-repo-maintenance.sh` if this clone should carry its own timers
+
+Prevention baseline and the incident these controls came from:
+[bf-4yjq crash context report](../crash-context-report-bf-4yjq-comprehensive.md)
+— its "Prevention Status Follow-up (2026-09-06)" section maps each of that
+report's recommendations to the control that now covers it.
+
 ---
 
 ## Key Scripts
@@ -244,13 +296,16 @@ independent of that rework.
 ## Important Links
 
 **Crash Investigation:**
-- [bf-1s6c3 Investigation Summary](../bf-1s6c3-investigation-summary.md) - Repository bloat crash (18GB → 138MB)
+- [bf-1s6c3 Investigation Summary](../archive/crash-investigations/bf-1s6c3-investigation-summary.md) - Repository bloat crash (18GB → 138MB)
 - [Crash Response Guide](../crash-response-guide.md) - Quick crash classification
 
 **Detailed Documentation:**
 - [Repository Maintenance Recommendations](./repository-maintenance-recommendations.md) - Comprehensive guide
-- [Cleanup and Recovery Procedures](../cleanup-and-recovery-procedures.md) - Emergency procedures
+- [Cleanup and Recovery Procedures](../archive/crash-investigations/cleanup-and-recovery-procedures.md) - Emergency procedures
 - [Crash Mitigation Strategies](../crash-mitigation-strategies.md) - Prevention strategies
+- [bf-4yjq Crash Context Report](../crash-context-report-bf-4yjq-comprehensive.md) - Original bloat incident; Prevention Status Follow-up section maps its recommendations to current controls
+- [Crash Prevention Requirements](../crash-prevention-requirements.md) - Canonical gap list (G-1..G-13); see also its [design](../crash-prevention-design.md) and [monitoring design](../crash-prevention-monitoring-design.md) companions
+- [Comprehensive Crash Prevention Guide](../comprehensive-crash-prevention-guide.md) - Operational prevention system
 
 ---
 
