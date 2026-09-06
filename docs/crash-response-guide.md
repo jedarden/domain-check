@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-01  
 **Purpose:** Agent guide for investigating and responding to crash alerts  
-**Related:** `docs/crash-mitigation-strategies.md`, `docs/comprehensive-crash-investigation-report-2026-09-01.md`
+**Related:** `docs/crash-mitigation-strategies.md`, `docs/comprehensive-crash-investigation-report-2026-09-01.md`, `docs/maintenance/repository-maintenance-guide.md`
 
 ---
 
@@ -13,10 +13,16 @@ When investigating a crash, first classify the type:
 | Exit Code | Pattern | Classification | Action |
 |-----------|---------|----------------|--------|
 | **-1** | SIGKILL/SIGHUP | Infrastructure event | Check system resources, verify work completion |
+| **-1** | Fixed-cadence re-dispatch deaths, `.git` > 5GB | **Infrastructure: Repository bloat** | Check repo size → `safe-git-gc.sh` cleanup (Pattern 3) |
 | **1** | error_max_turns | Workflow failure | Verify task completed, check bead closing issues |
 | **1** | HTTP 503/502 | Service unavailability | Check inference gateway status, retry with backoff |
 | **137** | SIGKILL (128+9) | OOM killer | Check memory pressure, verify git gc safety |
 | **Other** | Application error | Code/task issue | Standard debugging |
+
+> **Repository bloat is a distinct infrastructure sub-type**, not generic memory pressure: the
+> OOM trigger is the repository's own size, so it recurs on every dispatch until the repo is
+> cleaned — and unlike memory pressure, it is detectable *before* any crash (see
+> Pattern 3 below for detection heuristics and cleanup).
 
 ---
 
@@ -57,7 +63,7 @@ The crash alert manager automatically implements all 6 critical fixes:
 |----------------|-------------|-----------------|
 | **FALSE_POSITIVE** | Post-completion cleanup failure, max_turns, or completed bead | No action - close bead |
 | **SERVICE_FAILURE** | External service unavailable (HTTP 503/502) | Retry with backoff when service restored |
-| **INFRASTRUCTURE** | OOM, SIGHUP cascade, resource exhaustion | Check system resources, verify work completion |
+| **INFRASTRUCTURE** | OOM, SIGHUP cascade, resource exhaustion, repository bloat | Check system resources, verify work completion |
 | **CODE_DEFECT** | Actual application error | Standard investigation required |
 | **UNKNOWN** | Unable to classify | Manual investigation required |
 
@@ -82,8 +88,9 @@ The crash alert manager automatically implements all 6 critical fixes:
 The automated crash system integrates with continuous monitoring:
 
 ```bash
-# Install continuous monitoring
-./scripts/monitoring-setup.sh
+# Install continuous monitoring (systemd user timers — this box has no crontab)
+./scripts/setup-repo-maintenance.sh
+systemctl --user list-timers 'domain-check-*' --all
 
 # Monitor logs
 tail -f .beads/logs/crash-alert-manager.log
@@ -348,52 +355,81 @@ git fsck --full
 - ✅ Verify repository integrity
 - ⚠️ If OOM occurred, document memory limits used
 
-### Pattern 3: Repository Bloat Crashes (~15% of infrastructure crashes)
+### Pattern 3: Infrastructure — Repository Bloat Crashes (~15% of infrastructure crashes)
 
 **Symptoms:**
-- Exit code -1 (SIGKILL from OOM killer)
+- Exit code -1 (SIGKILL from memcg OOM), zero exit-code variation across events
+- Crashes recur at a fixed cadence on every re-dispatch — agents die minutes apart, for hours
 - Repository size > 5GB (should be <500MB)
 - Loose objects > 1GB (should be packed)
-- Routine git operations trigger OOM
-- Multiple crashes over short period (all exit code -1)
+- **`.git/objects` > 10GB = high risk → preemptive cleanup required**
+- Routine git operations (clone, fetch, checkout, gc, fsck, push) trigger OOM
+- Multiple crashes over a short period (all exit code -1)
 
 **Evidence from bf-4yjq (2026-08-12):**
-- 9 crashes over 2.5 hours, all exit code -1
-- Repository: 18GB with 17GB loose objects
-- `.beads/issues.jsonl`: 248MB (should be <5MB)
-- Any significant git operation triggered OOM
+- **50 crashes** between 17:54:00 and 20:30:43 UTC, every one exit code -1 — one death every
+  ~3.1 minutes for 2.5 hours. (The "9 crashes at ~17-minute intervals" figure in the earlier
+  comprehensive report is superseded — see its banner and the canonical investigation.)
+- Repository: 18GB with 17GB loose objects; trigger was 17+ identical ~237MB
+  `.beads/*.jsonl` bead-state snapshots that had been committed to git
+- Deterministic environmental kill, not a code defect: domain-check code was never involved
+- **Repaired:** packed to ~94MB, `.beads/` fully gitignored (0 tracked files), `git fsck` clean —
+  re-verified 2026-09-06 (`docs/crashes/bf-4yjq-cleanup-verification.md`)
 
-**Verification:**
+**Detection heuristics (run before any significant git operation):**
 ```bash
-# Check repository size
-du -sh .git
-du -sh .git/objects
+du -sh .git                # < 1GB healthy · 1-5GB warning · > 5GB critical
+du -sh .git/objects        # > 10GB = HIGH RISK → preemptive cleanup required
+git count-objects -vH      # loose count/size vs packed
 
-# Count loose vs packed objects
-git count-objects -vH
-
-# If repository > 5GB with > 1GB loose objects → REPOSITORY BLOAT
+# Scripted equivalents:
+./scripts/check-repo-health.sh         # full diagnostic pass
+./scripts/preflight-health-check.sh    # fails when .git exceeds 1GB
 ```
 
-**Action:**
-- ⚠️ IMMEDIATE: Add `.beads/*.jsonl` to `.gitignore`
-- ⚠️ Run safe git gc: `./scripts/safe-git-gc.sh --full`
-- ✅ Enable repository monitoring: `./scripts/monitoring-setup.sh`
-- ✅ Install scheduled gc in crontab (daily)
-- ✅ Install pre-commit hooks to prevent future large file additions
-- ✅ Document root cause bead (e.g., bf-2ildm) that created large commits
+**Cleanup — `scripts/safe-git-gc.sh` is the prescribed method. Never run bare
+`git gc --aggressive`:**
+```bash
+# 1. Confirm cleanup is actually needed
+./scripts/safe-git-gc.sh --check-only
+
+# 2. Run it (stages 1-2, or --full for deep compression; --resume after interruption)
+./scripts/safe-git-gc.sh --full
+
+# 3. Monitor from another terminal
+./scripts/safe-git-gc-monitor.sh --watch
+
+# 4. Verify
+du -sh .git && git fsck --full
+```
+
+The bare-gc path is also defended mechanically, by persistent git config rather than
+convention: `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` bound any
+pack-objects run — including bare `git gc` and `git push` — to ≈3GiB worst case. Check the
+*effective* bound (system → global → local) with `./scripts/setup-git-gc-config.sh --verify`;
+exit 1 means no bound is in force or threads are unpinned.
 
 **Prevention:**
-```bash
-# Install repository monitoring
-./scripts/monitoring-setup.sh
+- ✅ Keep the **whole `.beads/` directory** (plus `*.db` and `*.jsonl` repo-wide) in
+  `.gitignore` — never re-track bead state. This is the fix that ended bf-4yjq; ignoring only
+  `.beads/*.jsonl` patterns is not sufficient. Verify: `git ls-files .beads | wc -l` → 0
+- ✅ 10MB pre-commit hook (installed at `.git/hooks/pre-commit`, per-clone — the tracked source
+  copy is `scripts/pre-commit-repo-size-hook`)
+- ✅ Scheduled maintenance via **systemd user timers**: `./scripts/setup-repo-maintenance.sh`
+  (repo health + auto-gc check daily 02:00, incremental gc daily 03:00, full gc Sun 04:00).
+  Do **not** use `./scripts/monitoring-setup.sh` — it is cron-based and this box (NixOS) has no
+  crontab
+- ✅ Size limits and the full maintenance procedure:
+  `docs/maintenance/repository-maintenance-guide.md`
 
-# Add to .gitignore immediately
-echo ".beads/*.jsonl" >> .gitignore
-echo ".beads/*.json" >> .gitignore
-echo ".beads/checkpoint/" >> .gitignore
-echo ".beads/traces/" >> .gitignore
-```
+**Reference artifacts:**
+- `docs/reports/bf-4yjq-comprehensive-crash-report.md` — comprehensive crash report
+  (root-cause analysis and telemetry valid; crash count/cadence superseded — see its banner)
+- `docs/crash-investigations/bf-4yjq-crash-investigation.md` — canonical investigation
+  (verified 50-crash count)
+- `docs/crash-artifacts-bf-4yjq.md` — preserved crash artifacts
+- `docs/crashes/bf-4yjq-cleanup-verification.md` — post-cleanup verification record
+- `docs/crash-mitigation-strategies.md` — mitigation strategies
 
 ### Pattern 4: Service Availability Failure (~8% of crashes)
 
@@ -483,6 +519,15 @@ fi
 - ✅ Progress tracking and monitoring
 - ✅ Pre-flight integrity checks
 
+**Mechanical guard on the bare-gc path (2026-09-02):** the August 2026 crash storm was caused
+by bare `git gc --aggressive` exceeding the dispatch scope's 12GiB `MemoryMax` — memcg OOM
+SIGKILL, 129 attempts. That path is now defended by persistent git config, not convention:
+`pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` (the window limit is
+per-thread, so threads must be pinned) → worst case ≈3GiB per pack run. Applied repo-locally
+**and** globally, and it bounds `git push`'s pack-objects too (bf-198ne was the push-side
+variant of the same OOM). Verify anytime:
+`./scripts/setup-git-gc-config.sh --verify` — exit 1 = no effective bound or unpinned threads.
+
 **When `git gc --aggressive` is Acceptable:**
 - On dedicated systems with > 16GB free RAM
 - With cgroup memory limits in place
@@ -542,7 +587,9 @@ systemd-run --scope --quiet \
 - Memory availability (configurable, default 10GB)
 - Disk space (configurable, default 20GB)
 - CPU load (configurable, default <10 on 1min average)
-- Git repository health
+- Git repository health — **repository size** (fails above 1GB; this gate previously
+  failed open and passed repos of any size, fixed 2026-09-06), large files in history,
+  loose-object counts
 
 **Exit codes:**
 - `0` - All checks passed
@@ -598,6 +645,24 @@ fi
 
 echo "All health checks passed - proceeding with task"
 ```
+
+### Repository Size Pre-Flight (before git operations)
+
+Every significant git operation — `gc`, `push`, `clone`, `fetch`, `checkout`, `fsck` —
+scales with repository size, and the 2026-08-12 bloat storm (Pattern 3) turned routine
+operations into deterministic OOM kills. Check before running one:
+
+```bash
+du -sh .git            # < 1GB healthy · 1-5GB warning · > 5GB critical
+du -sh .git/objects    # > 10GB = HIGH RISK → preemptive cleanup required
+git count-objects -vH  # loose vs packed breakdown
+
+# Scripted gate — exits 1 when .git exceeds 1GB:
+./scripts/preflight-health-check.sh
+```
+
+Over threshold: run `./scripts/safe-git-gc.sh --full` (see Pattern 3) and re-check before
+proceeding. Never work around it with bare `git gc --aggressive`.
 
 ### Retry with Exponential Backoff
 
@@ -820,13 +885,23 @@ Other Exit Code?
 - **Specific Crashes:** 
   - `docs/crash-analysis-domchk-c9641ac5-2026-09-01.md` (Service availability)
   - `docs/investigation-summary-bf-173o7e-2026-09-01.md` (False positive)
-  - `docs/crash-artifacts-bf-4yjq.md` (Repository bloat - 9 OOM crashes from 18GB repo)
+  - `docs/crash-artifacts-bf-4yjq.md` (Repository bloat - 50 OOM crashes from 18GB repo, see below)
+
+- **Repository Bloat (bf-4yjq, 2026-08-12 — repaired and re-verified 2026-09-06):**
+  - `docs/reports/bf-4yjq-comprehensive-crash-report.md` — comprehensive report
+    (root cause and telemetry valid; crash count/cadence superseded — see its banner)
+  - `docs/crash-investigations/bf-4yjq-crash-investigation.md` — canonical investigation
+    (verified 50 crashes at ~3.1-minute intervals)
+  - `docs/crashes/bf-4yjq-cleanup-verification.md` — cleanup verified, repo at ~94MB
+  - `docs/maintenance/repository-maintenance-guide.md` — size limits, daily maintenance,
+    emergency cleanup steps
+  - `docs/crash-mitigation-strategies.md` — mitigation strategies
 
 - **Git GC Safety:** `docs/safe-git-gc-implementation.md`, `docs/safer-git-gc-strategy.md`
 
 ---
 
 **Guide Status:** ✅ Complete  
-**Last Updated:** 2026-09-02 (Added automated crash alert system section)  
+**Last Updated:** 2026-09-06 (Repository bloat as a distinct infrastructure classification: corrected crash counts to the verified 50-crash figure, detection heuristics incl. `.git/objects` > 10GB, repo-size pre-flight, safe-git-gc as the prescribed cleanup, mechanical pack limits, repaired-state record)  
 **Target Audience:** Agents investigating crash alerts  
 **Purpose:** Fast crash classification and response decisions
