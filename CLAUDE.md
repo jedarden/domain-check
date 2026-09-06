@@ -73,6 +73,23 @@ All cluster manifests (Deployment, Service, IngressRoute, etc.) live in **jedard
 
 ## Crash Prevention and Investigation
 
+### Current Repository Health (verified live 2026-09-06)
+
+The repository is **repaired and healthy**. The ~18GB loose-object bloat that
+caused the memcg-OOM crashes (bf-1s6c3, bf-4yjq, 2026-08-12) was packed down
+and cannot recur through `.beads/` — the whole directory is gitignored, 0
+tracked files.
+
+- **`.git`:** 94 MB (was ~18 GB); 169 loose objects / 1.27 MiB (normal churn,
+  packed by the daily 03:00 gc), one consolidated pack (90.43 MiB), 0 garbage
+- **Integrity:** `git fsck --full` clean; `./scripts/check-repo-health.sh` passes
+- **Effective gc bounds:** `./scripts/setup-git-gc-config.sh --verify` → ✅
+  (worst case ≈3GiB per pack run, within the 12GiB dispatch scope)
+- **Verification record:** [bf-4yjq cleanup verification](docs/crashes/bf-4yjq-cleanup-verification.md) —
+  re-run 2026-09-06, five days after the original cleanup, and holding
+
+Everything below is the standing procedure that keeps it that way.
+
 ### Operational Safety Guidelines
 
 **Critical:** Domain-check code has been thoroughly investigated and found to have NO defects. Crashes in this workspace are caused by external factors, not domain-check code issues.
@@ -109,11 +126,11 @@ All cluster manifests (Deployment, Service, IngressRoute, etc.) live in **jedard
 - ✅ Checkpoint/resume capability after each stage
 - ✅ Progress tracking and monitoring
 - ✅ Pre-flight integrity checks
-- ✅ Proven safety: Git gc completed successfully in 6 minutes with 97.5% size reduction
+- ✅ Proven safety: this repo's verified cleanups (18GB → 92MB on 2026-09-01, re-verified at 93MB on 2026-09-06) ran under these bounds — `docs/crashes/bf-173o7e-cleanup-verification.md`
 
-**Evidence:** Investigation of bead bf-173o7e showed `git gc --aggressive` completed successfully with 1.1GB peak memory usage, no OOM events, and repository integrity verified. Safe-git-gc scripts provide even better safety.
+**Evidence (corrected 2026-09-06):** The early investigation docs (`docs/crash-investigation-bf-4x12ec.md`, `docs/investigation-summary-bf-173o7e-2026-09-01.md`) recorded the Aug-14 gc deaths as "gc completed successfully, ~1.1GB peak, no OOM events" — that conclusion is **superseded**. Those runs were memcg-OOM SIGKILLs at the dispatch scope's 12GiB bound (the mechanical guard below exists because of them); the kernel records proving the mechanism were only recovered later, for the push-side variant bf-198ne. What *is* proven: bounded runs complete cleanly, and this repo now sits at ~94MB after the verified 18GB cleanup. Do not run bare `git gc --aggressive` on the strength of the older docs.
 
-**Mechanical guard for the bare-gc path (2026-09-02):** safe-git-gc.sh bounds only its own invocations — the Aug-14 crash storm happened when an agent ran bare `git gc --aggressive --prune=now`, whose pack-objects RSS exceeded the 12GiB `MemoryMax` of needle's dispatch scope (memcg OOM SIGKILL → exit code -1, 129 attempts). That path is now defended by persistent git config, not convention: `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` (the window limit is per-thread, so threads must be pinned) → worst case ≈3GiB per pack run. Applied repo-locally **and** globally (`./scripts/setup-git-gc-config.sh --global`). Check anytime with `./scripts/setup-git-gc-config.sh --verify` — it resolves the **effective** bound (system → global → local, the chain a bare gc actually sees) and reports which scope supplies each key, so a repo protected only by the box-wide global config verifies clean; exit 1 = no effective bound or threads unpinned. Tests in `scripts/test-gc-memory-bounds.sh` rerun the exact crash command under a 768MiB cgroup (peak pack-objects RSS ≈ 312MiB). See `docs/maintenance/repository-maintenance-guide.md`.
+**Mechanical guard for the bare-gc path (2026-09-02):** safe-git-gc.sh bounds only its own invocations — the Aug-14 crash storm happened when an agent ran bare `git gc --aggressive --prune=now`, whose pack-objects RSS exceeded the 12GiB `MemoryMax` of needle's dispatch scope (memcg OOM SIGKILL → exit code -1, 129 attempts). That path is now defended by persistent git config, not convention: `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` (the window limit is per-thread, so threads must be pinned) → worst case ≈3GiB per pack run. Applied repo-locally **and** globally (`./scripts/setup-git-gc-config.sh --global`). Check anytime with `./scripts/setup-git-gc-config.sh --verify` — it resolves the **effective** bound (system → global → local, the chain a bare gc actually sees) and reports which scope supplies each key, so a repo protected only by the box-wide global config verifies clean; exit 1 = no effective bound or threads unpinned. Tests in `scripts/test-gc-memory-bounds.sh` rerun the exact crash command under a 768MiB cgroup (peak pack-objects RSS ≈ 312MiB). The same bound covers `git push`'s pack-objects too: **bf-198ne (2026-08-16) was the push-side variant of the same memcg OOM** (720-commit backlog still carrying 5.6GB of retired bead-forge state), re-verified resolved 2026-09-06 — `docs/crashes/bf-198ne-crash-report.md`. See `docs/maintenance/repository-maintenance-guide.md`.
 
 ### Service Availability Checks
 
@@ -164,6 +181,7 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
 - **Other**: Standard investigation → Check crash artifacts
 
 **False Positive Detection:**
+- Verify the target bead's actual state **before** investigating: a large share of crash alerts target beads another worker already closed or completed. Read the bead's own deliverable and `git log --grep <bead-id>` first — near-identical artifact *titles* across beads are the main false-positive source (a report can match a title word-for-word and belong to a different bead; check its Related Bead field)
 - If work committed < 30 seconds before crash → FALSE POSITIVE (post-completion cleanup)
 - If crash → retry → success pattern → SELF-HEALED TRANSIENT FAILURE
 - If 10+ crashes in 10 minutes → INFRASTRUCTURE EVENT (system-wide)
@@ -178,19 +196,19 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
 
 ### Crash Alert System (2026-09-02 Implementation)
 
-**Implemented Fixes:** Comprehensive crash alert system improvements prevent false positives and duplicate alerts:
+**Implemented Fixes:** Comprehensive crash alert system improvements prevent false positives and duplicate alerts (all six critical fixes, grouped by mechanism):
 
-1. **Closed Bead Filtering:** Checks if target bead is CLOSED before creating alerts (prevents false positives like bf-3561g investigating completed bead bf-4k2ws)
-2. **Duplicate Detection:** Prevents multiple investigation beads for same crash event
-3. **Completion Awareness:** Detects post-completion cleanup termination vs. crash during task
-4. **Alert Cooldown:** 5-minute cooldown prevents alert spam during system-wide events
-5. **Crash Classification:** Accurate categorization (FALSE_POSITIVE, SERVICE_FAILURE, INFRASTRUCTURE, CODE_DEFECT)
+1. **Closed bead filtering** (fixes 1 & 5): checks if target bead is CLOSED before creating alerts (prevents false positives like bf-3561g investigating completed bead bf-4k2ws)
+2. **Duplicate detection + processed-alerts tracking** (fixes 2 & 3): prevents multiple investigation beads for the same crash event
+3. **Completion awareness + exit-code validation** (fixes 4 & 6): detects post-completion cleanup termination vs. crash during task
+4. **Alert cooldown:** 5-minute cooldown prevents alert spam during system-wide events
+5. **Crash classification:** accurate categorization (FALSE_POSITIVE, SERVICE_FAILURE, INFRASTRUCTURE, CODE_DEFECT)
 
 **Scripts:**
 - `scripts/crash-alert-manager.sh` - Main alert processing with all 6 critical fixes
 - `scripts/crash-classifier.sh` - Crash categorization
 - `scripts/alert-deduplication.sh` - Duplicate detection
-- `scripts/test-crash-alert-fixes.sh` - Test suite (12/12 passing)
+- `scripts/test-crash-alert-fixes.sh` - Test suite (re-verified 2026-09-06: 12/12 passing)
 
 **Usage:**
 ```bash
@@ -230,7 +248,7 @@ fi
 
 ### Repository Bloat Prevention and Detection
 
-**Critical:** Repository bloat is a leading cause of infrastructure crashes in this workspace. The bf-1s6c3 crash (2026-08-12) was caused by an 18GB repository with 17GB of loose objects, triggering OOM killer during git operations.
+**Critical:** Repository bloat caused the worst infrastructure crashes in this workspace: bf-1s6c3 and bf-4yjq (2026-08-12) ran an ~18GB repository with ~17GB of loose objects — **17+ identical 237MB `.beads/*.jsonl` snapshots had been committed** — so every significant git operation memcg-OOM'd (9 crashes in 2.5 hours, all exit -1). It is repaired as of 2026-09-06 (see Current Repository Health above); this section is what keeps it from coming back.
 
 **Quick Reference:** See [Repository Maintenance Guide](docs/maintenance/repository-maintenance-guide.md) for daily maintenance procedures and emergency cleanup steps.
 
@@ -266,30 +284,34 @@ git count-objects -vH
 
 **Prevention Measures:**
 
-1. **GitIgnore Configuration** (CRITICAL):
+1. **GitIgnore Configuration** (CRITICAL — this is the fix that ended bf-4yjq):
    ```bash
-   # Ensure .beads/ is excluded from git
-   cat .gitignore | grep ".beads/"
-   # Should include:
-   # .beads/*.jsonl
-   # .beads/*.json
-   # .beads/checkpoint/
-   # .beads/traces/
+   grep -n "beads\|jsonl\|\.db" .gitignore   # → ".beads/", "*.db", "*.jsonl"
+   git ls-files .beads | wc -l               # → 0 tracked files
    ```
+   The **whole `.beads/` directory** is ignored (plus `*.db` and `*.jsonl`
+   repo-wide) — not merely its JSONL patterns. Never re-track bead state.
+   Note the repo-wide `*.jsonl` rule: scratch `.jsonl` artifacts stay
+   untracked unless explicitly force-added.
 
-2. **Pre-commit Hooks**:
+2. **Pre-commit hook** (installed in this clone):
    ```bash
-   # Install hooks to prevent large file additions
-   ./scripts/setup-git-hooks.sh
-   # Blocks files >10MB from being committed
+   ls .git/hooks/pre-commit   # blocks any staged file > 10MB
    ```
+   Installed at `.git/hooks/pre-commit` — untracked and per-clone, so a fresh
+   clone has **no** hook until it is restored by hand.
+   `scripts/pre-commit-repo-size-hook` is a tracked source copy but has drifted
+   from the installed version, and there is no installer script. This hook is
+   the backstop that would have blocked the 237MB `.beads/*.jsonl` commits.
 
-3. **Scheduled Maintenance**:
+3. **Scheduled Maintenance** — systemd user **timers**, not crontab (this box
+   is NixOS; there is no `crontab`):
    ```bash
-   # Add to crontab for weekly repository checks
-   0 2 * * 0 /home/coding/domain-check/scripts/safe-git-gc.sh --check-only
-   0 3 * * 0 /home/coding/domain-check/scripts/check-repo-health.sh
+   ./scripts/setup-repo-maintenance.sh     # install/refresh the timers
+   systemctl --user list-timers 'domain-check-*' --all
    ```
+   Repo health + auto-gc check daily 02:00, incremental gc daily 03:00, full gc
+   weekly Sun 04:00 (`MemoryMax=4G`). Details under Monitoring and Alerting below.
 
 **Emergency Cleanup (If Repository Bloated):**
 ```bash
@@ -308,11 +330,12 @@ du -sh .git
 git fsck --full
 ```
 
-**Evidence from bf-1s6c3 Crash:**
+**Evidence from bf-1s6c3 / bf-4yjq (2026-08-12):**
 - Repository: 18GB (should be <500MB) - 36x larger than normal
 - Loose objects: 17.16GB (should be packed) - 99% of repository
-- Cleanup result: 18GB → 138MB (99.2% reduction)
-- Task completed successfully after cleanup
+- Root cause: 17+ identical 237MB `.beads/*.jsonl` snapshots committed to git
+- 9 OOM crashes over 2.5 hours, all exit code -1
+- Resolution: packed down to 93MB (99.5% reduction), re-verified 2026-09-06
 - No code defects found - purely infrastructure issue
 
 ### Monitoring and Alerting
@@ -329,7 +352,7 @@ Automated monitoring runs as **systemd user timers** (this box is NixOS — ther
 systemctl --user list-timers 'domain-check-*' --all
 ```
 
-**Installed Timers (verified 2026-09-02):**
+**Installed Timers (re-verified 2026-09-06 — all six present and firing):**
 - Crash pattern detection: every 10 minutes (`domain-check-monitoring.timer`)
 - Resource monitoring: every 5 minutes (`domain-check-resource-monitor.timer`)
 - Service monitoring: every 2 minutes (`domain-check-service-monitor.timer`)
@@ -372,22 +395,25 @@ systemctl --user list-timers 'domain-check-*' --all
 - **Crash Surge:** Alert at 10+ crashes in 10 minutes (infrastructure event)
 - **Service Availability:** Monitor inference gateway health endpoint
 
-**Implementation Status:** ✅ Monitoring scripts operational. Run `./scripts/monitoring-setup.sh` to enable continuous monitoring.
+**Implementation Status:** ✅ Monitoring operational — all six systemd timers installed and firing (verified 2026-09-06). Install/refresh with `./scripts/setup-repo-maintenance.sh`; the cron-based `scripts/monitoring-setup.sh` does not work on this NixOS box.
 
 ### Key Learnings
 
 **What Causes Crashes:**
-1. **Infrastructure events (70%)**: Memory pressure, OOM, SIGHUP cascade, **repository bloat (18GB → OOM)**
+1. **Infrastructure events (70%)**: Memory pressure, OOM, SIGHUP cascade, **repository bloat (historical — repaired 2026-09-06)**
 2. **Agent workflow limitations (20%)**: Max turns, bead closing issues
 3. **External service failures (8%)**: Inference gateway availability
 4. **Code defects (2%)**: Actual application errors — **NONE found in domain-check**
 
-**Repository Bloat as Primary Crash Cause:**
-- The bf-1s6c3 crash (2026-08-12) was caused by 18GB repository with 17GB loose objects
-- Triggered OOM killer during git reconciliation operations (exit code -1)
-- Resolution: Repository cleanup reduced 18GB → 138MB (99.2% reduction)
-- Task completed successfully after cleanup
-- Prevention: Use `.gitignore` for `.beads/`, run `./scripts/check-repo-health.sh` weekly
+**Repository Bloat as a Crash Cause (repaired 2026-09-06):**
+- bf-1s6c3 and bf-4yjq (2026-08-12): 18GB repository, 17GB loose objects, 17+ identical 237MB `.beads/*.jsonl` commits → memcg OOM during git operations (exit code -1)
+- Resolution: packed down to 93MB and holding; `.beads/` fully gitignored, `fsck` clean
+- Prevention is now layered, not manual: gitignore (bead state can't re-bloat the repo) → 10MB pre-commit gate → `pack.windowMemory` bounds on bare gc/push → daily automated health check (no need to run `check-repo-health.sh` by hand; the 02:00 timer does it)
+
+**Live fleet crash signature (September 2026 census):**
+- Exit -1 (kernel kills) is near-zero in steady state; the ones that do occur come from synthetic test/gc scopes, not live agent work
+- The dominant live signal is synchronized `exit=1` waves (13–15 workers/minute across beads) — that is service-class, not a per-bead defect
+- Needle OTLP 503s are usually the otel-collector crashlooping on config drift — classify before investigating
 
 **What Does NOT Cause Crashes:**
 1. ✅ Domain-check code (no defects found in any investigation)
@@ -395,4 +421,4 @@ systemctl --user list-timers 'domain-check-*' --all
 3. ✅ Normal application operations (well within resource limits)
 4. ✅ Repository maintenance (with proper monitoring and pre-flight checks)
 
-**Bottom Line:** Domain-check code is stable and defect-free. Focus crash investigation efforts on infrastructure (especially repository bloat), workflow, and service availability issues, not code defects.
+**Bottom Line:** Domain-check code is stable and defect-free. Focus crash investigation efforts on infrastructure and service availability issues, not code defects — and verify the target bead's actual state first, since most crash alerts today point at work another worker already finished.
