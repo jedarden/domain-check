@@ -36,7 +36,9 @@ BLOB_COUNT="${BF4YJQ_BLOBS:-16}"           # blobs -> (LOOSE_MB / BLOB_COUNT) ea
 MEMORY_MAX="${BF4YJQ_MEMORY_MAX:-512M}"    # the stand-in agent-scope bound
 TIMEOUT_SECS="${BF4YJQ_TIMEOUT:-600}"
 
-# Deployed bare-gc bounds, as set by scripts/setup-git-gc-config.sh
+# Pack bounds scaled to the 512M test scope, per spec §4 (the deployed values
+# are 2g / 1g / 1 — see scripts/setup-git-gc-config.sh; the mechanism under
+# test, window+cache caps with threads pinned, is identical)
 PACK_WINDOW_MEMORY="${BF4YJQ_WINDOW_MEMORY:-128m}"
 PACK_DELTA_CACHE_SIZE="${BF4YJQ_DELTA_CACHE:-64m}"
 PACK_THREADS="${BF4YJQ_THREADS:-1}"
@@ -63,8 +65,14 @@ fi
 bounded() {  # bounded <unit-name> <workdir> <command...>  -> runs under MemoryMax
   local unit=$1 dir=$2
   shift 2
+  # Callers must pass a unit name unique per call: systemd rejects a transient
+  # scope whose same-named predecessor is still tearing down ("was already
+  # loaded or has a fragment file"), so reusing one name across consecutive
+  # ops fails with a client-side exit 1 before the command runs (measured
+  # 2026-09-06). Uniqueness lives at the call site because this function runs
+  # inside $( ), so it cannot hand a generated name back to the caller.
   ( cd "$dir" && timeout "$TIMEOUT_SECS" systemd-run --user --quiet --scope \
-      --unit="$unit-$$" -p MemoryMax="$MEMORY_MAX" -p MemorySwapMax=0 \
+      --unit="$unit" -p MemoryMax="$MEMORY_MAX" -p MemorySwapMax=0 \
       "$@" ) 2>&1
 }
 
@@ -107,12 +115,12 @@ fi
 
 echo
 echo "=== A: the crash re-created — bare 'git gc' over $((LOOSE_MB / 1024))GiB loose inside ${MEMORY_MAX} ==="
-OUT=$(bounded bf4yjq-crash "$REPO" git gc)
+OUT=$(bounded "bf4yjq-crash-a-$$" "$REPO" git gc)
 rc=$?
 sig=$(exit_sig "$rc")
 loose_after_a=$(git -C "$REPO" count-objects -v | awk '/^count:/{print $2}')
 echo "$OUT" | tail -2 | sed 's/^/   /'
-UNIT="bf4yjq-crash-$$.scope"
+UNIT="bf4yjq-crash-a-$$.scope"
 oom_user=$(journalctl --user --no-pager -u "$UNIT" 2>/dev/null | grep -cE "killed by the OOM killer|result 'oom-kill'")
 oom_kern=$(journalctl -k --no-pager --since "-30 min" 2>/dev/null | grep -c "oom_memcg=.*$UNIT")
 if [[ "$oom_user" -gt 0 || "$oom_kern" -gt 0 ]]; then
@@ -129,7 +137,7 @@ echo "=== B: deployed mitigation — the same gc with pack.windowMemory/deltaCac
 git -C "$REPO" config pack.windowMemory "$PACK_WINDOW_MEMORY"
 git -C "$REPO" config pack.deltaCacheSize "$PACK_DELTA_CACHE_SIZE"
 git -C "$REPO" config pack.threads "$PACK_THREADS"
-OUT=$(bounded bf4yjq-bounded-gc "$REPO" git gc)
+OUT=$(bounded "bf4yjq-bounded-gc-b-$$" "$REPO" git gc)
 rc=$?
 echo "$OUT" | tail -2 | sed 's/^/   /'
 if [[ "$rc" -eq 0 ]]; then
@@ -144,8 +152,10 @@ git -C "$REPO" config --unset pack.windowMemory
 git -C "$REPO" config --unset pack.deltaCacheSize
 git -C "$REPO" config --unset pack.threads
 allok=1
+op_n=0
 for cmd in "git status --porcelain" "git log --oneline -5" "git fsck --full"; do
-  OUT=$(bounded bf4yjq-packed-op "$REPO" $cmd)
+  op_n=$((op_n + 1))
+  OUT=$(bounded "bf4yjq-packed-op-$op_n-$$" "$REPO" $cmd)
   rc=$?
   if [[ "$rc" -eq 0 ]]; then
     ok "'$cmd' on the packed repo completed inside ${MEMORY_MAX} (exit 0)"
