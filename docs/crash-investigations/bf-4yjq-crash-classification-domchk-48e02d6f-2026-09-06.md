@@ -87,9 +87,16 @@ out-of-scope observation; mirroring is meant to be server-side on Forgejo.)
 
 Against the three rules in `docs/crash-response-guide.md`:
 
-1. **Work committed < 30 s before crash → FALSE_POSITIVE: does not apply.** No commits were
-   made at all during the storm window; the subject task's commits came later, after the repo
-   was cleaned.
+1. **Work committed < 30 s before crash → FALSE_POSITIVE: does not apply.** Zero commits exist
+   in the live DAG during the storm window — but crash-era commits **do** survive on the
+   `pre-squash-history-20260816` backup ref (17 of them, all bead-state chores), so this rule
+   must be tested against **all refs**, not just `main`. Re-checked 2026-09-06
+   (domchk-0af2dd94): **2 of the 50 deaths have a commit 25–26 s before it**, inside this
+   rule's 30-second gate. The verdict is unchanged — those commits are mid-task
+   `chore: update bead tracking state before git reconciliation` bookkeeping (the agent
+   committed bead state, then died in the reconciliation git operation that followed), not the
+   task's deliverable, which landed only after the repo was cleaned five days later with the
+   bead open throughout. The other 48 deaths have no commit within the gate at all.
 2. **Crash → retry → success → SELF-HEALED TRANSIENT: does not apply.** Retry did not
    succeed within the storm — 50 consecutive deaths. Work completed only after the
    environmental condition (repo bloat) was removed, 5 days later. The loop was stopped by an
@@ -128,3 +135,32 @@ Against the three rules in `docs/crash-response-guide.md`:
 | [`bf-4yjq-artifact-catalog-2026-09-06.md`](bf-4yjq-artifact-catalog-2026-09-06.md) | Live-verified artifact inventory |
 | `docs/crash-response-guide.md` | Taxonomy, false-positive rules, Phase 2A checklist |
 | `docs/crash-artifacts-bf-4yjq.md` | Contemporaneous system-state telemetry (counts superseded; mechanism statement corrected above) |
+
+---
+
+## Addendum: independent re-verification (2026-09-06, domchk-0af2dd94)
+
+A later dispatch on the same alert pool re-derived this record's load-bearing figures rather
+than re-stating them. Every number held:
+
+| Claim in this record | Re-derivation | Result |
+|----------------------|---------------|--------|
+| 50 deaths, 17:53:53.875682Z → 20:30:38.310348Z | recount of `docs/crash-analysis/bf-4yjq-needle-worker-log-extract.log` | ✅ 50/50 `Crash(-1)`, endpoints byte-identical |
+| mean gap 192 s / median 156 s | same recount | ✅ 191.9 s / 156 s |
+| Rule 3: peak 5 deaths in any 10-min window | sliding-window scan over the 50 timestamps | ✅ 5 (18:18:13Z → 18:26:56Z); ~19.1/hour aggregate |
+| Rule 3: "no other bead was crashing during 17:54–20:30Z" | all `exit_code=-1` records in the domain-check worker log slots, date-constrained | ✅ window contains only bf-4yjq. (bf-mje3pd ×7, bf-29h1yy ×2, bf-2o7nlw ×1 died **Aug-13**, the decay phase — an unconstrained query wrongly sweeps them in) |
+| Rule 1: no commits in the storm window | `git log` on all refs, date-constrained | ⚠️ **Corrected above** — true of the live DAG; 17 crash-era commits survive on `pre-squash-history-20260816`, 2 within 30 s of a death |
+| Current state green | live `du -sh .git`, `git count-objects -vH`, `git fsck --full` | ✅ `.git` 97 MB, 52 loose (3.78 MiB) + 2 packs (90.93 MiB), 0 garbage, fsck clean; 47 G memory available, load 2.46 |
+
+Two transferable notes for the next reader:
+
+- **Time-of-day traps both directions.** An unconstrained `git log --since/--until` query
+  sweeps in other days' commits/deaths sharing the window's clock range (here it manufactured
+  10 extra "storm commits" out of Aug-13's decay-phase deaths); a naive-datetime parse of UTC
+  log stamps on this EDT box shifts displayed windows by +4 h. Constrain the date and parse
+  with an explicit timezone, or both bugs fire at once.
+- **The surge-rule gap is confirmed from the workspace side, not just this bead's.** Rule 3's
+  aggregate counter would not have fired even counting every bead in the workspace, because
+  the concurrent-die-off that would have tripped it came a day later. Only an hourly
+  per-bead/per-alert view (canonical report §9 rec. 1) catches a single-bead 2.6-hour
+  deterministic retry-kill loop.
