@@ -122,11 +122,14 @@ Everything below is the standing procedure that keeps it that way.
 ```
 
 **Why:** Safe scripts provide:
-- ✅ Memory-limited operations (configurable via `SAFE_GC_MEMORY_MAX`)
+- ✅ Memory-limited operations — soft `SAFE_GC_MEMORY_MAX` (pack.windowMemory) under a hard `SAFE_GC_CGROUP_MAX` ceiling, with a `ulimit -v` fallback
+- ✅ Fail-fast resource validation: invalid config or insufficient memory/disk/load exits **2** before any git work (`./scripts/safe-git-gc.sh --check-only` reports the same verdict without touching anything)
 - ✅ Checkpoint/resume capability after each stage
 - ✅ Progress tracking and monitoring
 - ✅ Pre-flight integrity checks
 - ✅ Proven safety: this repo's verified cleanups (18GB → 92MB on 2026-09-01, re-verified at 93MB on 2026-09-06) ran under these bounds — `docs/crashes/bf-173o7e-cleanup-verification.md`
+
+Tested by `scripts/test-safe-git-gc-limits.sh` (33 assertions, seconds to run; the disruptive real-gc cases gate on `DOMCHECK_RUN_LONG_TESTS=1`). Details: [safe-git-gc.sh Run-Time Safeguards](docs/maintenance/repository-maintenance-guide.md).
 
 **Evidence (corrected 2026-09-06):** The early investigation docs (`docs/crash-investigation-bf-4x12ec.md`, `docs/investigation-summary-bf-173o7e-2026-09-01.md`) recorded the Aug-14 gc deaths as "gc completed successfully, ~1.1GB peak, no OOM events" — that conclusion is **superseded**. Those runs were memcg-OOM SIGKILLs at the dispatch scope's 12GiB bound (the mechanical guard below exists because of them); the kernel records proving the mechanism were only recovered later, for the push-side variant bf-198ne. What *is* proven: bounded runs complete cleanly, and this repo now sits at ~94MB after the verified 18GB cleanup. Do not run bare `git gc --aggressive` on the strength of the older docs.
 

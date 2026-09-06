@@ -8,3 +8,22 @@ WorkingDirectory=/home/coding/domain-check
 ExecStart=/home/coding/domain-check/scripts/safe-git-gc.sh
 StandardOutput=append:/home/coding/domain-check/.beads/logs/git-gc.log
 StandardError=append:/home/coding/domain-check/.beads/logs/git-gc.log
+
+# NixOS: the systemd --user manager PATH holds only the systemd store path,
+# so `#!/usr/bin/env bash` in safe-git-gc.sh resolves to 127 and every run
+# fails before git starts (seen 2026-09-02 03:00:10). Pin the system profile
+# bin dir explicitly.
+Environment="PATH=/run/current-system/sw/bin:/usr/bin:/bin"
+
+# Hard resource bounds. A runaway gc must be OOM-killed inside its own cgroup,
+# never allowed to exhaust the box and let the global OOM killer take down an
+# unrelated agent process (root cause of the 2026-08-13 bf-65lsdu signal -1
+# crash). 4G ceiling sits above the script's soft 2G pack.windowMemory while
+# still bounding worst-case git RSS. Do not add User= here: this is a
+# systemd --user unit and User= is invalid in it.
+MemoryMax=4G
+MemorySwapMax=0
+CPUQuota=200%
+Nice=10
+IOSchedulingClass=idle
+OOMScoreAdjust=500

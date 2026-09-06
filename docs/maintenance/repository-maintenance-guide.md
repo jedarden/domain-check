@@ -157,6 +157,59 @@ needle-side, outside this repo; alert-side suppression is handled by
 
 ---
 
+## safe-git-gc.sh Run-Time Safeguards
+
+The persistent git config above bounds *bare* git. The sanctioned path — `safe-git-gc.sh` —
+carries its own four layers, so a run the box cannot absorb refuses to start instead of
+dying mid-repack (bf-65lsdu, 2026-08-13: several gc runs at once, each >4 GB):
+
+**1. Configuration validation (fail fast, exit 2).** Soft limits are kept separate from the
+hard ceiling, and the script refuses any combination where the ceiling does not cover the
+soft worst case `pack.windowMemory × pack.threads + pack.deltaCacheSize + 512m slack` — a
+ceiling below that sum is the self-inflicted OOM the ceiling exists to prevent
+([stepwise-git-gc-strategy.md §7.1](./stepwise-git-gc-strategy.md), item 1). Sizes must
+parse; an unpinned `pack.threads` is called out because it multiplies the window by nproc.
+
+**2. Pre-flight resource checks (fail fast, exit 2).** Before any git work: available
+memory ≥ ceiling + 1g, free disk ≥ max(5G, 1.5× repo size — a repack transiently needs the
+repo size again), 1-minute load ≤ 15. Thresholds are tunable via `SAFE_GC_MIN_AVAIL_MEM`,
+`SAFE_GC_MIN_DISK_GB`, `SAFE_GC_MAX_LOAD`.
+
+**3. Memory enforcement on every git invocation.** Preference order: cgroup `MemoryMax` via
+the systemd user manager (cumulative, authoritative) → `ulimit -v` address-space cap when
+systemd is unavailable or `SAFE_GC_NO_CGROUP=1` → soft git limits alone if both are opted
+out (logged as a warning). A runaway gc is OOM-killed inside its own cgroup rather than
+exhausting the box.
+
+**4. Checkpoint/resume + progress.** Each stage writes `status: "running"` with its pid to
+`.git/safe-gc-checkpoint.json`, so `safe-git-gc-monitor.sh` and `--check-only` can tell a
+run in flight from the last completed one. A dead run's entry is reaped to `interrupted`,
+and `--resume` restarts the interrupted stage (repacks are safe to re-run — they write new
+packs before removing old ones).
+
+**Exit codes:** `0` success (or, with `--check-only`, gc is needed) · `1` failure (or, with
+`--check-only`, gc not needed) · `2` fail-fast: invalid configuration or insufficient
+resources.
+
+**Where the ceiling comes from outside the script:** the `domain-check-git-gc.service` /
+`domain-check-git-gc-full.service` units carry their own `MemoryMax=4G` (plus
+`MemorySwapMax=0`, CPU quota, and the NixOS `PATH=` pin the user manager needs to find
+bash), so a timer-driven run is bounded even before the script's own scope is created.
+
+```bash
+./scripts/safe-git-gc.sh --check-only      # validate resources + gc-needed verdict; mutates nothing
+./scripts/test-safe-git-gc-limits.sh       # 33 assertions: ceilings, thresholds, checkpoints (seconds)
+DOMCHECK_RUN_LONG_TESTS=1 ./scripts/test-safe-git-gc-limits.sh   # adds the real-gc-on-this-repo cases
+```
+
+Scope note: the *stage commands* inside the script (plain gc / incremental repacks, and the
+§4 gates that should decide when wide-window work runs at all) are the stepwise-gc design's
+remaining work items — see §7.1 items 2–8 of
+[stepwise-git-gc-strategy.md](./stepwise-git-gc-strategy.md). The safeguards above are
+independent of that rework.
+
+---
+
 ## Prevention Checklist
 
 **Daily:**
@@ -182,7 +235,7 @@ needle-side, outside this repo; alert-side suppression is handled by
 |--------|---------|-------|
 | `preflight-health-check.sh` | Validate system before tasks | Before every agent task |
 | `check-repo-health.sh` | Repository size and object check | Weekly health monitoring |
-| `safe-git-gc.sh` | Memory-limited garbage collection | When cleanup needed |
+| `safe-git-gc.sh` | Memory-limited garbage collection with pre-flight resource checks, hard ceiling and checkpoint/resume (see its section above) | When cleanup needed; `--check-only` to validate first |
 | `safe-git-gc-monitor.sh` | Monitor gc progress | During gc operations |
 | `setup-git-gc-config.sh` | Persistent pack-memory bound + verify | After cloning; `--verify` when exit -1 appears |
 
@@ -218,8 +271,14 @@ du -sh .git/objects/* | sort -rh
 # Check available memory
 free -h
 
+# Validate before running: exit 2 means the box cannot absorb a gc right now
+./scripts/safe-git-gc.sh --check-only
+
 # Run with memory limit
 SAFE_GC_MEMORY_MAX=2g ./scripts/safe-git-gc.sh --full
+
+# A run killed mid-stage resumes from its last checkpoint
+./scripts/safe-git-gc.sh --resume
 
 # Confirm the persistent pack-memory bound is intact (see its section above)
 ./scripts/setup-git-gc-config.sh --verify
