@@ -87,6 +87,23 @@ per attempt" is wrong — the true sequence is 29 / 29 / 28 / 35 / 25. Its
 attempt table (timestamps, durations, exit codes) and prompt size (70,650)
 **do** verify byte-exactly.
 
+### Correction (2026-09-06, domchk-fe1e4a60)
+
+The claim above that "the cited primary log contains **no load or CPU metrics
+of any kind**" is **wrong**. The Aug-12 log contains 545 `fleet.cpu_saturated`
+events carrying `{load_average, core_count, threshold}` (e.g. `9.11 / 9 cores /
+0.8`) and 82 `worker.launch.deferred` events whose reason strings quote measured
+1-minute load ("system saturated: CPU load saturated: 10.79 (1-minute average)
+/ 9 cores = 1.20 > threshold 0.80"). The four load values in the 2026-08-25
+doc's table (9.11 / 9.4 / 8.47 / 8.21) are therefore **real recorded
+launch-gate samples, not unsourced numbers** — each was emitted within ~6 ms of
+one of bf-2xygo's own dispatch events, which is why this README read them as
+"attached after the fact". The circularity observation still stands: the samples
+coincide with dispatch evaluations, so the Aug-25 doc's load-vs-crash
+"correlation" is partly mechanical, and saturation was chronic all day (events
+in every hour 05–23), so it cannot by itself discriminate bf-2xygo's deaths.
+Full treatment: `docs/crashes/bf-2xygo-crash-classification-2026-09-06.md`.
+
 ## What is preserved vs. unrecoverable
 
 **Preserved here (2026-09-06):** all 91 bf-2xygo events from the dated
