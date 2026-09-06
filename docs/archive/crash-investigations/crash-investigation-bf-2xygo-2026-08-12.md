@@ -1,5 +1,23 @@
 # Crash Investigation: Bead bf-2xygo (2026-08-12)
 
+> **Superseded (2026-09-06) — mechanism claim only.** This document's CPU-saturation
+> attribution is superseded: the kill mechanism for git operations on the then-bloated
+> repository is memcg OOM at the dispatch-scope bound, and bf-2xygo's crash type is
+> `infrastructure-event` (repository-bloat sub-type, Pattern 3). The four load samples in
+> the table below are **real recorded needle launch-gate values** (the Aug-12 log contains
+> 545 `fleet.cpu_saturated` and 82 `worker.launch.deferred` events — the raw-log
+> extraction initially misread them as unsourced, corrected by
+> `docs/crashes/bf-2xygo-crash-classification-2026-09-06.md`), but they coincide with
+> dispatch evaluations and saturation was chronic all day, so they cannot discriminate
+> bf-2xygo's four deaths from the day's other 451 kills — do not cite them as measured
+> kill-time telemetry. No kernel records exist for Aug-12 (journald begins 2026-08-15),
+> so the Pattern-3 signature is the available and sufficient basis. The attempt table and
+> prompt size below verify byte-exactly against the raw extract; the "29 events written
+> per attempt" line is wrong (true sequence 29/29/28/35/25).
+> **Canonical:** `docs/crashes/bf-2xygo-investigation-findings-domchk-49962f7e-2026-09-06.md`
+> (consolidated findings) · `docs/crashes/bf-2xygo-crash-classification-2026-09-06.md`
+> (classification) · `docs/crash/bf-2xygo/raw-logs/` (evidence).
+
 ## Executive Summary
 
 On August 12, 2026, at approximately 21:18:27 UTC, bead `bf-2xygo` experienced a crash with exit code -1 during execution. Investigation reveals this was part of a **system-wide pattern of 455 crashes** across multiple beads throughout the day, strongly correlated with **CPU saturation** and **system resource pressure**.

@@ -168,6 +168,18 @@ committed by their own authors and are not part of the step-4 batch. Documents d
 - Task completed successfully after cleanup
 - No code defects found
 
+**bf-2xygo Repository Bloat (2026-08-12)**
+- `docs/crashes/bf-2xygo-investigation-findings-domchk-49962f7e-2026-09-06.md` - **Consolidated findings & closure record** (2026-09-06; classification INFRASTRUCTURE/repository-bloat, 5-attempt timeline, root cause, live mitigation verification, recommended actions; closes the write-up bead)
+- `docs/crashes/bf-2xygo-crash-classification-2026-09-06.md` - Classification layer (crash-response-guide criteria, false-positive rules 1-3 applied live, corrections to prior records)
+- `docs/crash/bf-2xygo/raw-logs/` - Evidence: 91 raw needle events + provenance README + sha256 manifest (extraction bead domchk-cd364e0a)
+- `docs/archive/crash-investigations/crash-investigation-bf-2xygo-2026-08-12.md` - Original 2026-08-25 investigation (**CPU-saturation mechanism superseded** — see its dated banner)
+
+**Key Events:**
+- 4 × exit -1 (signal deaths) at ~3.2-min re-dispatch cadence, 21:18-21:28 UTC 2026-08-12; attempt 5 exited 0, bead closed same evening
+- `git fetch` of both remotes against the ~18 GB bloated repo, between bf-4yjq's 50 kills and bf-1s6c3's 49 in the same storm
+- Alert disposition: false-positive / no action — self-healed transient, subject completed and closed 2026-08-12
+- No kernel records for Aug-12 (journald begins 2026-08-15) — Pattern-3 signature is the basis; no domain-check defect
+
 #### Safe Git GC Verification
 
 **bf-173o7e Git GC Safety (2026-08-30)**
