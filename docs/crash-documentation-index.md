@@ -1,6 +1,6 @@
 # Crash Documentation Index
 
-**Last Updated:** 2026-09-01  
+**Last Updated:** 2026-09-06 (added the bf-4yjq final summary and canonical record to Key Individual Reports; the bf-4yjq investigation closed 2026-09-06 — classification INFRASTRUCTURE/repository-bloat, remediation deployed and verified, see `crash-summary-bf-4yjq-2026-09-06.md` and `crash-prevention-requirements.md` for the live-verified gap list)  
 **Purpose:** Navigate crash investigation findings, procedures, and remediation status
 
 ---
@@ -209,6 +209,9 @@ done
 **Contains:** 289+ individual crash investigation and verification reports
 
 **Key Individual Reports:**
+- [`crash-summary-bf-4yjq-2026-09-06.md`](crash-summary-bf-4yjq-2026-09-06.md) - **bf-4yjq final summary** — repository-bloat crash, 50 memcg-OOM kills, remediation verified live, what worked well, monitoring gaps, open items
+- [`crash-investigations/bf-4yjq-crash-investigation.md`](crash-investigations/bf-4yjq-crash-investigation.md) - bf-4yjq canonical crash record (verified 50-crash count at ~3.1-min intervals)
+- [`crashes/bf-4yjq-consolidated-findings-domchk-4ed0544b-2026-09-06.md`](crashes/bf-4yjq-consolidated-findings-domchk-4ed0544b-2026-09-06.md) - bf-4yjq consolidated findings (two-layer fix, lessons learned, source index)
 - [`crashes/bf-173o7e-report.md`](crashes/bf-173o7e-report.md) - Git gc crash (false positive, workflow issue)
 - [`crash-analysis-domchk-c9641ac5-2026-09-01.md`](crash-analysis-domchk-c9641ac5-2026-09-01.md) - Service availability failure
 - [`investigation-summary-bf-173o7e-2026-09-01.md`](investigation-summary-bf-173o7e-2026-09-01.md) - False positive investigation
