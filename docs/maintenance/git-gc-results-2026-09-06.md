@@ -4,7 +4,12 @@
 **Repository:** `/home/coding/domain-check` (branch `main`)
 **Bead:** domchk-45da5280 (post-gc verification)
 **Chain:** pre-flight domchk-4b8a3472 ([git-gc-pre-flight-2026-09-06.md](git-gc-pre-flight-2026-09-06.md), 10:39 EDT) → standard gc run → this verification
-**Baselines:** [git-gc-baseline-2026-08-26.md](git-gc-baseline-2026-08-26.md), [git-gc-results-2026-08-26.md](git-gc-results-2026-08-26.md)
+**Baselines:** [git-gc-baseline.md](git-gc-baseline.md) (rolling, updated for this run),
+[git-gc-baseline-2026-08-26.md](git-gc-baseline-2026-08-26.md),
+[git-gc-results-2026-08-26.md](git-gc-results-2026-08-26.md)
+**Follow-up:** re-verified 2026-09-06 12:42 EDT by domchk-825c89bc (fsck, state
+holding, [compression ratio](#compression-ratio) added) — see
+[Re-verification](#re-verification-1242-edt) below.
 
 ## Decision: ✅ DONE — repository healthy, no deep compression required
 
@@ -85,6 +90,62 @@ size-garbage: 0 bytes
 - The 11 loose objects reappeared in the 17 minutes after gc from concurrent
   fleet activity and are **all reachable** (`--unreachable` → 0) — normal
   churn, not a failed cleanup. Next scheduled incremental: 2026-09-07 03:00 EDT.
+
+## Compression Ratio
+
+*Added by the 12:42 EDT follow-up (domchk-825c89bc). Measured as total
+uncompressed object content vs the compressed pack holding it — the ratio a
+gc run is actually responsible for.*
+
+```
+$ git cat-file --batch-all-objects --batch-check='%(objectsize)'
+  → 786,059,102 bytes total uncompressed content
+
+$ ls -l .git/objects/pack/pack-b1b822e67a8930efb1664a55affa9682dd3090d6.pack
+  →      94,856,353 bytes
+```
+
+| Measure | Uncompressed | Packed | Ratio | Space saved |
+|---------|--------------|--------|-------|-------------|
+| All objects (blob+tree+commit+tag) | 749.64 MiB | 90.46 MiB | **8.29:1** | 87.9% |
+| Same, vs `size-pack` (incl. `.idx`) | 749.64 MiB | 90.75 MiB | 8.26:1 | 87.9% |
+
+Uncompressed content by object type:
+
+| Type | Count | Uncompressed | Share |
+|------|-------|--------------|-------|
+| blob | 4,444 | 729.45 MiB | 97.3% |
+| tree | 3,857 | 19.05 MiB | 2.5% |
+| commit | 2,455 | 1.10 MiB | 0.15% |
+| tag | 199 | 40 KiB | <0.01% |
+
+The 8.29:1 figure is the meaningful one: 729 MiB of unique blob content across
+1,726 commits reachable from `HEAD` collapses into a 90 MiB pack. Note what it
+is *not* — `du -sh .git` (93M) is storage including ~2 MiB of non-object
+overhead, so dividing the checkout size by the `.git` size would not produce a
+compression ratio.
+
+## Re-verification (12:42 EDT)
+
+domchk-825c89bc re-ran the acceptance checks ~73 minutes after the run to
+confirm the post-gc state is holding under concurrent fleet load:
+
+| Check | Result at 11:46 | Result at 12:42 |
+|-------|-----------------|-----------------|
+| `git fsck --full` | exit 0, 0 dangling | **exit 0**, 2 dangling trees |
+| `--unreachable` | 0 entries | 5 trees |
+| `.git` size | 93M | **93M** (unchanged) |
+| Loose objects | 11 / 76 KiB | 49 / 324 KiB |
+| Packed objects / packs | 10,906 / 1 | 10,906 / **1** |
+| `size-pack` | 90.75 MiB | 90.75 MiB (unchanged) |
+| Garbage | 0 | **0** |
+
+Every figure holds or is ordinary churn. The 49 loose / 5 unreachable objects
+accumulated from fleet commits in the interim, are all reachable-or-dangling
+normal churn, and are exactly what the next scheduled gc consumes — the pack
+itself did not grow at all. `./scripts/check-repo-health.sh` passes
+(1 pack, "acceptable fragmentation", no large files in the working directory).
+**The repository is verified healthy and ready for production use.**
 
 ## Healthy-Band Check (CLAUDE.md size limits)
 
