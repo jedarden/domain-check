@@ -8,6 +8,62 @@
 
 ---
 
+## Re-verification — 2026-09-06 (domchk-accde0a5)
+
+**Status: ✅ ALL THREE REFS IDENTICAL — 0 ahead / 0 behind, no divergence. The "660 commits ahead" claim is historical and resolved.**
+
+### Live verification (2026-09-06, ~18:39–18:52 EDT)
+
+Checked three times over ~13 minutes while co-tenant workers were actively
+committing (main tip advanced `dec3105` → `5dfaf8b` → `c562ca3`; total history
+1753 → 1755 commits). At every instant:
+
+| Comparison | ahead / behind | Verified via |
+|---|---|---|
+| local main vs `origin/main` (Forgejo) | 0 / 0 | `git fetch origin` + `git ls-remote origin` |
+| local main vs `github-mirror/main` (GitHub) | 0 / 0 | `git fetch github-mirror` + `git ls-remote github-mirror` |
+| `origin/main` vs `github-mirror/main` | 0 / 0 | `git rev-list --left-right --count` |
+
+- All three refs byte-identical (same SHA) at each check — `dec3105`, then
+  `5dfaf8b`, then `c562ca3` — as the fleet committed and pushed.
+- The only gap ever observed was GitHub mirror **lag, not divergence**: 0–1
+  commits for seconds-to-minutes after each Forgejo push, self-healing on the
+  next fetch (`72f782f..dec3105` and `dec3105..5dfaf8b` both observed live).
+  No commit unique to GitHub existed at any point.
+- Comparison commands: `git rev-list --left-right --count main...origin/main`
+  and `main...github-mirror/main` (counts are `behind<TAB>ahead`).
+
+### Where "660 commits ahead with no divergence" came from
+
+The figure is real but stale — it describes a pre-squash state, not today's:
+
+- **Origin (bead record, bf-qzvan):** investigating the bf-1s6c3 alert
+  (2026-08-12 repository-bloat crash), it found Forgejo and GitHub identical at
+  `61d27ac` ("migrate: rehydrate the bead workspace from bead-forge to
+  bead-rs") with the **local main branch 660 commits ahead of both** — no
+  divergent history to reconcile, the commits just needed pushing.
+- **Resolved by push:** the same bead's closure record confirms the push to
+  origin completed with no merge required. The count has been decaying to zero
+  ever since; the 2026-08-13 "422 commits ahead" episode documented further
+  down is the same self-incrementing analysis-loop artifact, also resolved by
+  push.
+- **The baseline commit no longer exists:** `61d27ac` is not an object in this
+  clone — unreachable from main and absent from
+  `pre-squash-history-20260816` — because the 2026-08-16 history squash
+  rewrote that line. The 660 figure is therefore no longer recomputable from
+  current history, and nothing in any committed doc claims it.
+- **Do not re-dispatch on it:** domchk-accde0a5 was one of several auto-split
+  children of the bf-1s6c3 alert (siblings domchk-864e2c21, domchk-f774f440)
+  dispatched to re-verify this claim; a sibling already recorded it NOT FOUND
+  in current state. This section confirms the same: 0 / 0, no divergence,
+  nothing to reconcile.
+
+*Everything below this section is the 2026-09-02 analysis. Its specific
+figures (`debd24f`, `73ff9ab`) are superseded by the section above; its method
+and conclusions still hold.*
+
+---
+
 ## Executive Summary
 
 **Current Status: ✅ REMOTES FULLY SYNCHRONIZED**
