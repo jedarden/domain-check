@@ -101,7 +101,7 @@
 
 ## Crash Remediation Status
 
-**File:** [`docs/archive/crash-investigations/crash-remediation-complete-2026-09-01.md`](docs/archive/crash-investigations/crash-remediation-complete-2026-09-01.md)  
+**File:** [`archive/crash-investigations/crash-remediation-complete-2026-09-01.md`](archive/crash-investigations/crash-remediation-complete-2026-09-01.md)
 **Status:** ✅ COMPLETE
 
 ### Implemented Safeguards

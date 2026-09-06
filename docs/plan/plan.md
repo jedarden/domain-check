@@ -1293,10 +1293,10 @@ for operating procedures and thresholds.
 - **[Root Cause Determination — 2026-09-01 crash corpus](../investigations/root-cause-determination-domchk-6281555d-2026-09-06.md)** — canonical root-cause analysis (memcg-OOM kill path, ruled-out alternates, evidence chain)
 - **[bf-4yjq cleanup verification](../crashes/bf-4yjq-cleanup-verification.md)** — repository repair record with every criterion re-run live
 - **[bf-4yjq consolidated summary](../crash-investigations/bf-4yjq-consolidated-summary-domchk-ea5c6a63-2026-09-06.md)** — full crash-investigation summary for the repair
-- **[Crash Incident Summary](../research/crash-incident-summary-domain-check-2026-08-26.md)** - August incident timeline (historical; SIGHUP-cascade framing superseded by the RCA above)
-- **[Crash Pattern Analysis](../crash-pattern-analysis-2026-08-26.md)** - August crash patterns and signal sources (historical)
+- **[Crash Incident Summary](../archive/crash-investigations/research/crash-incident-summary-domain-check-2026-08-26.md)** - August incident timeline, archived (historical; SIGHUP-cascade framing superseded by the RCA above)
+- **[Crash Pattern Analysis](../archive/crash-investigations/crash-pattern-analysis-2026-08-26.md)** - August crash patterns and signal sources, archived (historical)
 - **[Git GC Mitigation Strategy](../git-gc-mitigation-strategy.md)** - Mitigation strategy with implementation timeline
-- **[Crash Data Bundle: bf-173o7e](../crash-data-bundle-bf-173o7e.md)** - Specific incident details and trace analysis
+- **[Crash Data Bundle: bf-173o7e](../archive/crash-investigations/crash-data-bundle-bf-173o7e.md)** - Specific incident details and trace analysis, archived
 - **`docs/crashes/` and `docs/crash-investigations/`** - Per-incident reports (96 investigation records, all concluding "no domain-check defect")
 
 **Status:** ✅ RESOLVED — infrastructure root cause identified and mitigated,

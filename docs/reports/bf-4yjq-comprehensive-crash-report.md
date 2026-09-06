@@ -6,7 +6,8 @@
 > (2026-08-12 17:54:00–20:30:43 UTC), part of a same-day 455-event workspace-wide crash storm.
 > The "BLOCKED, not actively executing at crash time" claim is likewise unverifiable from
 > surviving evidence. See **`docs/crash-investigations/bf-4yjq-crash-investigation.md`**
-> (canonical) and `docs/crash-circumstances-bf-4yjq-domchk-d5dd1b33-2026-09-02.md`.
+> (canonical) and
+> `docs/archive/crash-investigations/crash-circumstances-bf-4yjq-domchk-d5dd1b33-2026-09-02.md`.
 > The root-cause analysis, system-state telemetry, and resolution record below remain valid.
 
 **Report Date:** August 14, 2026  
