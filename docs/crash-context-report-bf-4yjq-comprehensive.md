@@ -321,6 +321,28 @@ git gc --aggressive
 3. **Automatic GC:** Configure git automatic GC with reasonable thresholds  
 4. **Workflow Fixes:** Review bead bf-2ildm workflow to prevent repeated large file commits  
 
+### Prevention Status Follow-up (2026-09-06)
+
+Each recommendation was re-checked against the live system on 2026-09-06. This
+report's health figures above (1.7 GB) predate the final pack-down — current
+state is `.git` 97 MB, 53 loose objects / 3.78 MiB, one consolidated pack
+(10,980 objects / 90.93 MiB), 0 garbage, `git fsck --full` clean. Verification
+record: [bf-4yjq cleanup verification](crashes/bf-4yjq-cleanup-verification.md).
+
+| # | Recommendation (2026-08-26) | Status (2026-09-06) | Enforced by |
+|---|---|---|---|
+| 1 | Repository size monitoring in CI/CD | **Not in CI — verified.** `domain-check-build` (`k8s/iad-ci/argo-workflows/domain-check-workflowtemplate.yml` in declarative-config) runs lint/test/fuzz plus a kaniko build; every step `git clone`s a fresh copy from Forgejo into an ephemeral container with no size check, and CI never touches the persistent clone where bloat actually accumulates. The equivalent monitoring runs on the lab box instead: repo-health + auto-gc check daily 02:00, size/object/resource monitors every 2–10 min (all six timers verified firing 2026-09-06). **Residual gap:** nothing rejects a large *tracked* file at push time — the >10MB gate is a per-clone pre-commit hook, so a fresh clone (CI's included) has no hook until restored by hand. | On-box systemd timers, not CI |
+| 2 | Pre-commit hook blocking >10MB | ✅ Implemented — `.git/hooks/pre-commit` (MAX_SIZE_MB=10) installed in this clone and written directly against this incident. Per-clone and untracked (source copy `scripts/pre-commit-repo-size-hook` has drifted from the installed version; no installer exists). | `.git/hooks/pre-commit` |
+| 3 | Automatic GC with reasonable thresholds | ✅ Implemented — `auto-gc-trigger.sh` (warn 2 GB, auto-gc 10 GB) on the daily 02:00 timer, incremental gc daily 03:00, full gc weekly Sun 04:00 under `MemoryMax=4G`; plus persistent `pack.windowMemory=2g` / `pack.deltaCacheSize=1g` / `pack.threads=1` bounding bare `git gc` *and* `git push` pack-objects (the later bf-173o7e / bf-198ne memcg-OOM mechanism, which happened *after* this report was written and is not covered by its "no crashes since cleanup" claim). | `check-repo-health` / `git-gc` timers + git config |
+| 4 | Workflow fixes for repeated large-file commits | ✅ Superseded by a stronger fix — the whole `.beads/` directory is gitignored, plus repo-wide `*.db` and `*.jsonl`; `git ls-files .beads` → 0 tracked files. The 17+ identical 237MB `.beads/*.jsonl` snapshot commits that caused this incident can no longer be staged at all. | `.gitignore` |
+
+**Prevention documentation set (canonical order):**
+[crash-prevention-requirements.md](crash-prevention-requirements.md) (gap list G-1..G-13) →
+[crash-prevention-design.md](crash-prevention-design.md) (response half) →
+[crash-prevention-monitoring-design.md](crash-prevention-monitoring-design.md) (detection half) →
+[comprehensive-crash-prevention-guide.md](comprehensive-crash-prevention-guide.md) (operational) →
+[repository-maintenance-guide.md](maintenance/repository-maintenance-guide.md) (checklist + thresholds + CI/CD coverage status).
+
 ---
 
 ## Investigation Confidence
