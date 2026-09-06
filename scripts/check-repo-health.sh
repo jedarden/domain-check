@@ -43,7 +43,7 @@ echo ""
 
 # 4. Check for large binary files in working directory
 echo "💎 Large Binary Files in Working Directory:"
-LARGE_BINARIES=$(find . -type f -size +10M -not -path "./.git/*" -not -path "./node_modules/*" -not -path "./target/*" 2>/dev/null || true)
+LARGE_BINARIES=$(find . -type f -size +10M -not -path "./.git/*" -not -path "./.beads/*" -not -path "./node_modules/*" -not -path "./target/*" 2>/dev/null || true)
 
 if [ -n "$LARGE_BINARIES" ]; then
     echo "⚠️  Found large files in working directory (>10MB):"
