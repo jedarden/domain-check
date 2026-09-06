@@ -43,7 +43,7 @@ the largest single source of misclassification:
 
 1. **SIGKILL (9) from host OOM** — early bf-1s6c3 / bf-4yjq docs.
 2. **SIGHUP (1)** — bf-3hivb, `signal-minus1-root-cause-analysis-verified-2026-09-02.md`.
-3. **Ambiguous, one of the above** — `root-cause-analysis-exit-code-negative-one.md`.
+3. **Ambiguous, one of the above** — `docs/archive/crash-investigations/root-cause-analysis-exit-code-negative-one.md`.
 4. **A needle sentinel for *any* signal death** (`code().unwrap_or(-1)`), **not
    a signal number at all** — `docs/crashes/bf-198ne-crash-report.md`, which is
    the only reading backed by kernel records and which explicitly supersedes
@@ -280,14 +280,14 @@ Phase 1 is entirely inside this repo.
 
 The task asked for the 70/20/8/2 pattern to be identified. It is documented —
 it appears in CLAUDE.md, `docs/crash-documentation-index.md`,
-`crash-root-cause-analysis-bf-1s6c3-final.md`, and
+`docs/archive/crash-investigations/crash-root-cause-analysis-bf-1s6c3-final.md`, and
 `comprehensive-crash-investigation-report-2026-09-01.md` as
 **infrastructure 70% / workflow 20% / service 8% / code defects 2%** — but a
 requirements doc that repeated it uncritically would mislead implementation
 work. Three things must be recorded:
 
 1. **No document derives the numbers from a counted population.** The only
-   table that attaches counts (`crash-investigation-findings-summary-2026-09-02.md`)
+   table that attaches counts (`docs/archive/crash-investigations/crash-investigation-findings-summary-2026-09-02.md`)
    maps 70%→180, 20%→47, 8%→15, 2%→5 against 247 events — and then reports
    domain-check defects as **0% = 0** in the same table, contradicting its own
    2% row.

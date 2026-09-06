@@ -273,7 +273,7 @@ Complex alerts benefit from decomposition into focused, single-purpose child bea
 - Sequential chaining with previous beads
 - Specific contribution to overall resolution
 
-**Full details:** See [Bead Split Resolution: Alert bf-xumcu (2026-08-26)](bead-split-resolution-bf-xumcu-2026-08-26.md)
+**Full details:** See [Bead Split Resolution: Alert bf-xumcu (2026-08-26)](docs/archive/crash-investigations/bead-split-resolution-bf-xumcu-2026-08-26.md)
 
 ---
 

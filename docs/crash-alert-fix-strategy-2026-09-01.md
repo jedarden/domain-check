@@ -405,10 +405,10 @@ def detect_crash_surge():
 
 ## Related Documentation
 
-- [Crash Incident Summary - 2026-08-26](crash-incident-summary-domain-check-2026-08-26.md)
+- [Crash Incident Summary - 2026-08-26](docs/archive/crash-investigations/research/crash-incident-summary-domain-check-2026-08-26.md)
 - [Crash Pattern Analysis - bf-5tgsk](crash-investigation-bf-5tgsk-2026-08-16.md)
-- [Verification Report - bf-6bio4g](verification-report-domchk-7080cea2-bf-6bio4g-crash.md)
-- [Verification Report - bf-4hp9p](verification-report-domchk-ccd3421d-duplicate-alert-resolved-bf-4hp9p-crash.md)
+- [Verification Report - bf-6bio4g](docs/archive/crash-investigations/verification-report-domchk-7080cea2-bf-6bio4g-crash.md)
+- [Verification Report - bf-4hp9p](docs/archive/crash-investigations/verification-report-domchk-ccd3421d-duplicate-alert-resolved-bf-4hp9p-crash.md)
 
 ---
 

@@ -40,9 +40,9 @@ Based on the root cause analysis from child bead domchk-f9b26e34 and the compreh
 ### Evidence Summary
 
 The comprehensive crash investigation documented in:
-- `docs/crash-remediation-strategy-2026-09-01.md`
+- `docs/archive/crash-investigations/crash-remediation-strategy-2026-09-01.md`
 - `docs/crash-mitigation-strategies.md`
-- `docs/crash-context-bf-1s6c3-complete.md`
+- `docs/archive/crash-investigations/crash-context-bf-1s6c3-complete.md`
 
 Shows that:
 1. **No OOM events involving domain-check processes** were found
@@ -351,7 +351,7 @@ curl -sf --max-time 5 https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health
 
 ### New Documentation Created
 
-1. **`docs/crash-remediation-strategy-2026-09-01.md`**
+1. **`docs/archive/crash-investigations/crash-remediation-strategy-2026-09-01.md`**
    - Comprehensive remediation strategy (3 phases)
    - Root cause-based fix proposals
    - Implementation roadmap
@@ -363,7 +363,7 @@ curl -sf --max-time 5 https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health
    - Risk assessments
    - Git gc safety guidance
 
-3. **`docs/git-reconciliation-safer-approach-analysis.md`**
+3. **`docs/archive/crash-investigations/git-reconciliation-safer-approach-analysis.md`**
    - Git workflow best practices
    - Conflict resolution strategies
    - Safe operation patterns

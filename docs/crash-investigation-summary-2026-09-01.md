@@ -433,7 +433,7 @@ journalctl --since "CRASH_TIME-5m" | grep -i "sighup"
 
 | Document | Description | Location |
 |----------|-------------|----------|
-| Root Cause Analysis | Complete analysis of exit code -1 crashes | `docs/crash-root-cause-analysis-domchk-c7176067-2026-09-01.md` |
+| Root Cause Analysis | Complete analysis of exit code -1 crashes | `docs/archive/crash-investigations/crash-root-cause-analysis-domchk-c7176067-2026-09-01.md` |
 | Crash Safeguards Guide | Monitoring, alerts, operational procedures | `docs/crash-safeguards-and-monitoring.md` |
 | Fix Recommendations | Infrastructure and tool improvements | `docs/fix-recommendations-crash-prevention-2026-09-01.md` |
 | BF-173o7e Analysis | Specific git gc crash investigation | `docs/root-cause-analysis-bf-173o7e-2026-09-01.md` |

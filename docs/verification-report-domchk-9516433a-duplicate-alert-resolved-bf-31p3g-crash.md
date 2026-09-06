@@ -55,7 +55,7 @@ This alert is a **duplicate notification** for crash bead bf-31p3g, which was al
 
 **Evidence:**
 1. Original crash investigation completed: 2026-08-25
-2. Comprehensive documentation exists: `crash-investigation-bf-31p3g-2026-08-16.md`
+2. Comprehensive documentation exists: `docs/archive/crash-investigations/crash-investigation-bf-31p3g-2026-08-16.md`
 3. Root cause identified and documented
 4. System has recovered and is stable
 5. No ongoing issues or persistent defects
@@ -127,7 +127,7 @@ This alert is a **duplicate notification** for crash bead bf-31p3g, which was al
 - System-wide crisis: 826 crashes in single day
 - System recovered: Current load healthy, zero crashes
 - No code defects: Transient resource exhaustion event
-- Comprehensive documentation exists: `crash-investigation-bf-31p3g-2026-08-16.md`
+- Comprehensive documentation exists: `docs/archive/crash-investigations/crash-investigation-bf-31p3g-2026-08-16.md`
 
 **Actions Taken:**
 - Verified original crash investigation completeness
@@ -142,6 +142,6 @@ This alert is a **duplicate notification** for crash bead bf-31p3g, which was al
 **Verification Completed:** 2026-09-01  
 **Verification Duration:** ~5 minutes  
 **Confidence Level:** HIGH  
-**Original Investigation:** crash-investigation-bf-31p3g-2026-08-16.md  
+**Original Investigation:** docs/archive/crash-investigations/crash-investigation-bf-31p3g-2026-08-16.md  
 **System Status:** Healthy and stable  
 **Recommendation:** Close duplicate alert, reference original investigation

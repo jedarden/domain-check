@@ -101,7 +101,7 @@
 
 ## Crash Remediation Status
 
-**File:** [`crash-remediation-complete-2026-09-01.md`](crash-remediation-complete-2026-09-01.md)  
+**File:** [`docs/archive/crash-investigations/crash-remediation-complete-2026-09-01.md`](docs/archive/crash-investigations/crash-remediation-complete-2026-09-01.md)  
 **Status:** ✅ COMPLETE
 
 ### Implemented Safeguards
@@ -306,7 +306,7 @@ docs/
 ├── crash-response-guide.md                    # Start here for crash investigation
 ├── comprehensive-crash-investigation-report-2026-09-01.md  # Complete investigation
 ├── crash-mitigation-strategies.md            # Mitigation proposals
-├── crash-remediation-complete-2026-09-01.md  # Remediation status
+├── docs/archive/crash-investigations/crash-remediation-complete-2026-09-01.md  # Remediation status
 ├── crash-documentation-index.md              # This file
 ├── crashes/                                  # Individual crash reports
 │   ├── bf-173o7e-report.md                  # Example: Git gc crash
