@@ -56,8 +56,19 @@ NO_CGROUP="${SAFE_GC_NO_CGROUP:-0}"
 NO_ULIMIT="${SAFE_GC_NO_ULIMIT:-0}"
 CGROUP_CAP="unknown"
 ULIMIT_CAP="off"
-CAPPED_SEQ=0
 CHECKPOINT_STATUS="unknown"
+
+# Unique transient unit name per call. A name must never be reused, for two
+# independent reasons: $$ is recycled across processes on a long-uptime box
+# (an OOM-killed scope lingers in failed state until reset), and every capped
+# git invocation runs inside a pipeline (`run_memory_capped git … | tee`), so
+# the function body executes in a subshell where a per-process counter resets
+# to the same value each call. Reusing a still-loaded name makes systemd-run
+# fail client-side with "already loaded or has a fragment file" and the
+# command never runs. Nanosecond resolution inside the call keeps names fresh.
+scope_unit_name() {  # scope_unit_name <role>
+  echo "safe-git-gc-$1-$$-$(date +%s%N 2>/dev/null || echo "$RANDOM$RANDOM")"
+}
 GC_NEEDED=false
 GC_REASON=""
 
@@ -264,7 +275,7 @@ check_resources() {
 resolve_memory_enforcement() {
   CGROUP_CAP="off"
   if [[ "$NO_CGROUP" != "1" ]] && command -v systemd-run >/dev/null 2>&1; then
-    if systemd-run --user --quiet --scope --unit="safe-git-gc-probe-$$" \
+    if systemd-run --user --quiet --scope --unit="$(scope_unit_name probe)" \
         -p MemoryMin=1M -- true >/dev/null 2>&1; then
       CGROUP_CAP="on"
     fi
@@ -297,9 +308,8 @@ run_memory_capped() {
   if [[ "$CGROUP_CAP" == "on" ]]; then
     local max_bytes
     max_bytes="$(mem_to_bytes "$CGROUP_MAX")"
-    CAPPED_SEQ=$((CAPPED_SEQ + 1))
     systemd-run --user --quiet --scope \
-      --unit="safe-git-gc-$$-${CAPPED_SEQ}" \
+      --unit="$(scope_unit_name run)" \
       -p "MemoryMax=${max_bytes}" \
       -- "$@"
   elif [[ "$ULIMIT_CAP" == "on" ]]; then
@@ -307,7 +317,6 @@ run_memory_capped() {
     # the child processes git spawns — but it still stops a single runaway.
     local cap_kb
     cap_kb="$(ulimit_cap_kb)"
-    CAPPED_SEQ=$((CAPPED_SEQ + 1))
     (
       if ! ulimit -v "$cap_kb" 2>/dev/null; then
         echo "safe-git-gc: could not apply ulimit -v ${cap_kb}KiB; running without the soft bound" >&2
