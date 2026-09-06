@@ -116,3 +116,39 @@ delivered `fb7bedd` to GitHub.
 
 Baseline figures in the body above remain correct for the `e0fab45` snapshot
 they describe; only the tip SHA moved.
+
+## Addendum 2026-09-06 22:14 UTC — GitHub side fetched and verified at `72f782f`, still zero divergence
+
+GitHub-side counterpart of the addenda above (bead **domchk-0dcecbe7**).
+`git fetch github-mirror main` succeeded and advanced the tracking ref
+`fb7bedd..72f782f`, then both remotes were checked live with `git ls-remote`
+(cached remote-tracking refs were not trusted):
+
+| Ref (live `git ls-remote`) | SHA |
+|-----|-----|
+| `github-mirror` (GitHub) `refs/heads/main` | `72f782f32047497e8dc31e8cd469bdfe0ad4ff12` |
+| `origin` (Forgejo) `refs/heads/main` | `72f782f32047497e8dc31e8cd469bdfe0ad4ff12` |
+| local `main` (HEAD) | `72f782f32047497e8dc31e8cd469bdfe0ad4ff12` |
+
+**Zero divergence still holds** — the push mirror delivered the 22:09 UTC
+commit to GitHub, and GitHub = Forgejo = local HEAD.
+
+Commit at the GitHub tip:
+
+| Field | Value |
+|-------|-------|
+| SHA | `72f782f32047497e8dc31e8cd469bdfe0ad4ff12` |
+| Subject | `docs: re-verify Forgejo origin/main — tip advanced to fb7bedd, zero divergence holds (domchk-2a4e7801)` |
+| Author / Committer | `jedarden <github@jedarden.com>` |
+| Date | `2026-09-06T18:09:58-04:00` (22:09:58 UTC, unix 1788732598) |
+| Parent | `fb7beddb74599da29173f0d41f76d03a87fa7a2c` |
+
+This snapshot is also recorded as structured state in
+`docs/github-remote-state.json`, completing the `next_steps` list that
+`docs/forgejo-remote-state.json` (2026-08-13) left open: "Document GitHub
+mirror state" / "Compare Forgejo vs GitHub mirror states". The three-file
+family (`forgejo-remote-state.json`, `local-main-state.json`,
+`github-remote-state.json`) now covers all three refs at their respective
+capture times; note the older two predate the 2026-08-16 history squash, so
+their SHAs are not comparable to the current tip — only this GitHub snapshot
+is current.
