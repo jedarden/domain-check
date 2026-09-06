@@ -1,8 +1,23 @@
 # Repository Maintenance Guide
 
 **Purpose:** Prevent repository bloat and maintain system stability  
-**Last Updated:** 2026-09-02  
+**Last Updated:** 2026-09-06  
 **Status:** ✅ Active
+
+---
+
+## Current Repository Health (verified live 2026-09-06)
+
+The repository is **repaired and healthy**. The ~18GB loose-object bloat that
+caused the memcg-OOM crashes (bf-1s6c3, bf-4yjq) was packed down and cannot
+recur through `.beads/` (now gitignored, 0 tracked files).
+
+- **`.git`:** 94 MB (was ~18 GB) — 136 loose objects / 1.04 MiB, one pack
+  (10,712 objects, 90.43 MiB), 0 garbage
+- **Integrity:** `git fsck --full` clean; `./scripts/check-repo-health.sh` passes
+- **Verification record:** [bf-4yjq cleanup verification](../crashes/bf-4yjq-cleanup-verification.md)
+
+Everything below describes the standing procedures that keep it that way.
 
 ---
 

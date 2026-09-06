@@ -1249,20 +1249,55 @@ For the complete ADR with context, alternatives considered, and consequences, se
 
 ## Incident Response & Crash Analysis
 
-### Crash Incident Investigation (2026-08-14 to 2026-08-28)
+### Crash Incident Investigation (2026-08-14 to 2026-09-06)
 
-A comprehensive investigation of perceived crashes revealed **zero actual crashes** affecting domain-check operations. All investigated incidents were either system-wide SIGHUP cascade events, workflow issues during bead closing, or false positive alerts.
+Across 157+ investigations, **no domain-check code defect was ever found** —
+zero panics, zero stack traces, zero application errors attributable to this
+codebase. The agent-worker crashes that prompted the investigations were real,
+but infrastructure: unbounded-memory maintenance processes (bare `git gc
+--aggressive`, large `git push`) running inside per-dispatch systemd scopes
+capped at 12 GiB, killed by the kernel's memory-cgroup OOM killer
+(`CONSTRAINT_MEMCG`, uncatchable SIGKILL, recorded as `exit_code=-1`). The host
+was never out of memory — the constraint was the cgroup.
 
-**Key Findings:**
-- No OOM events involving domain-check processes
-- No git gc failures (all operations completed successfully)
-- Repository integrity maintained throughout
-- All crashes were external termination (SIGHUP) or workflow issues
+> The earlier framing from the August phase — a system-wide SIGHUP/oomd cascade
+> with "zero actual crashes" — is **superseded**. Surviving kernel records show
+> the kills were memcg OOM, and the ~18GB of loose objects that bloated this
+> repository (see below) was real, not a false alarm.
 
-**Comprehensive Documentation:**
-- **[Crash Incident Summary](../research/crash-incident-summary-domain-check-2026-08-26.md)** - Complete incident timeline and analysis
-- **[Crash Pattern Analysis](../crash-pattern-analysis-2026-08-26.md)** - System-wide crash patterns and signal sources
-- **[Git GC Mitigation Strategy](../git-gc-mitigation-strategy.md)** - Detailed mitigation strategy with implementation timeline
+**Repository repair (complete):** The bloat that made routine git operations
+OOM-prone was removed — ~18GB of loose objects packed down to a 94MB
+repository, and `.beads/` (the untracked bead workspace that drove the growth)
+is now gitignored so the failure mode cannot recur through it.
+
+**Current repository health — re-verified live 2026-09-06:**
+
+| Metric | Current | Healthy threshold |
+|--------|---------|-------------------|
+| `.git` size | 94 MB (was ~18 GB) | < 500 MB |
+| Loose objects | 136 / 1.04 MiB (normal churn; daily gc packs them) | < 100 MB |
+| Packed objects | 10,712 in 1 pack, 90.43 MiB | 1 pack, fully consolidated |
+| Garbage | 0 bytes | 0 |
+| `git fsck --full` | clean (exit 0) | clean |
+| `./scripts/check-repo-health.sh` | passes | passes |
+| `.beads/` tracked files | 0 (gitignored, `.gitignore:66`) | 0 |
+
+Prevention now in force: `safe-git-gc.sh` bounds every gc invocation, persistent
+git config caps pack memory (`pack.windowMemory=2g`, `pack.threads=1` — applied
+repo-locally **and** globally, so bare `git gc`/`git push` are bounded too), and
+systemd user timers run daily incremental gc plus daily repo-health checks. See
+the [Repository Maintenance Guide](../maintenance/repository-maintenance-guide.md)
+for operating procedures and thresholds.
+
+**Documentation:**
+- **[Root Cause Determination — 2026-09-01 crash corpus](../investigations/root-cause-determination-domchk-6281555d-2026-09-06.md)** — canonical root-cause analysis (memcg-OOM kill path, ruled-out alternates, evidence chain)
+- **[bf-4yjq cleanup verification](../crashes/bf-4yjq-cleanup-verification.md)** — repository repair record with every criterion re-run live
+- **[bf-4yjq consolidated summary](../crash-investigations/bf-4yjq-consolidated-summary-domchk-ea5c6a63-2026-09-06.md)** — full crash-investigation summary for the repair
+- **[Crash Incident Summary](../research/crash-incident-summary-domain-check-2026-08-26.md)** - August incident timeline (historical; SIGHUP-cascade framing superseded by the RCA above)
+- **[Crash Pattern Analysis](../crash-pattern-analysis-2026-08-26.md)** - August crash patterns and signal sources (historical)
+- **[Git GC Mitigation Strategy](../git-gc-mitigation-strategy.md)** - Mitigation strategy with implementation timeline
 - **[Crash Data Bundle: bf-173o7e](../crash-data-bundle-bf-173o7e.md)** - Specific incident details and trace analysis
+- **`docs/crashes/` and `docs/crash-investigations/`** - Per-incident reports (96 investigation records, all concluding "no domain-check defect")
 
-**Status:** ✅ RESOLVED - Domain Check is healthy with no actual crashes
+**Status:** ✅ RESOLVED — infrastructure root cause identified and mitigated,
+repository repaired and holding at 94 MB, domain-check code confirmed defect-free
