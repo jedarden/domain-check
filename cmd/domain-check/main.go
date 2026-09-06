@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jedarden/domain-check/internal/bootstrap"
@@ -13,8 +15,8 @@ import (
 	"github.com/jedarden/domain-check/internal/cli"
 	"github.com/jedarden/domain-check/internal/config"
 	"github.com/jedarden/domain-check/internal/httpclient"
-	"github.com/jedarden/domain-check/internal/rdap"
 	"github.com/jedarden/domain-check/internal/ratelimit"
+	"github.com/jedarden/domain-check/internal/rdap"
 	"github.com/jedarden/domain-check/internal/server"
 	"github.com/jedarden/domain-check/internal/watch"
 	"github.com/jedarden/domain-check/internal/whois"
@@ -232,10 +234,10 @@ func runCheck(args []string) {
 func runBulk(args []string) {
 	// Default configuration.
 	cfg := cli.BulkConfig{
-		Format:      "text",
-		Concurrency: 20,
-		Timeout:     30 * time.Second,
-		UserAgent:   "domain-check/1.0",
+		Format:       "text",
+		Concurrency:  20,
+		Timeout:      30 * time.Second,
+		UserAgent:    "domain-check/1.0",
 		ShowProgress: false,
 	}
 
@@ -399,23 +401,28 @@ func runServer(args []string) {
 	// Initialize logger.
 	log := server.DefaultLogger(cfg.LogFormat, cfg.LogLevel)
 
+	// Context cancelled on SIGINT/SIGTERM/SIGHUP. Server.Run installs its own
+	// signal handler, but every background goroutine below (rate limiter
+	// cleanup, metrics sampling, bootstrap refresh, watch polling) watches
+	// this one so all of them stop together at shutdown instead of leaking.
+	// The two registrations are deliberate, not a double-handle bug: Run's
+	// covers the server when it runs standalone, this one covers the
+	// goroutines started here.
+	ctx, stop := signal.NotifyContext(context.Background(),
+		syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer stop()
+
 	// Create rate limiter for server (per-IP rate limiting).
 	rateLimiter := server.NewRateLimiter(log)
 
 	// Start periodic cleanup of stale IP entries (every 10 minutes).
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			rateLimiter.Cleanup()
-		}
-	}()
+	// SAFEGUARD: RunCleanup exits on ctx cancellation, so the goroutine never
+	// outlives shutdown.
+	go rateLimiter.RunCleanup(ctx, 10*time.Minute)
 
 	// Initialize Prometheus metrics.
 	metrics := server.GetMetrics()
 
-	// Initialize the domain checker with all its dependencies.
-	ctx := context.Background()
 	domainChecker, bootstrap, err := setupDomainChecker(ctx, cfg, log, metrics)
 	if err != nil {
 		log.Error("failed to initialize domain checker", "error", err)
@@ -529,7 +536,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 	// Create RDAP client.
 	rdapClient := rdap.NewRDAPClient(rdap.RDAPClientConfig{
 		HTTPClient: safeClient,
-		Bootstrap: bs,
+		Bootstrap:  bs,
 		RateLimit:  registryRateLimit,
 		AllowList:  allowlist,
 		UserAgent:  "domain-check/1.0",
@@ -557,7 +564,7 @@ func setupDomainChecker(ctx context.Context, cfg *config.Config, log *slog.Logge
 		WHOISClient:     whoisClient,
 		DNSPreFilter:    dnsPreFilter,
 		Cache:           resultCache,
-		Bootstrap: bs,
+		Bootstrap:       bs,
 		UseDNSPrefilter: false, // Disabled by default - can be enabled via config
 		BulkConfig:      checker.DefaultBulkCheckConfig(),
 		ActiveMetrics:   metrics,

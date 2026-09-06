@@ -28,9 +28,13 @@ func New(cfg *config.Config, handler http.Handler, log *slog.Logger) *Server {
 			Handler:           handler,
 			ReadTimeout:       15 * time.Second,
 			ReadHeaderTimeout: 5 * time.Second,
-			WriteTimeout:      30 * time.Second,
-			IdleTimeout:       120 * time.Second,
-			MaxHeaderBytes:    1 << 20, // 1MB
+			// WriteTimeout must exceed DefaultRequestTimeout: the timeout
+			// middleware writes its 503 when a request runs past that budget,
+			// and a shorter connection write deadline would drop the response
+			// the moment it fired. 45s = 30s request budget + 15s to flush.
+			WriteTimeout:   45 * time.Second,
+			IdleTimeout:    120 * time.Second, // reaps keep-alive connections idle for 2 min
+			MaxHeaderBytes: 1 << 20,           // 1MB
 		},
 		log: log,
 	}

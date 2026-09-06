@@ -23,9 +23,17 @@ type WatchHandlerInterface interface {
 // 2. Client IP - extract client IP for rate limiting
 // 3. Logging - log all requests
 // 4. Security Headers - CSP, X-Frame-Options, etc.
-// 5. Rate Limit - per-IP rate limiting
-// 6. CORS - cross-origin support for API
-// 7. Handler - the actual route handler
+// 5. Body Limit - cap request body size
+// 6. Timeout - cancel long-running requests and reply 503
+// 7. Recover - convert handler panics into 500 responses
+// 8. CORS - cross-origin support for API
+// 9. Handler - the actual route handler
+//
+// Recover sits inside Timeout because Timeout runs the handler in its own
+// goroutine, and a panic in another goroutine can only be recovered by
+// middleware that is itself inside that goroutine. BodyLimit sits outside
+// Timeout for the mirror reason: an oversized body is rejected before the
+// timeout middleware has spent a goroutine and a deadline on it.
 func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch DomainChecker, bootstrap BootstrapProvider, monitor *ServiceMonitor, metrics *Metrics, watchHandler WatchHandlerInterface) http.Handler {
 	mux := http.NewServeMux()
 
@@ -33,14 +41,16 @@ func Router(cfg *config.Config, log *slog.Logger, rateLimiter *RateLimiter, ch D
 	registerRoutes(mux, cfg, log, rateLimiter, ch, bootstrap, monitor, metrics, watchHandler)
 
 	// Build middleware chain (applied in reverse order).
-	// Outer to inner: RequestID -> ClientIP -> Logging -> Metrics -> SecurityHeaders -> RateLimit -> CORS -> Handler
+	// Outer to inner: RequestID -> ClientIP -> Logging -> Metrics -> SecurityHeaders -> BodyLimit -> Timeout -> Recover -> CORS -> Handler
 	handler := Chain(mux,
 		RequestID,
 		ClientIP(cfg.TrustProxy()),
 		Logging(log),
 		MetricsMiddleware(metrics),
 		SecurityHeaders,
-		BodyLimit(64 * 1024), // 64 KB max body for POST endpoints
+		BodyLimit(64*1024), // 64 KB max body for POST endpoints
+		Timeout(DefaultRequestTimeout, log, metrics),
+		Recover(log, metrics),
 		CORS(cfg),
 	)
 
@@ -89,7 +99,7 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, ra
 }
 
 const (
-	healthyThreshold   = 48 * time.Hour // Bootstrap age for "degraded" status
+	healthyThreshold   = 48 * time.Hour     // Bootstrap age for "degraded" status
 	unhealthyThreshold = 7 * 24 * time.Hour // Bootstrap age for "unhealthy" status (7 days)
 )
 
@@ -125,10 +135,10 @@ func healthHandler(log *slog.Logger, bootstrap BootstrapProvider, monitor *Servi
 		}
 
 		health := map[string]interface{}{
-			"status":         status,
-			"bootstrap_age":  formatDuration(bootstrapAge),
-			"uptime":         formatDuration(uptime),
-			"checks_served":  checksServed,
+			"status":        status,
+			"bootstrap_age": formatDuration(bootstrapAge),
+			"uptime":        formatDuration(uptime),
+			"checks_served": checksServed,
 		}
 
 		writeJSONResponse(w, statusCode, health)

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jedarden/domain-check/internal/checker"
 	"github.com/jedarden/domain-check/internal/config"
 )
 
@@ -82,10 +83,11 @@ func TestGracefulShutdownWithActiveConnections(t *testing.T) {
 // to prevent resource exhaustion from slow or hanging connections.
 //
 // Safeguards tested:
-// 1. ReadTimeout (15s) prevents slow clients from consuming resources
-// 2. ReadHeaderTimeout (5s) prevents slow header reading
-// 3. WriteTimeout (30s) prevents slow response writes
-// 4. IdleTimeout (120s) closes idle connections
+//  1. ReadTimeout (15s) prevents slow clients from consuming resources
+//  2. ReadHeaderTimeout (5s) prevents slow header reading
+//  3. WriteTimeout (45s) prevents slow response writes, while staying above
+//     the request-timeout middleware budget so its 503 can still be flushed
+//  4. IdleTimeout (120s) closes idle connections
 func TestHTTPTimeouts(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -103,8 +105,14 @@ func TestHTTPTimeouts(t *testing.T) {
 	if srv.http.ReadHeaderTimeout != 5*time.Second {
 		t.Errorf("ReadHeaderTimeout not set correctly: got %v, want %v", srv.http.ReadHeaderTimeout, 5*time.Second)
 	}
-	if srv.http.WriteTimeout != 30*time.Second {
-		t.Errorf("WriteTimeout not set correctly: got %v, want %v", srv.http.WriteTimeout, 30*time.Second)
+	if srv.http.WriteTimeout != 45*time.Second {
+		t.Errorf("WriteTimeout not set correctly: got %v, want %v", srv.http.WriteTimeout, 45*time.Second)
+	}
+	// The timeout middleware writes its 503 once a request exceeds
+	// DefaultRequestTimeout, so the connection write deadline must outlive it
+	// or the response is dropped the moment the guard fires.
+	if srv.http.WriteTimeout <= DefaultRequestTimeout {
+		t.Errorf("WriteTimeout (%v) must exceed the request timeout budget (%v)", srv.http.WriteTimeout, DefaultRequestTimeout)
 	}
 	if srv.http.IdleTimeout != 120*time.Second {
 		t.Errorf("IdleTimeout not set correctly: got %v, want %v", srv.http.IdleTimeout, 120*time.Second)
@@ -114,6 +122,18 @@ func TestHTTPTimeouts(t *testing.T) {
 	}
 
 	t.Log("HTTP timeout safeguards verified")
+}
+
+// TestRequestTimeoutAccommodatesBulkChecker pins the documented floor of
+// DefaultRequestTimeout: the bulk checker's own TotalTimeout. A request budget
+// below it would let the timeout guard answer a legitimate bulk request with a
+// 503 before the checker ever finished.
+func TestRequestTimeoutAccommodatesBulkChecker(t *testing.T) {
+	bulkTimeout := checker.DefaultBulkCheckConfig().TotalTimeout
+	if DefaultRequestTimeout < bulkTimeout {
+		t.Errorf("DefaultRequestTimeout (%v) is below the bulk checker's TotalTimeout (%v): bulk requests would be cut off by the timeout guard",
+			DefaultRequestTimeout, bulkTimeout)
+	}
 }
 
 // TestContextCancellation verifies that context cancellation propagates

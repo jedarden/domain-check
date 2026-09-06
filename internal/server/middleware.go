@@ -247,6 +247,19 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// Write forwards a body write, recording the implicit 200 that net/http sends
+// when a handler writes without calling WriteHeader first. Without this, a
+// handler that wrote body bytes is indistinguishable from one that never wrote
+// at all: Logging reports status 0, and Recover (safeguards.go) reads
+// rw.status == 0 as "the response head is untouched" and tries to write a 500
+// onto an already-started response.
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if rw.status == 0 {
+		rw.status = http.StatusOK
+	}
+	return rw.ResponseWriter.Write(b)
+}
+
 // ipLimiter holds a per-IP rate limiter map with cleanup support.
 type ipLimiter struct {
 	mu       sync.RWMutex
@@ -316,9 +329,9 @@ type RateLimiter struct {
 func NewRateLimiter(log *slog.Logger) *RateLimiter {
 	return &RateLimiter{
 		log:       log,
-		webLimit:  newIPLimiter(10, 10),  // 10/min, burst 10
-		apiLimit:  newIPLimiter(60, 60),  // 60/min, burst 60
-		bulkLimit: newIPLimiter(5, 5),    // 5/min, burst 5
+		webLimit:  newIPLimiter(10, 10), // 10/min, burst 10
+		apiLimit:  newIPLimiter(60, 60), // 60/min, burst 60
+		bulkLimit: newIPLimiter(5, 5),   // 5/min, burst 5
 	}
 }
 
@@ -377,6 +390,25 @@ func (rl *RateLimiter) Cleanup() {
 	rl.apiLimit.cleanup()
 	rl.bulkLimit.cleanup()
 	rl.log.Debug("rate limiter cleanup completed")
+}
+
+// RunCleanup calls Cleanup on every tick of interval until ctx is cancelled.
+// Run it as `go rateLimiter.RunCleanup(ctx, 10*time.Minute)` so the cleanup
+// goroutine's lifetime is owned by the caller's context and it cannot outlive
+// shutdown.
+func (rl *RateLimiter) RunCleanup(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			rl.Cleanup()
+		case <-ctx.Done():
+			rl.log.Debug("rate limiter cleanup stopped", "reason", ctx.Err())
+			return
+		}
+	}
 }
 
 // contextWithClientIP is a helper for tests to set client IP in context.

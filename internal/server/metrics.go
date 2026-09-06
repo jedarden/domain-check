@@ -12,15 +12,17 @@ import (
 
 // Metrics holds all Prometheus metrics for the service.
 type Metrics struct {
-	requestsTotal    *prometheus.CounterVec
-	requestDuration  *prometheus.HistogramVec
-	rdapRequests     *prometheus.CounterVec
-	rdapDuration     *prometheus.HistogramVec
-	cacheHits        *prometheus.CounterVec
-	activeChecks     prometheus.Gauge
-	bulkCheckSize    *prometheus.HistogramVec
-	checksServed     prometheus.Counter
-	bootstrapAge     *prometheus.GaugeVec
+	requestsTotal   *prometheus.CounterVec
+	requestDuration *prometheus.HistogramVec
+	rdapRequests    *prometheus.CounterVec
+	rdapDuration    *prometheus.HistogramVec
+	cacheHits       *prometheus.CounterVec
+	activeChecks    prometheus.Gauge
+	bulkCheckSize   *prometheus.HistogramVec
+	checksServed    prometheus.Counter
+	bootstrapAge    *prometheus.GaugeVec
+	panicsRecovered prometheus.Counter
+	requestTimeouts prometheus.Counter
 }
 
 var (
@@ -98,6 +100,18 @@ func newMetrics() *Metrics {
 			},
 			[]string{},
 		),
+		panicsRecovered: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "domcheck_panics_recovered_total",
+				Help: "Total number of handler panics recovered by middleware",
+			},
+		),
+		requestTimeouts: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "domcheck_request_timeouts_total",
+				Help: "Total number of requests that exceeded the request timeout",
+			},
+		),
 	}
 
 	// Register Go runtime metrics.
@@ -165,6 +179,19 @@ func (m *Metrics) AddChecksServed(n int) {
 // SetBootstrapAge sets the bootstrap cache age in seconds.
 func (m *Metrics) SetBootstrapAge(ageSeconds float64) {
 	m.bootstrapAge.WithLabelValues().Set(ageSeconds)
+}
+
+// RecordPanicRecovered increments the recovered-panic counter. The Recover
+// middleware calls it once per handler panic it converts into a 500 response.
+func (m *Metrics) RecordPanicRecovered() {
+	m.panicsRecovered.Inc()
+}
+
+// RecordRequestTimeout increments the request-timeout counter. The Timeout
+// middleware calls it when a request outlives its budget; a client that
+// disconnects early is not a timeout and is not counted.
+func (m *Metrics) RecordRequestTimeout() {
+	m.requestTimeouts.Inc()
 }
 
 // statusCodeToString converts an HTTP status code to a string category.
