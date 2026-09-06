@@ -5,6 +5,22 @@
 **Status:** ✅ COMPLETE - Comprehensive crash documentation established  
 **Classification:** NOT A CODE DEFECT - Infrastructure and workflow issues
 
+> **⚠ Correction (2026-09-06) — the mechanism stated below is superseded.**
+> This index's *conclusion* (domain-check code contains zero defects; failures were external)
+> **stands**. Its stated *mechanism* does not. The verified mechanism is **kernel memory-cgroup OOM
+> SIGKILL inside each dispatch's `MemoryMax=12 GiB` scope**, caused by unbounded-memory processes
+> (bare `git gc --aggressive`, `node`/vitest) — never host-wide memory exhaustion, and never a
+> "SIGHUP cascade". `exit_code=-1` is needle's sentinel for an unrecorded signal death, **not**
+> signal −1 and not SIGHUP. The "94.71% memory pressure", "201+ crashes in 5 hours" and
+> "826 crashes" figures below are attested values that no surviving primary source can re-derive —
+> treat them as [REPORTED], not [LIVE].
+>
+> Canonical corrections: §7 ("Superseded Claims — Do Not Propagate") of
+> [`../investigations/investigation-report-final-2026-09-06-domchk-e843c4f1.md`](../investigations/investigation-report-final-2026-09-06-domchk-e843c4f1.md)
+> (chain: domchk-65afcc88 → domchk-d6871df1 → domchk-e843c4f1, commit c700252; umbrella
+> domchk-11c26b24, parent alert bead bf-4829x8). Any new corpus document must cite or extend that
+> list; none may restate a claim on it as fact.
+
 ---
 
 ## Executive Summary
@@ -45,6 +61,31 @@
 ---
 
 ## Documentation Structure
+
+### Final Delta Report — 2026-09-06 (canonical, supersedes the mechanism below)
+
+| Document | Chain | Commit |
+|----------|-------|--------|
+| `docs/investigations/investigation-report-final-2026-09-06-domchk-e843c4f1.md` | domchk-e843c4f1 (step 3: recommendations + provenance convention) | c700252 |
+| `docs/investigations/findings-compilation-2026-09-05-domchk-65afcc88.md` | domchk-65afcc88 (step 1: compiled findings) | 5b4be43 |
+| `docs/investigations/investigation-report-draft-2026-09-06-domchk-d6871df1.md` | domchk-d6871df1 (step 2: draft) | 9338e2b |
+
+The 2026-09-06 delta report is the corpus's corrected, evidence-derived account: **five causal
+layers** (scoped-OOM kills, NEEDLE alerting defects, a crash-handler kill source, service-class
+`exit_code=1` waves, and explicitly not domain-check code), plus §9 recommendations R1–R12 and the
+§7 superseded-claims list. Baseline: `docs/investigations/final-investigation-report-2026-09-01.md`
+(383241f), which carries the correction banner.
+
+Committed 2026-09-06 by domchk-0d3c11c9 (step 4: commit + link). The sibling chain's
+`docs/investigations/evidence-compilation-2026-09-01-crash-investigation.md` (R8) had already
+landed via a7aefac — swept into a concurrent worker's commit, disclosed by domchk-59e1f1d5 — and
+step 4 housekeeping-committed the remaining 23 untracked investigation documents in their existing
+sections below: the bf-1ea4g / bf-2ildm / bf-198ne / bf-4x12ec artifact reports, the systemic RCA
+and the exit-code −1 signal analysis (the only copies), the crash-alert-generation logic, and the
+bf-4yjq details extraction (committed on behalf of its unassigned owner bead domchk-e5404cd7).
+domchk-6281555d's RCA (1592bf5) and domchk-adb15fe5's stepwise gc strategy (c34ab77) were
+committed by their own authors and are not part of the step-4 batch. Documents dated
+2026-08-13/14 and 2026-09-02 in that batch restate superseded claims — read them with §7 open.
 
 ### Comprehensive Analysis Documents (docs/)
 
