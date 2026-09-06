@@ -1,5 +1,20 @@
 # Final Investigation Report: Domain-Check Crash Analysis
 
+> **⚠ Correction (2026-09-06) — the mechanism stated below is superseded.**
+> This report's *conclusions* (zero domain-check code defects; zero data loss; NEEDLE alerting needs
+> completion detection, self-healing awareness and deduplication) **stand**. Its stated *mechanism*
+> does not: the "systemd-oomd at 94.71% memory pressure → SIGHUP cascade" account has been corrected.
+> The verified mechanism is **kernel memory-cgroup OOM SIGKILL inside each dispatch's
+> `MemoryMax=12 GiB` scope**, caused by unbounded-memory processes (bare `git gc --aggressive`,
+> `node`/vitest). `exit_code=-1` is needle's sentinel for an unrecorded signal death, **not** SIGHUP.
+> The host was never out of memory, so host-wide alerting could not have caught it. The "94.71%"
+> figure is not a surviving record, and the Aug-16 window is 04:27:35Z–17:40:32Z (13.2 h, two waves).
+> Full corrected analysis and the complete superseded-claims table:
+> [`investigation-report-draft-2026-09-06-domchk-d6871df1.md`](investigation-report-draft-2026-09-06-domchk-d6871df1.md)
+> and [`findings-compilation-2026-09-05-domchk-65afcc88.md`](findings-compilation-2026-09-05-domchk-65afcc88.md) §2.4.
+> Volumetrics quoted below ("201+ crashes", "826 crashes") are attested figures that no surviving
+> primary source can re-derive — treat them as [REPORTED], not [LIVE].
+
 **Report Date:** 2026-09-01  
 **Investigation Period:** 2026-08-13 to 2026-09-01  
 **Report Type:** Final Comprehensive Analysis  

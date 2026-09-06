@@ -121,7 +121,9 @@ Before starting tasks that depend on external services:
 
 ```bash
 # Check inference gateway availability
-curl -sf --max-time 5 https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health || echo "Gateway down"
+# NOTE: `-k` is required — the gateway serves a self-signed cert, so plain `-sf`
+# always fails with curl 60 ("Gateway down") while the gateway is actually fine.
+curl -skf --max-time 5 https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health || echo "Gateway down"
 
 # Check system resources
 free -h                    # Memory: Need 10GB+ available
