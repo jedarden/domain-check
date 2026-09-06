@@ -5,6 +5,12 @@
 **Investigation Bead:** domchk-69b5e14e  
 **Status:** CLOSED (2026-08-25T16:11:07.546451156Z)
 
+> **2026-09-06 correction.** The cascade section below was re-derived from
+> `.beads/events.jsonl` and system journald; the "SIGHUP" attributions in the
+> original version were wrong (see the mechanism note there). The crash-window
+> numbers, the minute-by-minute cascade timeline, and the dependency map live in
+> [`docs/cascade-timeline-bf-3561g-2026-08-16.md`](cascade-timeline-bf-3561g-2026-08-16.md).
+
 ---
 
 ## Executive Summary
@@ -65,7 +71,7 @@ The bead was tasked with:
 
 **Bead:** bf-3561g  
 **Title:** "ALERT: Agent crash on bead bf-4k2ws"  
-**Creation Date:** 2026-08-16  
+**Creation Date:** 2026-08-13T03:58:25Z  
 **Status:** CLOSED  
 **Final Status:** Successfully split into child beads before crashing
 
@@ -150,14 +156,16 @@ Through its investigation, bf-3561g found:
 
 **Bead:** bf-3561g  
 **Crash Timestamp:** 2026-08-16T17:21:28.132817919+00:00  
-**Exit Code:** -1 (SIGHUP signal)  
+**Exit Code:** -1 (needle's sentinel for an abnormal child death — **not** a signal
+number; the kernel record for this second shows a **memcg OOM kill**)  
 **Duration:** 305,382 ms (5 minutes 5 seconds)  
 **Final Status:** CLOSED
 
-### System-Wide SIGHUP Cascade
+### System-Wide Memory-Pressure Cascade
 
 **Time Period:** 2026-08-16 12:00-17:00 UTC (5 hours)  
-**Total Crashes:** 201 across all beads and workers  
+**Total Crashes:** 177 in that window (201 if the window is extended to 17:29:52, the
+end of bf-3561g's own chain — the source of the frequently-quoted "201")  
 **Affected Workers:** 
 - lab-domain-check (including bf-3561g)
 - lab-drawrace
@@ -165,13 +173,15 @@ Through its investigation, bf-3561g found:
 - lab-roam-1
 
 **Signal Pattern:**
-- Exit Code: -1 for all crashes
-- Signal: SIGHUP (hangup detected on controlling terminal)
+- Exit Code: -1 for all crashes (sentinel, not a signal number)
+- Actual mechanism: kernel `CONSTRAINT_MEMCG` OOM — `git` reaching ~11.7 GiB anon RSS
+  inside the 12 GiB per-dispatch `MemoryMax` (295 kernel kills, 283 scopes)
 - Pattern: Repeated retries of all active beads during cascade window
 
 ### bf-3561g Crash History
 
-Bead bf-3561g crashed **9 times** during the cascade window:
+Bead bf-3561g crashed **9 times** during the cascade's tail window (17:13:04–17:29:52
+UTC, immediately after the 12:00–17:00 core):
 
 | # | Claim Time | Crash Time | Duration | Exit Code |
 |---|-------------|------------|----------|-----------|
@@ -193,22 +203,25 @@ Bead bf-3561g crashed **9 times** during the cascade window:
 
 ### Root Cause
 
-bf-3561g crashed because it was **caught in a system-wide SIGHUP cascade** that affected 201 beads across 4 workers during a 5-hour window on 2026-08-16.
+bf-3561g crashed because it was **caught in a system-wide memory-pressure cascade** that
+produced 177 bead crashes across 4 workers during the 12:00–17:00 window on 2026-08-16
+(201 through 17:29:52).
 
 ### Signal Analysis
 
-**Signal -1 (SIGHUP):**
-- **Signal Name:** SIGHUP (hangup)
-- **Common Cause:** Terminal session closure, process group termination, systemd service stop
-- **Interpretation:** External signal termination, NOT internal agent failure
-- **Impact:** Immediate termination without cleanup opportunity
+**Exit code -1:**
+- **Meaning:** needle's outcome-classifier sentinel for an abnormal child death
+- **Not** a signal number — no SIGHUP is involved
+- **Actual cause (kernel record, same second):** `oom-kill:constraint=CONSTRAINT_MEMCG`,
+  `git` at ~11.7 GiB anon RSS against the 12 GiB dispatch `MemoryMax`
+- **Impact:** immediate SIGKILL of the child, no cleanup opportunity
 
 ### Infrastructure-Level Event
 
-The source of the cascade appears to be infrastructure-level:
-- Terminal session closure
-- Systemd service management
-- Process manager action
+The source of the cascade is infrastructure-level:
+- Per-dispatch cgroup memory limit (12 GiB `MemoryMax`)
+- Repository bloat (18 GB, 17 GB loose objects) making every `git` operation balloon
+- System-wide pressure — systemd-oomd killed a *different* scope 5 s before crash #4
 - NOT caused by agent behavior or code defects
 
 ### Key Insight
