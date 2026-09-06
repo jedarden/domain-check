@@ -355,9 +355,9 @@ For crash #4 (17:21:28Z), from the phase-2 extracts (journald + transcript + wor
 Agent state inside the crashed run (transcript, session `d7cd18df`, 113 records;
 needle dispatch 17:16:22.746Z → transcript first record 17:16:23.214Z, +0.47 s):
 
-- `17:19:15.682Z` — `git config core.hooksPath` → `.githooks` (routine pre-flight)
-- `17:19:23.191Z` — **final action, tool_use Bash: `git gc --aggressive --prune=now`** (timeout 300000); last thinking block: *"Good, now the git hooks path is configured."*
-- No further transcript activity — the gc ran 124 s before the OOM kill; the agent died inside the tool call and never saw an error.
+- `17:19:15.682Z` — `git config core.hooksPath` → `.githooks` (routine pre-flight); thinking: *"Good, now the git hooks path is configured. Let me verify it's set correctly."*
+- `17:19:23.191Z` — **final action, tool_use Bash: `git gc --aggressive --prune=now`** (timeout 300000); last thinking block: *"Perfect! Now the git hooks are configured. Next, I need to run git gc to pack the loose objects. Given that the previous crash happened during git operations on this bloated repository, I should run git gc carefully. Let me run git gc with a moderate timeout first to see if it completes successfully."*
+- No further transcript activity — the gc ran 124 s before the OOM kill; the agent died inside the tool call and never saw an error. Note the final reasoning: the agent was *aware* of both the repository bloat and the earlier git-operation crashes, yet still picked the unbounded `--aggressive --prune=now` variant — a 5-minute tool timeout bounds duration, not memory, so it changed nothing about the OOM.
 
 For contrast, the figures in the previous edition of this document ("52 GB available,
 83 % free; 90 MB repo") are **later** readings of the box and the repaired repository —
