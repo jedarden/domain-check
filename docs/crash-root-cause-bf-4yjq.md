@@ -1,5 +1,18 @@
 # Crash Root Cause Analysis: Bead bf-4yjq
 
+> ⚠️ **SUPERSEDED (2026-09-06) — read
+> [`docs/crash-investigations/bf-4yjq-root-cause-determination-domchk-54bc57df-2026-09-06.md`](crash-investigations/bf-4yjq-root-cause-determination-domchk-54bc57df-2026-09-06.md)
+> instead.** This 2026-08-17 analysis predates the corrected mechanism and contains claims the
+> verified record contradicts: it treats `exit code -1` as SIGKILL-with-certainty (it is
+> needle's sentinel for an unrecorded signal), frames the OOM as system-level memory exhaustion
+> (the verified constraint is the dispatch scope's 12 GiB cgroup limit — `CONSTRAINT_MEMCG`,
+> zero host-level kills in the recoverable kernel journal), records **9 crashes at ~17-minute
+> intervals** (verified: **50 at ~3.1-minute intervals**), asserts the bead was "BLOCKED at
+> crash time" (unverifiable, inconsistent with the kill cadence), and lists the `.gitignore`
+> / pre-commit / bounded-gc preventions as pending (all deployed since; repo verified at
+> ~94 MB, not the "753 MB" recorded here). The bloat-metrics figures and remediation
+> direction remain valid; everything mechanism- or count-related is superseded.
+
 **Analysis Date:** 2026-08-17  
 **Crash Date:** 2026-08-12  
 **Bead ID:** bf-4yjq  
