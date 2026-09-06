@@ -82,3 +82,37 @@ divergence checks (`git ls-remote github-mirror`), not for pushing.
    nothing executable is stale.
 3. The stale `github-main` local branch recommended for deletion in the
    2026-09-01 analysis no longer exists.
+
+## Addendum 2026-09-06 22:05 UTC — tip advanced to `fb7bedd`, still zero divergence
+
+Re-verified ~20 minutes after the check above (bead **domchk-2a4e7801**).
+`origin/main` advanced one commit past the `e0fab45` recorded above:
+
+| Ref (live `git ls-remote`, not cached refs) | SHA |
+|-----|-----|
+| `origin` (Forgejo) `refs/heads/main` | `fb7beddb74599da29173f0d41f76d03a87fa7a2c` |
+| `github-mirror` (GitHub) `refs/heads/main` | `fb7beddb74599da29173f0d41f76d03a87fa7a2c` |
+| local `main` (HEAD) | `fb7beddb74599da29173f0d41f76d03a87fa7a2c` |
+
+**Zero divergence still holds** — Forgejo = GitHub = local HEAD, so the mirror
+kept up with the new commit with no manual intervention.
+
+Commit at the new tip:
+
+| Field | Value |
+|-------|-------|
+| SHA | `fb7beddb74599da29173f0d41f76d03a87fa7a2c` |
+| Subject | `docs: bf-2xygo raw needle logs — 91 crash events, claim verification + Aug-25 load-table correction (domchk-cd364e0a)` |
+| Author | `jedarden <github@jedarden.com>` |
+| Committer | `jedarden <github@jedarden.com>` |
+| Date | `2026-09-06T17:55:09-04:00` (21:55:09 UTC) |
+| Local state | up to date — `git fetch origin main` reported nothing new; HEAD already at `fb7bedd` |
+
+Server-side push mirror re-checked via
+`GET /api/v1/repos/jedarden/domain-check/push_mirrors`: `sync_on_commit: true`,
+interval `8h`, `last_update: 2026-09-06T21:56:14Z` (65 s after the commit was
+authored), `last_error: ''` — consistent with the mirror having already
+delivered `fb7bedd` to GitHub.
+
+Baseline figures in the body above remain correct for the `e0fab45` snapshot
+they describe; only the tip SHA moved.
