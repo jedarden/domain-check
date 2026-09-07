@@ -1,2 +1,0 @@
-go test fuzz v1
-string("罹ﱦ0\u200dﱦ0")
