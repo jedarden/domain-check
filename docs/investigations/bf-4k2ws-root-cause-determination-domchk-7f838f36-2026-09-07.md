@@ -453,11 +453,21 @@ Pre-0.4.2 `handle_crash` alerted per kill with no fingerprint, no cooldown,
 no target-state check — re-verified on both ledger sides this session (55
 `action=alerted` events 02:03:43.020Z → 07:04:03.300Z in the log; exactly 55
 `ALERT: Agent crash on bead bf-4k2ws` beads in the store, all created inside
-the storm window). The countermeasures exist and were verified live in
-`scripts/crash-alert-manager.sh`: 300 s cooldown (`ALERT_COOLDOWN_SECONDS`),
-processed-alert tracking (`PROCESSED_ALERTS_FILE`), dedup via
-`scripts/alert-deduplication.sh`, closed-target filtering, and exit-code
-validation separating the −1 sentinel from the 124 cap class. The 36
+the storm window). **Countermeasures, with an effectiveness caveat:** the
+repo-side pieces exist as code — `scripts/crash-alert-manager.sh` carries a
+300 s cooldown (`ALERT_COOLDOWN_SECONDS`), processed-alert tracking
+(`PROCESSED_ALERTS_FILE`), dedup via `scripts/alert-deduplication.sh`,
+closed-target filtering, and exit-code validation separating the −1 sentinel
+from the 124 cap class — but presence is not effectiveness: the same-day gap
+analysis ([`../alert-deduplication-gap-analysis-2026-09-07.md`](../alert-deduplication-gap-analysis-2026-09-07.md),
+bead `domchk-b5448b6a`, commit `7d34f8c`) finds that pipeline has **never
+once fired in production** — no production caller invokes
+`crash-alert-manager.sh` (the only timer in this stack runs the report-only
+`crash-pattern-detection.sh`), every dedup ledger is empty while the alert
+pool holds 1,714 beads (~177 open against closed targets), and ten structural
+gaps (D-1–D-10) are documented there with reproductions. This subsection's
+"verified live" therefore means the knobs are present; the §8.2
+alert-multiplication mechanism is current behavior, not history. The 36
 still-open historical alert beads remain for their owners — outside this
 bead's scope.
 
