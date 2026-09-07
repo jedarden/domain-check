@@ -619,3 +619,128 @@ system journald 2026-08-16 (kernel + oomd; local-stamped, UTC−4)
 
 **Committed extracts:** `docs/crash-context-bf-3561g/kernel-oom-kill-2026-08-16T172127Z.txt` ·
 `docs/crash-context-bf-3561g/systemd-oomd-2026-08-16T172122Z.txt`
+
+---
+
+## 14. Reproducibility determination (append 2026-09-07 — domchk-ebf9c1f7)
+
+Bead `domchk-ebf9c1f7` ("Determine if crash is reproducible or intermittent", child #2
+of the `domchk-83a0645c` chain) asked for the target event — bf-3561g crash #4,
+2026-08-16T17:21:27.977Z (§3.2) — to be classified as **reproducible** (consistent
+trigger) or **intermittent** (sporadic/external). §14 states the classification the
+rest of this document implies but never says outright. Every figure below was
+re-derived live on 2026-09-07 from primary sources, not carried forward.
+
+### 14.1 Verdict
+
+**REPRODUCIBLE — a consistent, deterministic trigger; not intermittent.** The crash
+fires whenever three preconditions co-occur: (1) an *unbounded* git operation, (2) the
+then-18 GB / 17 GB-loose-objects repository, (3) a dispatch scope capped at 12 GiB
+`MemoryMax`. Each kill is the same computation arriving at the same ceiling (§4.2,
+§8). It is not sporadic, not an external event, not time-of-day-driven, and not a code
+defect.
+
+The two features that *look* intermittent are both explained by mechanism:
+
+- **The 9-failures-then-success retry chain** (§4.5) is the deterministic mechanism
+  plus needle's auto-retry policy. Every attempt re-ran git work against the same
+  bloated repo inside the same cgroup bound; the 10th dispatch succeeded at
+  17:31:56.062Z (exit 0, 123 s) only because system pressure had eased in the ~17:30
+  cascade tail — the trigger condition dissolved, the mechanism did not become flaky.
+- **176 of 177 window crashes landing within ±2 s of a kernel memcg OOM** (§4.1) is
+  the opposite of sporadic: the `−1` sentinel and the kernel kill are the same event
+  observed by two logs (§6).
+
+The umbrella bead's §"Reproducibility" ("reproducible during fleet management system
+restart events … system-wide … cascade ended after 5 hours") is **superseded together
+with its SIGHUP mechanism** (§0; corrected in `domchk-83a0645c` Notes 2026-09-07). The
+corrected form: reproducible **by trigger condition** — any git-heavy dispatch on the
+bloated repo could pin its scope — not reproducible *during an external event*.
+
+### 14.2 Evidence per acceptance criterion
+
+**Criterion 1 — similar crashes in the crash pattern logs.**
+`.beads/logs/crash-monitor.log` (`crash-pattern-detection.sh`, 10-min cadence,
+installed 2026-09-02) holds 780 parsed runs in three verdict eras:
+
+| Era (UTC) | Runs | Verdict | What it actually measured |
+|---|---|---|---|
+| 2026-09-02 01:50:47 → 2026-09-06 ~14:00 | 650 | ⚠️ ELEVATED CRASH RATE | **Stale-window artifact** — the surge check read the never-pruned `.beads/events.jsonl` (all 247 events ≥6 days old) against a 1-hour cutoff. Zero new crashes. |
+| 2026-09-06 14:10:00 → 22:10:00 | 49 | ⚠️ DEGRADED: source stale | The honest fix (`bead domchk-0c601026`): "247 crash event(s), newest 2026-08-26T22:54:48Z — none within the last 24hours." |
+| 2026-09-06 22:20:26 → 2026-09-07 11:40:00 | 81 | ✅ CLEAN | "No crashes detected in the last 24hours / System Status: STABLE", every run through the latest. |
+
+The 650 ELEVATED rows must **not** be read as recurrence — they counted the old
+Aug-16 census on every run. `.beads/logs/crash-pattern-alerts.log` contains exactly
+one alert ever emitted (`[2026-09-02T02:11:23Z] ELEVATED CRASH RATE: 247 crashes in
+1hour`), which is that same artifact. `.beads/logs/system-event.log` holds only
+synthetic `domchk-testbead` surge-gate test records (2026-09-07 05:02Z);
+`alert-deduplication.log` holds only the 2026-09-02 manual runs (report-only, never
+wired into production — see bf-4k2ws §9.4).
+
+**Criterion 2 — the same crash before, under similar conditions: yes, 246 times, in
+one bounded era.** Census of `.beads/events.jsonl` (append-only, never rotated), all
+247 crash events carry `exit_code −1`:
+
+| Date (UTC) | Events | Context |
+|---|---|---|
+| 2026-08-16 | **245** | The cascade (§4): 04:00–17:29:52Z, 177 within 12:00–17:00Z across 59 beads / 4 workers; 295 kernel memcg kills / 283 scopes |
+| 2026-08-17 | 1 | `bf-4833lh` (an ALERT bead about the bf-4x12ec gc-storm bead) at 16:00:27Z, 686 s — still the bloated-repo era (repair landed 2026-09-01); its chain interleaves fail/complete/crash/fail/complete/fail. No kernel OOM record found at the instant (±15 min): mechanism kernel-confirmed only for the Aug-16 window |
+| 2026-08-26 | 1 | `bf-12gb0r` (an ALERT bead about bf-173o7e, already completed exit 0 on Aug-17) re-dispatched 22:52:03Z, killed 164 s later — 7 min after journald's Aug-26 external-kill wave ("worker was killed by an external process"). Still pre-repair |
+| 2026-08-27 → today | **0** | No exit-−1 crash event since 2026-08-26T22:54:48Z |
+
+bf-3561g's own nine crashes are the tightest "same conditions" sample: all on
+lab-domain-check, 17:13:04.749Z → 17:29:52.577Z (a 16-minute span), durations
+48.95–305.38 s (median 103.2 s), each an auto-retry of the same alert-bead work
+(`.beads/events.jsonl` lines 1499, 1508, 1520, 1527, 1531, 1534, 1537, 1540, 1543).
+Crash #4 — the longest, 305 s — is the one with the kernel record and the
+self-inflicted `git gc --aggressive --prune=now` transcript (§5).
+
+**Criterion 3 — patterns.**
+
+- *Time of day*: clustered with fleet dispatch density, not clock time. Aug-16 by
+  UTC hour: 04→11, 05→3, 06→17, 07→2, 10→11, 12→29, **13→49**, 14→34, 15→22,
+  **16→43**, 17→24 (sums 245); zero in 08/09/11, zero after 17:29:52. All nine of
+  bf-3561g's crashes sit in the last 16 minutes of the day's activity. The peak hours
+  are when the git-heavy divergence/merge beads and their alert progeny were being
+  dispatched, not a nightly or scheduled effect.
+- *Resources*: at every examined kill the dispatch scope is pinned at 100 % of its
+  12 GiB limit (crash #4: usage 12,582,912 kB = limit, `failcnt 8948`), with
+  system-wide pressure behind it (user.slice 94.29 % > 80 % for >20 s, `Pgscan`
+  1,953,981; load 15.76 on 7 cores at this run's dispatch) — §5. Window-wide, `git`
+  victims pin the limit (median anon-rss 11.73 GiB) and non-git victims (`node`/vitest,
+  another workspace) are collateral of the same pressure (§4.2).
+- *Operations*: git against the bloated repo — 193 of the window's 295 kernel victims
+  were `git`; the structural amplifier was the alert system itself (57 of 59 crashing
+  beads were ALERT beads, §4.4). Crash #4's specific operation was an unbounded gc;
+  the other subjects ran divergence/merge/push work over the same objects.
+
+**Criterion 4 — one-time or recurring: recurring while the conditions held; extinct
+since they were removed.** Within the bloated-repo era (≈2026-08-12 → 2026-08-26) the
+crash was *reproducible on demand* — 245 times in one day, 9 times for this bead
+alone, with the mechanism re-firing on every eligible dispatch. Post-mitigation,
+re-verified live 2026-09-07:
+
+- kernel memcg kills since 2026-09-05: **63, all from synthetic test/replay scopes**
+  (`bf1s6c3-push-*`, `bf1s6c3-gc-*`, `bf4yjq-crash-*`, `safe-git-gc*` — the deliberate
+  bound-replay tests); **zero from live `run-p*` dispatch scopes** (journald, scope-name
+  distribution). Earlier post-repair kills sampled (2026-09-02 07:15) are likewise
+  `safe-git-gc-*` test scopes at ~63 MB RSS.
+- `.beads/events.jsonl`: zero `exit_code −1` events since 2026-08-26T22:54:48Z
+  (confirmed independently by the monitor's DEGRADED banner census).
+- repository: `.git` 103 MB, 162 loose objects / 1.73 MiB, 1 pack (99.11 MiB),
+  0 garbage; `./scripts/setup-git-gc-config.sh --verify` → ✅ effective
+  `pack.windowMemory=2g / deltaCacheSize=1g / threads=1`, worst case ≈3072 MiB per
+  pack run — precondition (1) is now bounded, precondition (2) is gone (§8).
+
+### 14.2.1 Bottom line
+
+**Classification: reproducible (consistent trigger), now prevented rather than
+merely quiet.** On 2026-08-16 the trigger was deterministic and re-fired on every
+eligible dispatch — reproducibility is why the window produced 245 events and why
+auto-retry could not escape it. It was never intermittent: nothing about the crash
+depends on chance, only on whether an unbounded git operation meets a bloated repo
+inside a bounded cgroup. That conjunction last occurred 2026-08-26; both of its
+controllable legs have since been eliminated and the elimination is verified live
+(this section), so the correct operational reading is not "watch for it again" but
+"keep the bounds in force" — the daily 02:00 repo-health timer and
+`setup-git-gc-config.sh --verify` are the standing checks.
