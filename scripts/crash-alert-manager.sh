@@ -27,6 +27,17 @@ PROCESSED_ALERTS_FILE="$LOG_DIR/processed-alerts.txt"  # Track processed alert b
 # Resolution tracking integration
 RESOLUTION_TRACKER="$SCRIPT_DIR/crash-resolution-tracker.sh"
 
+# Global alert-cooldown integration (domchk-7b404946): the outermost
+# suppression gate — ONE 5-minute window for crash alerts of ANY
+# classification, held in .beads/logs/crash-alert-metadata.json. The
+# per-classification window below cannot see a cascade that arrives as mixed
+# classifications and dedup keys on the crash target, so a fleet-wide event
+# still fans out one ALERT bead per kill (the 2026-08-16 cascade reached 177
+# crashes across 59 beads). This gate opens the window on the first alert,
+# logs (without alerting) every crash that lands inside it, and attaches the
+# suppressed-crash summary to the first alert after it closes.
+COOLDOWN_SCRIPT="${COOLDOWN_SCRIPT:-$SCRIPT_DIR/alert-cooldown.sh}"
+
 # Initialize processed alerts file
 if [[ ! -f "$PROCESSED_ALERTS_FILE" ]]; then
     touch "$PROCESSED_ALERTS_FILE"
@@ -61,6 +72,14 @@ Exit Codes:
   1  Alert generated (new genuine crash)
   2  Classification failed
   3  Error processing
+
+Global Alert Cooldown (scripts/alert-cooldown.sh):
+  The outermost suppression gate. The first alert of ANY classification opens
+  a 5-minute global window (state: .beads/logs/crash-alert-metadata.json);
+  crashes arriving while it is open are logged but not alerted (exit 0, no
+  ALERT bead), and the first crash after it closes carries a summary of the
+  suppressed crashes in its alert body. -f/--force bypasses the gate and
+  still opens a new window.
 
 Classification Types (from crash-classifier.sh):
   - FALSE_POSITIVE   Post-completion administrative failure
@@ -352,6 +371,46 @@ if [[ "$FORCE_ALERT" != true ]]; then
     fi
 fi
 
+# GLOBAL ALERT COOLDOWN (domchk-7b404946): exit 3 = a crash alert fired less
+# than 5 minutes ago — this crash is LOGGED (cooldown state + audit log) but
+# NOT alerted. Exit 0 with a COOLDOWN_EXPIRED block = the previous window
+# suppressed crashes nobody has summarized yet; this alert carries their
+# summary (the gate emits it exactly once and consumes it from the state).
+# Anything else fails open: crash alerting never depends on this gate.
+COOLDOWN_SUMMARY=""
+if [[ -x "$COOLDOWN_SCRIPT" ]]; then
+    if [[ "$FORCE_ALERT" != true ]]; then
+        set +e
+        COOLDOWN_OUTPUT=$("$COOLDOWN_SCRIPT" check 2>/dev/null)
+        COOLDOWN_RC=$?
+        set -e
+        if [[ $COOLDOWN_RC -eq 3 ]]; then
+            log_alert "INFO" "Alert cooldown active for $BEAD_ID — crash logged, not alerted"
+            if [[ -n "$COOLDOWN_OUTPUT" ]]; then
+                log_alert "INFO" "$COOLDOWN_OUTPUT"
+            fi
+            if ! "$COOLDOWN_SCRIPT" record-suppressed "$BEAD_ID" "$CLASSIFICATION" \
+                    "suppressed by the global cooldown window" >/dev/null 2>&1; then
+                log_alert "WARN" "Could not record suppressed crash $BEAD_ID in cooldown state"
+            fi
+            echo "Reason: global alert cooldown active — crash logged, not alerted (state: $LOG_DIR/crash-alert-metadata.json)"
+            if [[ -n "$COOLDOWN_OUTPUT" ]]; then
+                echo "$COOLDOWN_OUTPUT"
+            fi
+            exit 0
+        elif [[ $COOLDOWN_RC -eq 0 ]]; then
+            if grep -q "^COOLDOWN_EXPIRED" <<<"$COOLDOWN_OUTPUT"; then
+                COOLDOWN_SUMMARY="$COOLDOWN_OUTPUT"
+                log_alert "INFO" "Cooldown expired with suppressed crashes — summary attached to this alert"
+            fi
+        else
+            log_alert "WARN" "Alert cooldown gate returned $COOLDOWN_RC for $BEAD_ID — failing open"
+        fi
+    fi
+else
+    log_alert "WARN" "Alert cooldown module not found or not executable ($COOLDOWN_SCRIPT) — global cooldown inactive"
+fi
+
 # Generate alert
 log_alert "ALERT" "Genuine crash detected: $BEAD_ID"
 echo "Classification: $CLASSIFICATION"
@@ -362,6 +421,24 @@ echo ""
 echo "=== Classification Details ==="
 echo "$CLASSIFICATION_OUTPUT"
 echo ""
+
+# End-of-cooldown summary (domchk-7b404946): the first alert after a window
+# that suppressed crashes carries their summary — the gate emitted it exactly
+# once and has already consumed it from the state.
+if [[ -n "$COOLDOWN_SUMMARY" ]]; then
+    echo "=== Cooldown Summary — crashes suppressed while the cooldown was active ==="
+    echo "$COOLDOWN_SUMMARY"
+    echo ""
+fi
+
+# Open the next cooldown window (domchk-7b404946): the alert that just fired
+# starts a fresh 5-minute global cooldown during which further crashes are
+# logged, not alerted. A failed record never fails the alert itself.
+if [[ -x "$COOLDOWN_SCRIPT" ]]; then
+    if ! "$COOLDOWN_SCRIPT" record-alert "$BEAD_ID" "$CLASSIFICATION" >/dev/null 2>&1; then
+        log_alert "WARN" "Could not open the global cooldown window for $BEAD_ID"
+    fi
+fi
 
 # Update alert state
 ALERT_ENTRY=$(cat <<EOF
