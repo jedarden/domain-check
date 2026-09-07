@@ -401,6 +401,94 @@ this section's tables or a fresh re-run, not from `bf-y24az`'s notes.
 
 ---
 
+## Unique Commits and Author Statistics — 2026-09-07 (domchk-ca6412a0)
+
+**Step 3 of the `bf-y24az` divergence chain: which commits are unique to each
+compared ref, and who wrote them — no final compilation (step 4 owns that).**
+Computed per step 1's standing instruction: the extractor was **re-run fresh
+at this dispatch** (`.beads/state/domchk-ca6412a0/`, 9/9 checks pass, both
+remotes `ls-remote`-fresh), not cited from step 1 or 2 — and it moved again:
+`main` advanced 1,864 → **1,872** between step 2's run and this one.
+
+### State at compute time
+
+All three live refs — `main`, `origin/main`, and `github-mirror/main` — sit at
+**`ba231732`** (1,872 commits each), **0/0 against each other, hash sets
+byte-identical**. `pre-squash-history-20260816` is unchanged at `7e4edf6c`
+(722 commits, frozen since 2026-08-16).
+
+One operational observation worth keeping: on this run's first look, **before**
+fetching, `github-mirror/main` sat 8 commits behind `main` (`8d326cc` vs
+`ba231732`, 8 ahead / 0 behind). The Forgejo→GitHub push mirror syncs on an
+interval, so a mid-window read sees lag that looks like one-sided divergence.
+The fetch caught it up in the same session and `ls-remote` on both remotes
+then returned `ba231732`. **Mirror lag is not divergence** — the ahead count
+was 0, and any "unique to main" set computed mid-window is a stale-mirror
+artifact, not a real split.
+
+### Unique commits per compared pair
+
+| Pair | unique to first | unique to second | hash sets |
+|---|---|---|---|
+| `main` \| `origin/main` | **0** | **0** | byte-identical |
+| `main` \| `github-mirror/main` | **0** | **0** | byte-identical |
+| `main` \| `pre-squash-history-20260816` | **1,870** | **720** | diverged |
+
+Each count is cross-validated two ways (set difference over the extracted
+hash sets, and `git rev-list --count a ^b`) and both agree with
+`--left-right --count` — 11/11 checks pass. **There are no unique commits on
+either side of the Forgejo/GitHub pair**: the mirror is a faithful mirror,
+which is the load-bearing fact for step 4's compilation. The only non-empty
+unique sets belong to the pre-squash comparison, the same genuine split step 2
+dated to merge-base `8373e5d9` (2026-08-15).
+
+### Author distribution per branch
+
+Aggregated by author **email** (the stable identity across name-spelling
+drift); every branch's per-author counts sum exactly to its commit total.
+
+| Branch | Distinct authors | Commits | Top contributors (by commit count) |
+|---|---|---|---|
+| `main` | 2 | 1,872 | `jedarden <github@jedarden.com>` **1,871** (99.95%); `jedarden <gitea@local.domain>` **1** (0.05%) |
+| `origin/main` | 2 | 1,872 | identical to `main` (byte-identical distributions) |
+| `github-mirror/main` | 2 | 1,872 | identical to `main` (byte-identical distributions) |
+| `pre-squash-history-20260816` | 1 | 722 | `jedarden <github@jedarden.com>` **722** (100%) |
+
+The two `jedarden` identities differ only in email: `github@jedarden.com` is
+the repo-standard identity (CLAUDE.md Git Identity) and carries all but one
+commit; the single `gitea@local.domain` commit is `a32662b32bbf`
+("docs: add jedarden.com footer", 2026-08-24) — a pre-standardization author
+string, not a different human. No other contributor has ever committed here.
+
+### Author distribution of the unique sets
+
+The only pair with non-empty unique sets:
+
+| Set | Commits | Authors | Breakdown |
+|---|---|---|---|
+| `main`-only (post-split) | 1,870 | 2 | `jedarden <github@jedarden.com>` 1,869 (99.95%); `jedarden <gitea@local.domain>` 1 (0.05%) |
+| `pre-squash`-only | 720 | 1 | `jedarden <github@jedarden.com>` 720 (100%) |
+
+Date ranges confirm step 2's timeline: every `main`-only commit is dated
+2026-08-16 → 2026-09-07 (strictly after the split), and every pre-squash-only
+commit 2026-08-10 → 2026-08-16 (strictly inside the old branch's lifetime).
+Authorship does not differentiate the two sides — same single author on both —
+so the unique-commit split is purely temporal (squash-and-rehydrate vs frozen
+pre-squash history), not a multi-author fork.
+
+### Structured output
+
+Raw statistics live in `.beads/state/domchk-ca6412a0/stats.json` (gitignored,
+same convention as steps 1–2's datasets): per-ref author distributions with
+counts/shares/first-last dates, top-10 contributor rankings per branch, unique
+sets with counts and samples, the unique-set author tables above, and the 11
+validation checks. Re-runnable end to end:
+`python3 extract_commits.py && python3 compute_unique_commits_authors.py`.
+Step 4 (`domchk-884dd8ae`) should re-run rather than cite these counts — `main`
+has moved on every single chain run so far (1,593 → 1,859 → 1,864 → 1,872).
+
+---
+
 *Everything below this section is the 2026-09-02 analysis. Its specific
 figures (`debd24f`, `73ff9ab`) are superseded by the dated sections above; its
 method and conclusions still hold.*
