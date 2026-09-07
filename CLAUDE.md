@@ -284,6 +284,16 @@ replay logs `Classification: UNKNOWN`, not a banner. The tracking bead remains o
 its owner; it tracks closure/verification, not the mechanism. Lesson: the suite's
 grep-marker tests (tests 4–12) cannot see wiring bugs like this; a functional replay can.
 
+**Dated correction 2026-09-07 (domchk-3b605127):** tracking bead `domchk-f6fff20f` is now
+**Closed** (rev 4) — the fix was re-read live at HEAD `7e34c2f` before closing. **Capture-race
+rule (from the corpus RCA, `docs/crash-root-cause-domchk-4f0b8b43-2026-09-07.md` §4-C):** a
+kill wave can take the needle worker *before it writes the crash record* — bf-57nao4's
+event stream ends at its fatal `dispatch` with no `fail`/`crash` record ever written — so a
+trace that says `outcome: crash` against a silent `events.jsonl` is classified **from the
+trace**, and the classifier printing `UNKNOWN` is never by itself evidence that no crash
+occurred. Proposed automated fix (classifier emits `INFRASTRUCTURE` + mechanism instead of
+bare `UNKNOWN` in that shape): `docs/crash-fix-strategy-domchk-3b605127-2026-09-07.md` §3.2.
+
 ### Resource Limits
 
 **Safe Operating Limits:**
