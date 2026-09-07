@@ -805,6 +805,119 @@ was read from the file itself this session.*
 
 ---
 
+## 13. Mitigation strategies — selection, implementation, verification (bead `domchk-8a20810b`, 2026-09-07)
+
+Dispatched to "implement and document mitigation strategies" based on the
+root-cause findings, with four acceptance criteria: strategy selected by
+crash type, mitigation documented with implementation steps,
+monitoring/alerting updated if needed, and safety scripts verified.
+Appended here per §6 — and per §10.3 anti-requirement 5, as no new
+bf-4k2ws-scope document. **Result: the mitigation stack this incident's
+class calls for is already implemented and committed; this section binds
+each criterion to its artifact, re-runs the verification battery live, and
+records three deltas (13.5).** Nothing was rebuilt and no code changed
+(§10.3 anti-requirements 1 and 3).
+
+### 13.1 Strategy selection by crash type (criterion 1)
+
+| Crash class | Applies to bf-4k2ws? | Selected mitigation | Status |
+|---|---|---|---|
+| **Infrastructure** (primary, §3.6) | Yes — the repo-bloat-era kill regime | Resource bounds, object-store guard, bounded remediation, heavy-work gating = §10.1 R1–R4 | **Implemented; verified live in 13.4** |
+| **Workflow failure** (amplifier, §3.4/§9.2) | Partially — verify-then-close debt made 25 of 55 kills post-completion | Repo-side: `scripts/verify-work-completion.sh` close-time marker (**176** marker files counted live this session, §12.2 counted 172 hours earlier); the terminal-state defect at the alert source is G-9 — NEEDLE-side, external | Marker implemented; G-9 external |
+| **Service failure** | No — ruled out (§4) | Retry-with-backoff = G-11; failover-aware gateway check = G-4 — both registered, neither this repo's crash mechanism | External / open (13.4 line 3 is G-4's live specimen) |
+| **Code defect** | No — ruled out (§3.5, §9.5) | **Not applicable** — zero domain-check defects across 157+ investigations | N/A |
+
+The selection is the corpus's standard matrix applied to this
+determination's classification; its source documents are
+`docs/crash-mitigation-strategies.md` (ranked proposals — note its
+2026-09-01 crash summaries predate the reclassification and are superseded
+on premise, not on proposal), `docs/crash-prevention-requirements.md`
+(G-1..G-13 with closure states), and §10.1's requirement→artifact table,
+which this section deliberately does not duplicate.
+
+### 13.2 Documented implementation steps (criterion 2)
+
+The implementation steps live in the committed procedure documents and are
+cited, not restated: `docs/maintenance/repository-maintenance-guide.md`
+(safe-git-gc stages, checkpoint/resume, the exit-code contract, timer
+installation), `scripts/README.md` (per-script usage incl.
+`verify-work-completion.sh`), repo `CLAUDE.md` §Crash Prevention
+(safety rules, limits, bloat prevention layers), and §10.4's 12-step
+battery as the executable checklist. Every R1–R4 artifact's file paths are
+already bound in §10.1.
+
+### 13.3 Monitoring/alerting (criterion 3) — current; no update needed here
+
+`systemctl --user list-timers 'domain-check-*' --all` re-verified live:
+**7/7 timers present, every NEXT in the future** — service-monitor 08:36,
+monitoring 08:40, resource-monitor 08:40 (all Mon 2026-09-07), repo-health
+Tue 08-04 02:00, auto-gc Tue 02:30, git-gc Tue 03:00, git-gc-full Sun
+09-13 04:00 (EDT). Two caveats that belong in the record:
+
+1. **This dispatch's own template names the wrong install path.** Its
+   "Mitigation Options" lists `./scripts/monitoring-setup.sh` — the G-7
+   live trap (cron-based; this NixOS box has no `crontab`, so it installs
+   a silent no-op). The live install/refresh path is
+   `./scripts/setup-repo-maintenance.sh`; retirement/replace of the
+   cron script is registered as G-7,
+   `docs/crash-prevention-requirements.md` §5. Future dispatch readers:
+   option 2 of the template is obsolete.
+2. **Alert-layer effectiveness is not this section's claim.** The knobs
+   pass their self-test (13.4 line 7) but the pipeline has never fired in
+   production — §9.4 / D-1..D-10, owner `domchk-b5448b6a`.
+
+### 13.4 Safety-script verification battery (criterion 4) — live this session
+
+Run at HEAD `e72af3c` = `origin/main`. `scripts/` carries co-tenant WIP
+(20 dirty paths, including three of this battery's subjects:
+`safe-git-gc.sh`, `preflight-health-check.sh`,
+`check-repo-health.sh`), so those three ran from their **committed**
+copies (`git show HEAD:scripts/<f>` written to gitignored
+`.beads/state/battery-8a20810b/`); the clean subjects ran in place.
+A linked-worktree run (`git worktree add`) was tried first and abandoned
+for an environmental reason worth recording: `safe-git-gc.sh` writes
+`.git/safe-gc.log` under the repo root, and in a linked worktree `.git`
+is a *file*, so `tee` fails and the script exits before checking anything
+— a future bead must not read that as a repo-state failure.
+
+| # | Command | Live result |
+|---|---|---|
+| 1 | `./scripts/setup-git-gc-config.sh --verify` | exit 0 — effective chain system→global→local, worst case ≈3072 MiB, within the 6 GiB ceiling |
+| 2 | `safe-git-gc.sh --check-only` (committed copy) | resource checks pass (46725 MB avail mem, 33 GB free disk, load 4.07; loose 183, 1 pack, repo 104 MB) → **"GC not needed", exit 1 — the documented healthy answer** (contract: 0 = gc needed, 1 = not needed, 2 = fail-fast; repository-maintenance-guide.md §Exit codes) |
+| 3 | `./scripts/preflight-health-check.sh` (committed copy) | repo-health and cgroup-headroom checks pass; gateway check ✗ and the script exits 1 — **the documented self-signed-cert false alarm**: the probe is plain `-sf` (curl 60) while `-skf .../health` returned `ok` live this session. Exactly G-4's gap, not a system-health failure |
+| 4 | `./scripts/check-repo-health.sh` (committed copy) | exit 0 — object census, fragmentation, gc config, no large working-tree files; two informational warnings (13.5 delta 3) |
+| 5 | `./scripts/setup-git-hooks.sh --check` | exit 0 — 10 MB pre-commit hook installed, byte-identical to tracked source |
+| 6 | `./scripts/system-event-mode.sh check` | exit 0 — "clear" (abnormal 300s=1, 1h=8; crashes 300s=0; PSI some avg60=0.00%) |
+| 7 | `./scripts/test-crash-alert-fixes.sh` | exit 0 — all six fix areas (knobs present; effectiveness stays with §9.4) |
+| 8 | `./scripts/test-safe-git-gc-limits.sh` | exit 0 — **33/33 passed**, incl. checkpoint/resume end-to-end in a scratch repo |
+| 9 | Repo state | `.git` 103 MB; **183 loose / 1.92 MiB** (fourth snapshot in §2's same-day creep series: 171 → 183); 1 pack 99.11 MiB; garbage 0; `git fsck --full` exit 0 (dangling-only); `.gitignore` lines 66–70 (`.beads/`, `*.db`, `*.db.backup.*`, `*.jsonl`); `git ls-files .beads` → **0** |
+| 10 | `systemctl --user list-timers 'domain-check-*' --all` | 7/7, every NEXT future (13.3) |
+
+### 13.5 Deltas
+
+1. **§10.4 step 7's pass criterion is mis-stated for the healthy case.** It
+   specifies `--check-only` → "exit 0"; the documented contract makes
+   **exit 1 = "gc not needed" = healthy**, while exit 0 now means "gc is
+   needed". A bead following §10.4 literally would fail a healthy
+   repository on exactly the line that proves it healthy.
+2. **The preflight gateway probe still fails healthy systems** (curl 60
+   under `-sf`; repo `CLAUDE.md` documents `-skf` as required and the
+   gateway answered `ok` under it this session) — G-4's live specimen,
+   reproduced again; owner per §10.2's open-items table.
+3. **`check-repo-health.sh` invokes a `check-repo-size.sh` helper that is
+   not in the repository** — the size check degrades to a ⚠️ line
+   ("not found") and the run still exits 0. Cosmetic; noted so the warning
+   is not read as a size failure.
+
+*§13 appended by `domchk-8a20810b`, 2026-09-07. Battery lines 1, 5, 6, 7, 8
+ran in place (committed, clean copies); lines 2, 3, 4 ran from
+`git show HEAD:` copies inside `.beads/state/battery-8a20810b/` because
+`scripts/` carries co-tenant WIP; lines 9–10 are read-only commands in the
+live worktree. All executed this session at HEAD `e72af3c` = `origin/main`;
+the 176-marker count in 13.1 is this bead's own `ls | wc -l`.*
+
+---
+
 *Determination by `domchk-7f838f36`, 2026-09-07; §8 appended by
 `domchk-4311aaa8`, 2026-09-07; §9 appended by `domchk-a7bc56b5`, 2026-09-07.
 Every count in §2 was re-derived this session from
@@ -821,4 +934,6 @@ delta is the missing superseded banner on
 §12 appended by `domchk-42dcef04`; its own-session live verifications are
 itemized in its section footer, while figures quoted from §8–§9 (attempt
 chronology, orphan deltas, heartbeat deltas) are those beads' first-hand
-derivations, not re-derived there.*
+derivations, not re-derived there. §13 appended by `domchk-8a20810b`; its
+battery lines and methodology are itemized in its §13.4 footer and were all
+executed live at HEAD `e72af3c`.*
