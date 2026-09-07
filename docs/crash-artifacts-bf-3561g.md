@@ -744,3 +744,100 @@ controllable legs have since been eliminated and the elimination is verified liv
 (this section), so the correct operational reading is not "watch for it again" but
 "keep the bounds in force" — the daily 02:00 repo-health timer and
 `setup-git-gc-config.sh --verify` are the standing checks.
+
+---
+
+## 15. Crash classification (append 2026-09-07 — domchk-d6893165)
+
+Bead `domchk-d6893165` ("Classify the crash issue", child #3 of the `domchk-83a0645c`
+chain, depending on §14) asks for one classification from the fleet's four categories —
+INFRASTRUCTURE_EVENT / WORKFLOW_FAILURE / SERVICE_FAILURE / CODE_DEFECT — with
+supporting evidence, using `scripts/crash-classifier.sh` if available, to inform the fix
+strategy. Target event as before: bf-3561g crash #4, 2026-08-16T17:21:28Z (§3.2). Every
+figure below was re-verified live on 2026-09-07; §15 adds no new document and touches no
+earlier section.
+
+### 15.1 Verdict
+
+**INFRASTRUCTURE_EVENT** — the kernel memory-cgroup OOM killer terminated a `git`
+process at 100 % of its per-dispatch 12 GiB `MemoryMax` scope, against the
+then-18 GB / 17 GB-loose-objects repository, the fatal run having launched an unbounded
+`git gc --aggressive --prune=now`; the alert system's re-dispatch of more git-heavy
+alert beads onto the same repo amplified the class (§4.4, §8). This is the formal,
+criterion-mapped statement of the one-line verdict §12 already carries and of the
+`domchk-6abaa850` umbrella correction ("Classification stands: INFRASTRUCTURE_EVENT") —
+not a new determination.
+
+### 15.2 Evidence, per category
+
+**INFRASTRUCTURE_EVENT — confirmed.** This bead's own definition of the category
+("memory pressure, OOM, SIGHUP cascade, repository bloat") names two of the actual legs:
+
+| Leg | Live-verified evidence |
+|---|---|
+| Kernel OOM kill | `docs/crash-context-bf-3561g/kernel-oom-kill-2026-08-16T172127Z.txt` (md5 `49ae1f995b6f09f6d9788a8831b5637d`, re-hashed 2026-09-07) line 106: `oom-kill:constraint=CONSTRAINT_MEMCG … oom_memcg=…/run-p2695224-i212383579.scope,task=git,pid=2718298` |
+| Cgroup memory pressure | same extract line 30: `memory: usage 12582912kB, limit 12582912kB, failcnt 8948` — the scope pinned at exactly 100 % of 12 GiB; call trace shows `mem_cgroup_out_of_memory` ← `try_charge_memcg` ← `do_anonymous_page` (anonymous memory — the gc's heap, not page cache) |
+| Repository bloat | the trigger operation was `git gc --aggressive --prune=now` at 17:19:23.191Z (§8), against the still-unrepaired ~18 GB repo |
+| Reproducible under those conditions | §14 criterion 2, re-verified: 9 crash events for this bead in `.beads/events.jsonl` (lines 1499/1508/1520/1527/1531/1534/1537/1540/1543, all `exit_code −1`), 17:13:04Z–17:29:52Z; crash #4's record reads `{"event":"crash","exit_code":-1,"duration_ms":305382,"ts":"2026-08-16T17:21:28.132817919+00:00","worker":"lab-domain-check","strand":"auto"}` |
+| Not the SIGHUP leg of the category | §0/§6 — `exit −1` is needle's sentinel for an unclassifiable abnormal child death; the kernel record above is the actual mechanism, and no hangup is involved |
+
+**WORKFLOW_FAILURE — ruled out.** No `error_max_turns` anywhere in this chain. Crash
+#4's agent had already finished its bead work: the final tool_use was the gc invocation,
+and the kill landed 124 s into it (§8); nothing about turn limits or bead-closing
+mechanics is in the death path.
+
+**SERVICE_FAILURE — ruled out.** The fatal event is a kernel memcg charge failure on an
+anonymous page, not a failed upstream call; no HTTP/gateway signature exists in the
+kernel record or the event stream. (The fleet's separate needle-OTLP-503 /
+otel-collector class is a different signal, unrelated to this event.)
+
+**CODE_DEFECT — ruled out.** The killed process was `git` (`Comm: git`, `task=git` in
+the extract) — domain-check code was not in the kill path and no application error
+appears in any artifact of this chain, consistent with the workspace-wide 157+
+investigations / zero code defects (§12).
+
+### 15.3 The classifier run (acceptance criterion: "use crash-classifier.sh if available")
+
+`./scripts/crash-classifier.sh bf-3561g`, run live 2026-09-07 → prints
+**FALSE_POSITIVE**, exit 0. That verdict answers a *different question* than the one
+this bead asks, and both answers are correct — recording how they reconcile is part of
+the classification deliverable:
+
+- **The trace-provenance guard worked.** The single-slot trace for bf-3561g holds the
+  *10th* dispatch (captured 2026-08-17T11:06:29Z, `exit_code 0` — the success), outside
+  the incident window 2026-08-16T17:13:04Z–17:29:52Z that the script derives from
+  `.beads/events.jsonl`. The script said so explicitly, skipped its trace-derived
+  pattern checks, and took the crash's exit code from the event stream (−1) instead —
+  exactly the fix for the earlier failure mode (noted in the comment atop
+  `classify_crash()`) where that success transcript produced a FALSE_POSITIVE with a
+  fabricated reason.
+- **The FALSE_POSITIVE branch that fired is the recovery rule** (`crash-classifier.sh`,
+  "Bead recovered after the crash — this is a FALSE_POSITIVE"): `exit_code −1` **and**
+  bead status Closed ⇒ "crash triggered automatic retry, a later attempt succeeded."
+  That is a *triage disposition* — CLAUDE.md's crash-response guide calls the same
+  shape SELF-HEALED TRANSIENT FAILURE, meaning "no per-bead investigation was needed" —
+  not a mechanism category, and it is not one of the four categories this bead was
+  asked to choose from. The script's own reason text for this bead names the mechanism
+  itself: "the 2026-08-16 cascade … was kernel memcg OOM."
+- **Reconciliation.** Mechanism = INFRASTRUCTURE_EVENT (§15.1). Disposition =
+  self-healed via auto-retry — the 10th dispatch completed the work (event line 1546,
+  `exit_code 0`; the bead is Closed, verified). The two do not conflict: the crash was
+  real, infrastructure-caused, and cost nothing but the 9 failed dispatches, because
+  the retry re-ran into the same trigger until pressure eased (§14.1). Had this bead's
+  category list contained a fifth "no action needed" slot, the classifier's output
+  would map there; the Goal ("inform the fix strategy") is a mechanism question, so the
+  classification reported is the mechanism one.
+
+### 15.4 Fix strategy the classification implies
+
+Each ruled-out category deletes a whole fix direction: no code change (nothing in
+domain-check was in the kill path), no workflow change (turn limits and bead closing
+were not the problem), no service dependency to harden. The fix lives entirely in the
+infrastructure layer and both of its legs are already landed and verified — repository
+de-bloat (§8 mitigation list; re-verified 2026-09-06/07: `.git` 103 MB, 0 garbage) and
+persistent pack memory bounds covering both `git gc` and `git push`
+(`./scripts/setup-git-gc-config.sh --verify` → ✅, worst case ≈3072 MiB per pack run).
+The classification therefore adds no open work item; it confirms the standing checks in
+§14.2.1 — the daily 02:00 repo-health timer and the `--verify` gate — are the correct
+and sufficient response, with the classifier's recovery-rule verdict as the reminder
+that individual events of this class need no per-bead investigation.
