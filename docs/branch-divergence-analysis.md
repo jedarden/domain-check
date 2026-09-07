@@ -214,6 +214,60 @@ outside this bead's scope:
 
 ---
 
+## Recovery Actions — 2026-09-07 (domchk-0d54f34e)
+
+**No recovery was needed; the recovery umbrella `domchk-bc734e55` is closed
+as NOT APPLICABLE.** This bead was documentation-only ("No analysis work
+performed"), and this section is the record its acceptance criteria asked
+for — recovery actions documented even when the answer is "no recovery
+needed" — plus the resolution point for future auto-splits of this family.
+
+### Was the original task complete?
+
+**Yes.** bf-4k2ws "Analyze divergent Forgejo and GitHub branch states" was
+closed 2026-08-16T15:35:42Z with all eight acceptance criteria satisfied —
+mapped criterion-to-artifact in the Verification section above. Re-verified
+live 2026-09-07 by this bead rather than trusted from the chain:
+`bead show bf-4k2ws` → Closed; both deliverables present on `origin/main`
+(`git ls-tree`); fresh fetch of both remotes, then `git rev-list
+--left-right --count` → 0/0 local-vs-origin, 0/0 local-vs-github-mirror,
+0/0 origin-vs-github-mirror, all three tips identical at `eb717df` at
+verification time.
+
+### Recovery actions taken
+
+None against the deliverable — there was nothing to recover. The split that
+was meant to perform recovery produced verification instead:
+
+| Chain bead (all `split-child`) | Verdict |
+|---|---|
+| `domchk-59478499` — verify completeness | complete; 8/8 criteria (its section above) |
+| `domchk-637878ba` — review existing analysis | complete and accurate after the 2026-09-07 corrections; the 52 stale docs it found are a doc-accuracy remediation item, not analytical gaps |
+| `domchk-80c2d3a9` — complete missing analysis | conditional did not fire → NOT APPLICABLE, no work |
+| `domchk-0d54f34e` — this bead | documents recovery actions; marks the parent |
+
+The one action this chain took was administrative, on the parent umbrella
+**`domchk-bc734e55` ("Recover incomplete work if needed")**: closed as NOT
+APPLICABLE — the outcome its own acceptance criteria direct ("If bf-4k2ws
+analysis was complete, this bead is marked as not applicable") and that both
+prior children recommended. Its notes had read "Status: CLOSED - NOT
+APPLICABLE - Original work was complete" since 2026-09-02 while the bead
+itself stayed Open at revision 12: the notes were written; the close never
+happened. Its stale `split-child` and `verification-failed` labels came off
+at the same time — a completed umbrella carrying a co-resident
+`split-child` label is this family's known re-split trigger, and
+`verification-failed` was falsified by the chain's verification.
+
+### Next steps
+
+None analytical. One loose end remains in this family, outside this chain's
+scope: **`bf-31p3g`** ("Create merge commit reconciling both histories") is
+still InProgress (untouched since 2026-08-17) with notes concluding
+"COMPLETED - No merge operation required" — for its owner to close. Do not
+re-dispatch on the divergence premise; see the Standing conclusion above.
+
+---
+
 *Everything below this section is the 2026-09-02 analysis. Its specific
 figures (`debd24f`, `73ff9ab`) are superseded by the two sections above; its
 method and conclusions still hold.*
