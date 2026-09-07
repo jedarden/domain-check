@@ -417,6 +417,67 @@ bf-1s6c3 auto-split chain) found its deliverable already rendered by `af9b461` +
 `fcfa79d` (domchk-ed3ed12b, closed) and therefore shipped no new summary document —
 the only change here is the dated correction above.
 
+### Re-verification 2026-09-07 (domchk-0d35f6e5 — the parallel chain's root-cause step)
+
+This bead is the "Investigate root cause based on classification" link of the **parallel**
+gather → classify → investigate chain (`domchk-2f8e3f15` → `domchk-0d43def4` →
+`domchk-0d35f6e5`); its classification predecessor handed it this report's subject with
+"Infrastructure — repository bloat, confidence high". The deliverable it was dispatched to
+produce — root cause with supporting evidence, contributing factors, mitigation strategy —
+is rendered by **§6, §5 and §8 above**, written by the sibling chain. Per the workspace
+dedup rule this bead therefore shipped **no new document**; what follows is its own
+first-hand re-verification, plus the explicit mapping of its dispatch's four
+infrastructure-branch investigation steps onto this report.
+
+**Live re-verification (all re-run 2026-09-07, byte-exact against this report):**
+
+- **Census recounted** from the committed extracts (945 + 513 lines): `agent.completed` × 76
+  → exit −1 × 71, 124 × 4, 0 × 1; `outcome.classified` → crash × 71, timeout × 4,
+  success × 1; `outcome.handled` → alerted × 71, deferred × 4, none × 1; first claim
+  21:31:27.663Z; last completion 02:01:22.561Z
+- **Ancestry:** `42a7b07` = commit, 2026-08-12T21:47:07Z "Merge reconciliation: Forgejo and
+  GitHub remote histories" — **not** an ancestor of `main`; `46293c5` **is**; `2832106` and
+  `7dd79eb` both fail `git cat-file`
+- **Repository:** `.git` 102 MB · 71 loose objects / 484 KiB · 3 packs · 99.13 MiB ·
+  garbage 0 · `git fsck --full` exit 0 · `git ls-files .beads` → 0 · `.gitignore:66`
+  `.beads/` (+ `*.db` / `*.jsonl` rules)
+- **Convergence:** `rev-list --left-right --count HEAD...origin/main` → 0 / 0; Forgejo
+  `origin/main` == local `HEAD` == `21b5a85`
+- **Prevention layers 3–4:** `scripts/setup-git-gc-config.sh --verify` exit 0 (effective
+  windowMemory=2g / threads=1 / deltaCache=1g, worst case ≈3072 MiB within the 12 GiB
+  dispatch-scope ceiling); `scripts/setup-git-hooks.sh --check` exit 0 (installed hook
+  byte-identical to tracked source)
+- **Host today:** 45 G memory available, 57 G disk free, load 5.74 — healthy
+
+**The dispatch's four infrastructure-branch steps, mapped:**
+
+1. *Memory pressure and system resources* — the violated axis at crash time was the
+   **repository-size** axis (≈18 GB object store), not the host axis; host memory/load for
+   2026-08-12 remain unknowable (§4.3). The pre-task `free -g` gate would not have caught
+   this event (§5's threshold review, quantified in the RCA addendum) — which is why the
+   operative pre-flight for this crash type is the repo-size table (§8).
+2. *OOM killer logs and system events* — re-confirmed live that none can exist for Aug-12:
+   `journalctl --list-boots` first entry **2026-08-15 19:46:33 EDT**. The memcg mechanism is
+   kernel-proven for the later siblings bf-4x12ec (gc) and bf-198ne (push); for this event it
+   rests on the fully-present Pattern-3 signature (§5.2).
+3. *SIGHUP cascade* — **excluded by the data**: all 71 deaths carry `exit_code: −1` with zero
+   variation (no 129/137 signal-number encoding anywhere in the extracts), and −1 is needle's
+   `wait()` sentinel for died-by-signal (§5.1). The superseded SIGHUP-cascade framing of the
+   2026-09-01 corpus is catalogued in §11.
+4. *Resource limits and quotas* — the binding constraint was the dispatch scope's
+   `MemoryMax=12GiB` (`docs/maintenance/repository-maintenance-guide.md:158,171`) against an
+   18 GB object store; the post-remediation bound (windowMemory=2g, threads pinned,
+   deltaCache=1g → ≈3 GiB worst case per pack run) verifies clean today.
+
+**Root-cause verdict (unchanged, confirmed):** Infrastructure — repository bloat
+(Pattern 3). Immediate cause: memcg-OOM SIGKILL of `git push`'s pack-objects inside the
+12 GiB dispatch scope (71 of 76 attempts died at the push step, §4.2). Amplifying cause: the
+~10 s no-backoff re-dispatch loop with no stop-condition for satisfied work. Underlying
+cause: 17+ identical ~237 MB `.beads/*.jsonl` snapshots committed to git. Mitigation: §8
+layers 1–6, re-verified in force above. **Alert disposition: no further action for this
+event** — the bead is closed, the deliverable is represented on `main` by `46293c5`, and the
+repository condition is repaired and holding.
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
