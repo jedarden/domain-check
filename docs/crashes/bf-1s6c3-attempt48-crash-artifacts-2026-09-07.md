@@ -252,3 +252,58 @@ attempt-48** instant (the last of the storm's named instants without one) was ap
 [`docs/crash-analysis-bf-1s6c3-2026-09-06.md`](../../crash-analysis-bf-1s6c3-2026-09-06.md) §12.
 The verdict above is §5's, unchanged — this section renders it for this chain's specific
 attempt and adds no new mechanism.
+
+## 9. Fix applied (domchk-e9234a0d, 2026-09-07)
+
+### 9.1 Fix type and justification
+
+**Classification carried in:** Infrastructure — repository bloat (**Pattern 3**), specific
+mechanism *push-side pack-objects memcg-OOM* (§8). The dispatch's literal fix path for that
+branch is `./scripts/safe-git-gc.sh --full` + monitor — the remediation for **extant** bloat.
+
+**No gc was run, deliberately.** That path's precondition — a bloated object store — does not
+hold: the bloat was repaired 2026-09-06 (18 GB → ~94 MB, re-verified holding) and child 2's
+close-reason handoff to this bead is explicit — *verify the layers and document, do not run a
+new gc*. Running a 1–2 h full gc against a healthy 103 MB repository would be pure churn, and
+bounded full gcs already run on schedule (weekly Sun 04:00, `MemoryMax=4G`). The fix that
+matches this classification is therefore the **existing four-layer Pattern-3 prevention
+stack**, re-verified live end-to-end at the point this chain's fix step executes; nothing in
+the chain surfaced a gap requiring new remediation.
+
+| Layer | What it prevents | Status for this event's mechanism |
+|---|---|---|
+| 1. `.beads/` fully gitignored (the root cause of the bloat itself) | bead-state snapshots re-entering git | ✅ `.gitignore:66` `.beads/`, `:68` `*.db`, `:70` `*.jsonl`; `git ls-files .beads` → **0**; `git log --all -- .beads/` → **0 commits** on every ref |
+| 2. 10 MB pre-commit gate | any single oversized blob landing at all | ✅ `./scripts/setup-git-hooks.sh --check` → exit 0, installed hook byte-identical to tracked source |
+| 3. `pack.windowMemory=2g` + `deltaCacheSize=1g` + `threads=1` | **the kill mechanism itself** — unbounded pack-objects under gc *and* push | ✅ `./scripts/setup-git-gc-config.sh --verify` → exit 0; all three keys effective at **both** scopes a bare push sees (`~/.gitconfig` global *and* `.git/config` local) — attempt 48 died 2026-08-12, four days before this layer existed (added 2026-09-02) |
+| 4. Scheduled bounded maintenance (systemd user timers) | slow re-accumulation going unnoticed | ✅ all seven `domain-check-*` timers present and firing 2026-09-07 — repo-health daily 02:00, incremental gc daily 03:00, full gc weekly Sun 04:00, plus the three monitoring timers |
+
+### 9.2 Commands executed and verification results (all live, 2026-09-07)
+
+| Command | Result |
+|---|---|
+| `./scripts/setup-git-gc-config.sh --verify` | **exit 0** — worst case ≈**3072 MiB** per pack run (windowMemory 2 GiB × 1 thread + 1 GiB delta cache) within the 12 GiB dispatch-scope ceiling |
+| `./scripts/check-repo-health.sh` | **exit 0** — gc config verified, no unmanaged aggressive gc running |
+| `git count-objects -vH` | 149 loose objects / **1.10 MiB** · 3 packs / **99.13 MiB** · garbage **0** — loose count is normal churn drift (§6 read 82, §8 read 134; the daily 03:00 gc packs them) |
+| `git fsck --full` | **exit 0** — dangling trees only, normal churn |
+| `git fetch origin` + rev-list | **0 ahead / 0 behind** — no divergence |
+| `du -sh .git` | **103 MB** (vs ≈18 GB at crash time) |
+| largest blob in the object store | **14,970,288 B** ×3 — no bloat remnant; the 237 MB `.beads` snapshots are gone |
+| `./scripts/setup-git-hooks.sh --check` | **exit 0** |
+| `systemctl --user list-timers 'domain-check-*'` | **7/7 timers** present with future trigger times |
+| Host: `free -h` / `df -h /` / `uptime` | 46 Gi available memory · 51 G disk free · load 7.23 — healthy, no resource exhaustion |
+| `journalctl -k --since "-7 days"` oom-kill attribution | 96 lines, **all synthetic/test scopes** — `safe-git-gc-*` self-test bounds (22 × `task=bash`), `bf4yjq-crash-*` signature replays (14 × `task=git`), 46 generic `oom-killer:` gfp_mask notices; **zero live dispatch-scope victims** |
+
+### 9.3 Disposition
+
+- **Fix applied matches the classification** — the Pattern-3 stack is the matched remediation
+  for Infrastructure/repository-bloat, and layer 3 bounds the exact command that died
+  (`git push` pack-objects, 13.0 s in flight).
+- **Monitored for safety** — no gc was run, so no new OOM surface was introduced; the
+  monitoring layer reports healthy and the only recent kernel OOM records are the safeguard
+  layer's own deliberate test bounds.
+- **Verification complete** — `fsck` clean, 0/0 divergence, 0 garbage, all four layers green.
+- **No new commit beyond this documentation.** The chain's open tail is **domchk-4e8821ca**
+  (verify prevention + document learnings + close parent bf-1wz2w): its verification steps
+  are the §9.2 table re-run, and the lessons-learned material it would write already exists
+  in the canonical report's §8 (Prevention Recommendations) and `docs/crash-mitigation-strategies.md`.
+  Alert closure remains with bf-1wz2w's own closure chain, untouched here.
