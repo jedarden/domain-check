@@ -199,6 +199,16 @@ action was to stop adding load; nothing does that.
 query: "is a crash surge active right now?" plus a documented deferral
 convention.
 
+> **CLOSED 2026-09-07** (commit `e0fab45`, bead `domchk-84d48411`; verified live
+> by `domchk-a18b2c06`): `scripts/system-event-mode.sh` is tracked and answers
+> `check` / `status` / `json` / `alert-gate` with the exit-code contract
+> (0 clear / 75 defer / 4 alert-suppressed / 2 usage), sourcing crash-burst,
+> synchronized-exit-wave, and PSI-memory signals. Live re-verification: a
+> `status` run on a fresh event source reports `STATE clear`, and
+> `scripts/test-system-event-mode.sh` passes 32/32. The remaining half of this
+> gap — making dispatchers and preflights actually *call* the gate — is the
+> adoption question, not a missing implementation.
+
 **G-4 — Gateway failover and the retry mandate are unimplemented.**
 Recommendation #3 (retry with backoff + failover) is documented as code and as
 a CLAUDE.md snippet, but `scripts/gateway-failover.sh` does not exist and
