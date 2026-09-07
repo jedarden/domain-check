@@ -261,6 +261,49 @@ independent of that rework.
 
 ---
 
+## Fix-Chain Verification Record (bf-4k2ws chain, 2026-09-07)
+
+The bf-4k2ws fix chain — fix type `domchk-2222ea44` → implement `domchk-20f2666d` →
+test `domchk-ecf47b49` → document `domchk-26ccd69b` (this record) — closed with
+**no code change**: the fix this chain exists to implement and test is the safeguard
+stack documented on this page (the pack-memory bounds above, the safe-gc run-time
+safeguards, the `.beads/` gitignore + 10 MB pre-commit gate), all already committed.
+Per the chain's fix spec
+(`docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`
+§10.4), "implement and test" here means *run the battery and change nothing unless a
+line fails* — nothing failed. Sibling-wave battery records live in that document's
+§13.4 and in the beads' notes; this subsection is chain A's.
+
+Battery re-run first-hand 2026-09-07 at HEAD `48aafce` = `origin/main`. Scripts
+carrying co-tenant WIP in the worktree (`safe-git-gc.sh`, `preflight-health-check.sh`)
+ran from `git show HEAD:` copies; the rest ran in place:
+
+| Check | Live result |
+|---|---|
+| `setup-git-gc-config.sh --verify` | exit 0 — effective chain system→global→local; all three keys present at both global and local scope; worst case ≈3072 MiB within the 6 GiB ceiling |
+| `safe-git-gc.sh --check-only` (committed copy) | config validated (window 2g / delta 1g / ceiling 6g / threads 1, worst ≈3584 MiB); resource checks pass (46836 MB avail mem vs 7168 min, 28 G disk, load 5.17 vs 15 max) → **"GC not needed", exit 1 — the healthy answer** under the exit-code contract above |
+| `test-safe-git-gc-limits.sh` | 33/33 passed, exit 0 (incl. checkpoint/resume end-to-end) |
+| `test-gc-memory-bounds.sh` | **12/12, exit 0** — incl. the crash-condition replay: bare `git gc --aggressive --prune=now` (the bf-173o7e / bf-4x12ec kill command) exited 0 under `MemoryMax=768M` with pack-objects peak RSS 320528 KB < the 700 MiB cap; the crash-era runs exceeded 12 GiB |
+| Repo state | `.git` 104 MB; 220 loose / 2.28 MiB; 1 pack 99.11 MiB; garbage 0; `git fsck --full` exit 0; `git ls-files .beads` → 0; pre-commit hook byte-identical (`setup-git-hooks.sh --check` exit 0) |
+
+Two deltas a future battery runner should expect (both reproduced again this session;
+first recorded in the determination doc's §13.5):
+
+1. **`safe-git-gc.sh --check-only` exiting 1 *is* success** on a healthy repo — the
+   contract is `0` = gc needed, `1` = not needed, `2` = fail-fast. Fix-spec §10.4
+   step 7 says "exit 0"; read it through this contract or a healthy repo fails the
+   one line that proves it healthy.
+2. **The committed `preflight-health-check.sh` fails one line on a healthy system:**
+   its gateway probe is plain `-sf` and dies on the gateway's self-signed cert
+   (curl 60) while a direct `curl -skf …/health` returns `ok` — G-4's live specimen,
+   fix owned by `domchk-6951fe0c`. Also note the script resolves its helpers relative
+   to its own directory (`SCRIPT_DIR`), so a `git show HEAD:` extract run from a
+   scratch dir degrades the repo-health / cgroup checks to "⚠ not found (skipping)" —
+   extract the helpers alongside it or run it in place; those skips are warnings, not
+   failures, and the gateway line remains the only hard one.
+
+---
+
 ## Prevention Checklist
 
 **Daily:**

@@ -35,6 +35,22 @@ When investigating a crash, first classify the type:
 
 ## Automated Crash Alert System (Implemented 2026-09-02)
 
+> **2026-09-07 status — read this first.** The alerting layer changed after this
+> section was written. Duplicate-alert defense now lives in a dedicated gate,
+> `scripts/alert-deduplication.sh check <alert-bead-id>` (exit 0 = DUPLICATE →
+> suppress, 1 = UNIQUE → proceed, 2 = usage, 3 = INDETERMINATE → fail open),
+> backed by `scripts/crash-resolution-tracker.sh`, whose `check` now evaluates
+> live bead closure and work-completion markers instead of the 0-record ledger
+> it used to read (gaps D-1..D-10 in
+> [alert-deduplication-gap-analysis-2026-09-07.md](alert-deduplication-gap-analysis-2026-09-07.md),
+> shipped in `48aafce`). Run the gate **before** starting any investigation of an
+> ALERT bead — most alerts today point at work another worker already finished.
+> Caveats on the subsections below: nothing in production invokes
+> `crash-alert-manager.sh` (no timer, no hook), and at HEAD its
+> FALSE_POSITIVE / SERVICE_FAILURE branches are inert — its classification
+> variable is the classifier's `=====` banner (gap D-3). Architecture, usage,
+> testing, and troubleshooting: **[alerting-system-guide.md](alerting-system-guide.md)**.
+
 ### Quick Start: Automated Crash Processing
 
 **NEW:** Use the automated crash alert system before manual investigation:
