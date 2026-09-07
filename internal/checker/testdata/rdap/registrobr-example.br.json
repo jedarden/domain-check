@@ -1,0 +1,56 @@
+{
+  "rdapConformance": [
+    "rdap_level_0",
+    "nicbr_rdap_profile_0"
+  ],
+  "objectClassName": "domain",
+  "handle": "D123456-BR",
+  "ldhName": "EXAMPLE.COM.BR",
+  "status": [
+    "published"
+  ],
+  "entities": [
+    {
+      "handle": "123456",
+      "roles": ["registrant"],
+      "publicIds": [
+        {
+          "type": "CNPJ",
+          "identifier": "00.000.000/0001-00"
+        }
+      ]
+    },
+    {
+      "handle": "REG-001",
+      "ldhName": "Registro BR",
+      "roles": ["registrar"]
+    }
+  ],
+  "events": [
+    {
+      "eventAction": "registration",
+      "eventDate": "1995-01-01T00:00:00-03:00"
+    },
+    {
+      "eventAction": "expiration",
+      "eventDate": "2025-01-01T00:00:00-03:00"
+    },
+    {
+      "eventAction": "delegation check",
+      "eventDate": "2024-12-01T10:00:00-03:00"
+    },
+    {
+      "eventAction": "last changed",
+      "eventDate": "2024-06-15T14:30:00-03:00"
+    }
+  ],
+  "nameservers": [
+    {
+      "ldhName": "NS1.EXAMPLE.COM.BR"
+    },
+    {
+      "ldhName": "NS2.EXAMPLE.COM.BR"
+    }
+  ],
+  "port43": "whois.registro.br"
+}

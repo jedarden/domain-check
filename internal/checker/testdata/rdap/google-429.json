@@ -1,0 +1,12 @@
+{
+  "rdapConformance": [
+    "rdap_level_0"
+  ],
+  "objectClassName": "error",
+  "errorCode": 429,
+  "title": "Rate Limit Exceeded",
+  "description": [
+    "You have exceeded the rate limit for this service.",
+    "Please wait before making additional requests."
+  ]
+}

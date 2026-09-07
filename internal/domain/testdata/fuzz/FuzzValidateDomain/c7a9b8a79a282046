@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\ud7aä́\ud7aä́힔̦\ud7aä́\ud7aä́힔̦힔̦힔̦")

@@ -1,0 +1,47 @@
+{{define "index"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+<section class="search-section">
+    <form action="/check" method="GET" class="search-form">
+        <div class="input-group">
+            <input type="text" name="d" id="domain-input" placeholder="Enter a domain name" autofocus autocomplete="off" spellcheck="false" required>
+            <button type="submit" aria-label="Check domain">Check</button>
+        </div>
+
+        <fieldset class="tld-options">
+            <legend>Also check:</legend>
+            <label><input type="checkbox" name="tlds" value="com"> .com</label>
+            <label><input type="checkbox" name="tlds" value="org"> .org</label>
+            <label><input type="checkbox" name="tlds" value="net"> .net</label>
+            <label><input type="checkbox" name="tlds" value="dev"> .dev</label>
+            <label><input type="checkbox" name="tlds" value="io"> .io</label>
+            <label><input type="checkbox" name="tlds" value="app"> .app</label>
+        </fieldset>
+    </form>
+</section>
+
+<section class="recent-checks-section hidden" id="recent-checks">
+    <div class="recent-checks-header">
+        <h2>Recent checks</h2>
+        <button type="button" class="clear-history-btn" id="clear-history">Clear history</button>
+    </div>
+    <ul class="recent-checks-list" id="recent-checks-list">
+        <li class="no-history">No recent checks</li>
+    </ul>
+    <noscript>
+        <p class="noscript-message">Recent checks history requires JavaScript to be enabled.</p>
+    </noscript>
+</section>
+
+<section class="info-section">
+    <h2>How it works</h2>
+    <p>Domain Check queries registry servers directly via <a href="https://about.rdap.org/">RDAP</a> (Registration Data Access Protocol), the ICANN-mandated successor to WHOIS. This provides authoritative availability data, not guesswork.</p>
+    <ul>
+        <li>No accounts required</li>
+        <li>No tracking or analytics</li>
+        <li>Works without JavaScript</li>
+    </ul>
+</section>
+{{end}}

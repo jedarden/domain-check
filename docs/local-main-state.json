@@ -1,0 +1,29 @@
+{
+  "snapshot_type": "local_main_branch_state",
+  "captured_at": "2026-08-13T07:24:30Z",
+  "branch": "main",
+  "commit": {
+    "sha": "e5143c9ac3d6f73bcaccdfad60c37125a22823d2",
+    "short_sha": "e5143c9",
+    "message": "docs: document local main branch state for bead bf-1ea4g - captures baseline commit SHA, message, author, and timestamp for branch divergence analysis",
+    "author": {
+      "name": "jedarden",
+      "email": "github@jedarden.com"
+    },
+    "timestamp": "2026-08-13T03:23:02-04:00",
+    "timestamp_unix": 1786617782
+  },
+  "repository": {
+    "name": "domain-check",
+    "path": "/home/coding/domain-check"
+  },
+  "context": {
+    "purpose": "Branch divergence analysis baseline",
+    "bead_id": "bf-1ea4g",
+    "next_steps": [
+      "Compare with Forgejo remote state",
+      "Compare with GitHub mirror state",
+      "Identify divergent commits"
+    ]
+  }
+}

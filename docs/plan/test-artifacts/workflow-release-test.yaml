@@ -1,0 +1,25 @@
+# Test 2: Release Workflow (Explicit Entry Point)
+# Submission: kubectl --kubeconfig=/home/coding/.kube/iad-ci.kubeconfig create -f workflow-release-test.yaml -n argo-workflows
+#
+# Expected behavior:
+# - Uses 'release' entrypoint (explicit override)
+# - Runs: quality-gate → goreleaser-release
+# - Does NOT run build-quality-gate, resolve-version, or docker-build
+# - Expected failure: goreleaser fails because v0.0.0-test tag doesn't exist on remote
+# - Success criterion: Reaches goreleaser step (proves entrypoint routing)
+
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: domain-check-release-manual-
+  namespace: argo-workflows
+  annotations:
+    description: "Test release entrypoint with fake tag - should fail at goreleaser (expected)"
+spec:
+  workflowTemplateRef:
+    name: domain-check-build
+  entrypoint: release  # Override default entrypoint
+  arguments:
+    parameters:
+      - name: tag
+        value: "v0.0.0-test"  # Non-existent tag - will fail at goreleaser (EXPECTED)

@@ -1,0 +1,31 @@
+{
+  "bead_id": "bf-1ea4g",
+  "snapshot_type": "local_main_branch_state",
+  "snapshot_taken_at": "2026-08-13T04:01:18-04:00",
+  "snapshot_taken_at_unix": 1723539678,
+  "branch": {
+    "name": "main",
+    "commit_sha": "13823164584ccea4aa70f2217228261bca2eb89f",
+    "commit_short_sha": "1382316",
+    "commit_message": "docs: capture local main branch state for bead bf-1ea4g - documents baseline commit SHA, message, author, and timestamp for branch divergence analysis",
+    "commit_author": {
+      "name": "jedarden",
+      "email": "github@jedarden.com"
+    },
+    "commit_timestamp": "2026-08-13T04:00:13-04:00",
+    "commit_timestamp_unix": 1786608013,
+    "commit_co_authors": ["Claude <noreply@anthropic.com>"]
+  },
+  "context": {
+    "working_directory": "/home/coding/domain-check",
+    "is_git_repository": true,
+    "current_branch": "main",
+    "repository": "jedarden/domain-check"
+  },
+  "notes": [
+    "This is a baseline snapshot of the local main branch state",
+    "Used for branch divergence analysis in bead bf-1ea4g",
+    "Snapshot captured before any remote operations or comparisons",
+    "This data will be used for later analysis steps"
+  ]
+}

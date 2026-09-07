@@ -1,0 +1,28 @@
+% Copyright (c) 2024 by DENIC
+% Version: 2.0
+%
+% Restricted rights.
+%
+% Terms and Conditions of Use
+%
+% The data in this record is provided by DENIC for informational purposes only.
+% DENIC does not guarantee its accuracy and cannot, under any circumstances,
+% be held liable in case the stored information would prove to be wrong,
+% incomplete or not accurate in any sense.
+%
+% All the domain data that is visible in the whois service is protected by law.
+% It is not permitted to use it for any purpose other than technical or
+% administrative requirements associated with the operation of the Internet.
+% It is explicitly prohibited to extract, copy and/or use or re-utilise in any
+% form and by any means (electronically or not) the whole quantitative or
+% substantial part of the contents of the whois database without prior and
+% explicit permission by DENIC.
+% It is prohibited, in particular, to use it for transmission of unsolicited
+% and/or commercial and/or advertising by phone, fax, e-mail or any other media.
+%
+% It is the task of the named administrative contact (Admin-C) to ensure that
+% all legal and contractual obligations are met when the domain is delegated.
+
+Domain: thisisnotaqqqsdomain123.de
+Status: free
+Changed: 2024-01-15T10:30:00+01:00

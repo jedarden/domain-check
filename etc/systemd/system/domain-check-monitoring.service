@@ -1,0 +1,12 @@
+[Unit]
+Description=Domain Check Crash Alert Manager
+Documentation=file:///home/coding/domain-check/docs/crash-response-guide.md
+After=network.target
+
+[Service]
+Type=oneshot
+User=coding
+WorkingDirectory=/home/coding/domain-check
+ExecStart=/home/coding/domain-check/scripts/crash-alert-manager.sh --auto-process
+StandardOutput=append:/home/coding/domain-check/.beads/logs/crash-alert-manager.log
+StandardError=append:/home/coding/domain-check/.beads/logs/crash-alert-manager.log

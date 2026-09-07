@@ -1,0 +1,2 @@
+go test fuzz v1
+string("0ؒ\xc60ڍĠ..0\xb4߁..0.ע\xdd.0000000\xa80\x800\x85Ο؞\u05ca0\x8cܰ\u05c9̶ʧî.00")

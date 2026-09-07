@@ -1,0 +1,27 @@
+[ JPRS database provides information on network administration. Its use is    ]
+[ restricted to network administration purposes. For further information,     ]
+[ use 'whois -h whois.jprs.jp help'. To suppress Japanese output, add'/e'     ]
+[ at the end of command, e.g., 'whois -h whois.jprs.jp xxx/e'.                ]
+
+Domain Information: [ドメイン情報]
+[Domain Name]                   EXAMPLE.JP
+
+[登録者名]                      Example Corporation
+[Registrant]                    Example Corporation
+
+[Name Server]                   ns1.example.jp
+[Name Server]                   ns2.example.jp
+
+[Signing Key]
+
+[登録年月日]                    1997/03/19
+[有効期限]                      2025/03/31
+[状態]                          Active
+
+[最終更新]                      2024/03/01 01:05:07 (JST)
+
+Contact Information: [公開連絡窓口]
+[名前]                          Example Corporation
+[Name]                          Example Corporation
+[Email]                         domain@example.jp
+[Web Page]

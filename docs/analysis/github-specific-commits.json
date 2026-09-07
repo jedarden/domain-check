@@ -1,0 +1,11 @@
+{
+  "analysis_type": "github-specific-commits",
+  "generated_at": "2026-08-13T07:15:00Z",
+  "forgejo_branch": "origin/main",
+  "forgejo_commit": "63ba02474c9b6bc339388adb3a44542e10755a10",
+  "github_branch": "github/main",
+  "github_commit": "63ba02474c9b6bc339388adb3a44542e10755a10",
+  "common_ancestor": "63ba02474c9b6bc339388adb3a44542e10755a10",
+  "github_specific_count": 0,
+  "github_specific_commits": []
+}

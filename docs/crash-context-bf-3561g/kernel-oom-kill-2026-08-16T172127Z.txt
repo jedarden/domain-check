@@ -1,0 +1,107 @@
+Aug 16 13:21:27 lab kernel: git invoked oom-killer: gfp_mask=0xcc0(GFP_KERNEL), order=0, oom_score_adj=200
+Aug 16 13:21:27 lab kernel: CPU: 3 UID: 1001 PID: 2718317 Comm: git Not tainted 6.12.63 #1-NixOS
+Aug 16 13:21:27 lab kernel: Hardware name: Dell Inc. OptiPlex 3000/0R7HRW, BIOS 1.9.1 01/18/2023
+Aug 16 13:21:27 lab kernel: Call Trace:
+Aug 16 13:21:27 lab kernel:  <TASK>
+Aug 16 13:21:27 lab kernel:  dump_stack_lvl+0x5d/0x90
+Aug 16 13:21:27 lab kernel:  dump_header+0x43/0x1c0
+Aug 16 13:21:27 lab kernel:  oom_kill_process.cold+0x8/0x87
+Aug 16 13:21:27 lab kernel:  out_of_memory+0x218/0x500
+Aug 16 13:21:27 lab kernel:  mem_cgroup_out_of_memory+0x133/0x150
+Aug 16 13:21:27 lab kernel:  try_charge_memcg+0x493/0x640
+Aug 16 13:21:27 lab kernel:  __mem_cgroup_charge+0x42/0xe0
+Aug 16 13:21:27 lab kernel:  do_anonymous_page+0x383/0x8c0
+Aug 16 13:21:27 lab kernel:  ? __pte_offset_map+0x1b/0x190
+Aug 16 13:21:27 lab kernel:  __handle_mm_fault+0xb3c/0xfc0
+Aug 16 13:21:27 lab kernel:  ? perf_event_task_tick+0x4f/0xa0
+Aug 16 13:21:27 lab kernel:  handle_mm_fault+0xe2/0x2d0
+Aug 16 13:21:27 lab kernel:  do_user_addr_fault+0x227/0x640
+Aug 16 13:21:27 lab kernel:  exc_page_fault+0x71/0x160
+Aug 16 13:21:27 lab kernel:  asm_exc_page_fault+0x26/0x30
+Aug 16 13:21:27 lab kernel: RIP: 0033:0x550850
+Aug 16 13:21:27 lab kernel: Code: 48 83 c2 01 c1 e0 08 c1 e9 17 44 09 f8 41 33 04 8a 48 39 d7 75 e4 48 8d 57 ff 39 f0 74 4c 49 89 10 89 c2 48 83 ef 10 44 21 ea <41> 89 40 08 49 8d 0c d4 41 83 04 91 01 48 8b 31 49 89 70 10 4c 89
+Aug 16 13:21:27 lab kernel: RSP: 002b:00007f38e4dd6d60 EFLAGS: 00010202
+Aug 16 13:21:27 lab kernel: RAX: 000000000005d22a RBX: 0000000000400000 RCX: 000000000000003c
+Aug 16 13:21:27 lab kernel: RDX: 000000000005d22a RSI: 00000000323c0ba6 RDI: 00007f378cac19a1
+Aug 16 13:21:27 lab kernel: RBP: 0000000000eb4499 R08: 00007f35f03a3ff8 R09: 00007f38d40fde20
+Aug 16 13:21:27 lab kernel: R10: 000000000074eda0 R11: 00007f3789095011 R12: 00007f35dda00010
+Aug 16 13:21:27 lab kernel: R13: 00000000003fffff R14: 000000000eb44998 R15: 0000000000000069
+Aug 16 13:21:27 lab kernel:  </TASK>
+Aug 16 13:21:27 lab kernel: memory: usage 12582912kB, limit 12582912kB, failcnt 8948
+Aug 16 13:21:27 lab kernel: swap: usage 0kB, limit 9007199254740988kB, failcnt 0
+Aug 16 13:21:27 lab kernel: Memory cgroup stats for /user.slice/user-1001.slice/user@1001.service/app.slice/run-p2695224-i212383579.scope:
+Aug 16 13:21:27 lab kernel: anon 12855824384
+Aug 16 13:21:27 lab kernel: file 12288
+Aug 16 13:21:27 lab kernel: kernel 29065216
+Aug 16 13:21:27 lab kernel: kernel_stack 360448
+Aug 16 13:21:27 lab kernel: pagetables 26537984
+Aug 16 13:21:27 lab kernel: sec_pagetables 0
+Aug 16 13:21:27 lab kernel: percpu 1344
+Aug 16 13:21:27 lab kernel: sock 0
+Aug 16 13:21:27 lab kernel: vmalloc 0
+Aug 16 13:21:27 lab kernel: shmem 0
+Aug 16 13:21:27 lab kernel: zswap 0
+Aug 16 13:21:27 lab kernel: zswapped 0
+Aug 16 13:21:27 lab kernel: file_mapped 0
+Aug 16 13:21:27 lab kernel: file_dirty 0
+Aug 16 13:21:27 lab kernel: file_writeback 0
+Aug 16 13:21:27 lab kernel: swapcached 0
+Aug 16 13:21:27 lab kernel: anon_thp 0
+Aug 16 13:21:27 lab kernel: file_thp 0
+Aug 16 13:21:27 lab kernel: shmem_thp 0
+Aug 16 13:21:27 lab kernel: inactive_anon 2518032384
+Aug 16 13:21:27 lab kernel: active_anon 10337775616
+Aug 16 13:21:27 lab kernel: inactive_file 12288
+Aug 16 13:21:27 lab kernel: active_file 0
+Aug 16 13:21:27 lab kernel: unevictable 0
+Aug 16 13:21:27 lab kernel: slab_reclaimable 1810848
+Aug 16 13:21:27 lab kernel: slab_unreclaimable 295952
+Aug 16 13:21:27 lab kernel: slab 2106800
+Aug 16 13:21:27 lab kernel: workingset_refault_anon 0
+Aug 16 13:21:27 lab kernel: workingset_refault_file 114938
+Aug 16 13:21:27 lab kernel: workingset_activate_anon 0
+Aug 16 13:21:27 lab kernel: workingset_activate_file 5540
+Aug 16 13:21:27 lab kernel: workingset_restore_anon 0
+Aug 16 13:21:27 lab kernel: workingset_restore_file 5535
+Aug 16 13:21:27 lab kernel: workingset_nodereclaim 0
+Aug 16 13:21:27 lab kernel: pgdemote_kswapd 0
+Aug 16 13:21:27 lab kernel: pgdemote_direct 0
+Aug 16 13:21:27 lab kernel: pgdemote_khugepaged 0
+Aug 16 13:21:27 lab kernel: pgpromote_success 0
+Aug 16 13:21:27 lab kernel: pgscan 483225
+Aug 16 13:21:27 lab kernel: pgsteal 401873
+Aug 16 13:21:27 lab kernel: pgscan_kswapd 0
+Aug 16 13:21:27 lab kernel: pgscan_direct 483225
+Aug 16 13:21:27 lab kernel: pgscan_khugepaged 0
+Aug 16 13:21:27 lab kernel: pgsteal_kswapd 0
+Aug 16 13:21:27 lab kernel: pgsteal_direct 401873
+Aug 16 13:21:27 lab kernel: pgsteal_khugepaged 0
+Aug 16 13:21:27 lab kernel: pgfault 6318362
+Aug 16 13:21:27 lab kernel: pgmajfault 10472
+Aug 16 13:21:27 lab kernel: pgrefill 2108489
+Aug 16 13:21:27 lab kernel: pgactivate 40173
+Aug 16 13:21:27 lab kernel: pgdeactivate 0
+Aug 16 13:21:27 lab kernel: pglazyfree 0
+Aug 16 13:21:27 lab kernel: pglazyfreed 0
+Aug 16 13:21:27 lab kernel: swpin_zero 0
+Aug 16 13:21:27 lab kernel: swpout_zero 0
+Aug 16 13:21:27 lab kernel: zswpin 0
+Aug 16 13:21:27 lab kernel: zswpout 0
+Aug 16 13:21:27 lab kernel: zswpwb 0
+Aug 16 13:21:27 lab kernel: thp_fault_alloc 0
+Aug 16 13:21:27 lab kernel: thp_collapse_alloc 0
+Aug 16 13:21:27 lab kernel: thp_swpout 0
+Aug 16 13:21:27 lab kernel: thp_swpout_fallback 0
+Aug 16 13:21:27 lab kernel: numa_pages_migrated 0
+Aug 16 13:21:27 lab kernel: numa_pte_updates 0
+Aug 16 13:21:27 lab kernel: numa_hint_faults 0
+Aug 16 13:21:27 lab kernel: Tasks state (memory values in pages):
+Aug 16 13:21:27 lab kernel: [  pid  ]   uid  tgid total_vm      rss rss_anon rss_file rss_shmem pgtables_bytes swapents oom_score_adj name
+Aug 16 13:21:27 lab kernel: [2695224]  1001 2695224     1956      911       96      815         0    53248        0           200 bash
+Aug 16 13:21:27 lab kernel: [2695227]  1001 2695227  1582777    65633    62325     3308         0  1404928        0           200 claude
+Aug 16 13:21:27 lab kernel: [2718051]  1001 2718051     2201     1010      192      818         0    53248        0           200 bash
+Aug 16 13:21:27 lab kernel: [2718283]  1001 2718283     2666     1122       32     1090         0    65536        0           200 git
+Aug 16 13:21:27 lab kernel: [2718297]  1001 2718297     2666     1103       32     1071         0    57344        0           200 git
+Aug 16 13:21:27 lab kernel: [2718298]  1001 2718298  3290313  3076687  3075427     1260         0 24903680        0           200 git
+Aug 16 13:21:27 lab kernel: oom-kill:constraint=CONSTRAINT_MEMCG,nodemask=(null),cpuset=user.slice,mems_allowed=0,oom_memcg=/user.slice/user-1001.slice/user@1001.service/app.slice/run-p2695224-i212383579.scope,task_memcg=/user.slice/user-1001.slice/user@1001.service/app.slice/run-p2695224-i212383579.scope,task=git,pid=2718298,uid=1001
+Aug 16 13:21:27 lab kernel: Memory cgroup out of memory: Killed process 2718298 (git) total-vm:13161252kB, anon-rss:12301708kB, file-rss:5040kB, shmem-rss:0kB, UID:1001 pgtables:24320kB oom_score_adj:200
