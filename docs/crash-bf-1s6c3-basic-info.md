@@ -144,3 +144,110 @@ of `main`; zero divergence today). No work was lost; domain-check code was never
 | Agent version and workspace identified | §3, §4 |
 | Task context captured (bead being worked on) | §5 |
 | List of all available crash artifacts compiled | §6 (including what does not exist) |
+
+**Classification-step criteria (domchk-2a28452d):** crash type classified, pattern analysis,
+false-positive determination, next steps → all four in **§8** below.
+
+---
+
+## 8. Crash classification, pattern analysis, false-positive determination
+
+**Added 2026-09-07 by domchk-2a28452d — this chain's classification step** (the step after the
+gather step that compiled §§1–7). Everything below was re-derived first-hand for this bead:
+the census, cadence and density figures are recounted directly from this bundle's extracts
+(945 + 513 lines), the git ancestry and repository figures re-measured live, then
+cross-checked against the canonical report (§5) and the parallel chain's committed
+classification deliverable
+(`docs/crashes/bf-1s6c3-crash-classification-2026-09-06.md`, domchk-56b5ba67, commit `9b92cd9`)
+— which it matches. This section adds the classification layer to the basic-facts sheet; the
+canonical report's §5 (rationale), §6 (root-cause chain) and §12 (each chain bead's dated
+re-verification) remain the authoritative record and are cited, not duplicated.
+
+### 8.1 Crash type: INFRASTRUCTURE — repository-bloat sub-type (guide Pattern 3)
+
+**Primary class: Infrastructure event. Confidence: high (~95%).**
+**Sub-type: repository bloat. Confidence: high (~90%)** — the two legs that rest on
+contemporaneous documentation rather than re-measurable state are (a) the ≈18 GB crash-time
+repo size, which survives only in cleanup-era docs because the offending objects were packed
+away 2026-09-01, and (b) the memcg kill mechanism, which has no Aug-12 kernel record (journald
+starts Aug-15) and is kernel-proven only for the better-instrumented later siblings bf-4x12ec
+(gc variant) and bf-198ne (push variant). Per the guide's own design, the classification rests
+on the Pattern-3 detection signature — which is fully present — not on a kernel record that
+cannot exist for this date.
+
+Guide mapping applied (`docs/crash-response-guide.md` Quick Reference table):
+
+| Guide row | Requires | bf-1s6c3 (recounted) | Verdict |
+|---|---|---|---|
+| Exit −1 → Infrastructure event | signal death, code unrecorded | 71 of 76 completions exit −1; **zero** `129`/`137` signal encodings anywhere in 1,458 extract lines (−1 is needle's sentinel, not a signal number — guide note 2) | ✅ |
+| Exit −1 + fixed-cadence re-dispatch deaths + `.git` > 5 GB → **Infrastructure: Repository bloat** (Pattern 3) | all three | 71 deaths at median 173.7 s over a 227 min kill window; ≈18 GB `.git` at crash time; the task itself was the routine git operation (`git push`) that triggered each kill | ✅ |
+
+Excluded alternates — each re-checked in the extracts for this classification, not copied:
+
+- **Workflow failure** (exit 1 + `error_max_turns`): the string `max_turns` appears **0** times
+  in either extract, and `transform.completed` succeeded on **all 76** attempts — template
+  rendering was never the failure point.
+- **Service failure** (exit 1 + HTTP 503/502): **0** occurrences of a 502/503 status to the
+  inference gateway in either extract.
+- **Code defect**: no application error in any attempt; the task never touched domain-check
+  code (it was a two-parent git history merge). Consistent with the workspace's standing
+  finding that no domain-check code defect has ever been confirmed.
+
+### 8.2 Pattern analysis: repeated, not isolated — a deterministic self-sustaining storm
+
+| Measure | Value (recounted from the committed extracts) |
+|---|---|
+| Shape | **Repeated** — 76 dispatch attempts against one bead; 71 identical signal deaths |
+| Kill window | 2026-08-12T21:36:44.519Z → 2026-08-13T01:24:06.842Z = **227.4 min** |
+| Storm span (first kill → final exit 0) | **265 min** (§1's table gives the same window as claim → orphan, 270 min) |
+| Inter-kill gap | median **173.7 s**, range 74–731 s |
+| Inter-completion gap (all 76 completions) | median **176.7 s** |
+| Kill density | **3.12 kills / 10 min** over the kill window (2.68 / 10 min over the full 265 min span) |
+| Exit-code variation | **zero** among the 71 deaths — plus 4 × 124 (needle's 600 s cap) and 1 × 0 |
+| Attempt duration (the 71 kills) | median 160,886 ms, range 62,523–431,048 ms — **mid-attempt deaths, not post-completion cleanup** |
+| Outcome bookkeeping | `outcome.classified` crash × 71 / timeout × 4 / success × 1; `outcome.handled` **alerted × 71** — one undrained cause raised 71 alerts |
+| Re-dispatch loop | release → re-claim in ~10 s each death (measured by the parallel chain and re-confirmed at attempt boundaries in canonical report §12) |
+| Last-command signature | 71 of 76 attempts ended with a `git push` issued (60 `origin`, 10 `github`, 1 bare) — the kill lands inside pack-objects |
+| Same-mechanism context | follows bf-4yjq's 50 kills (17:54–20:30Z) the same evening on the same ≈18 GB object store |
+
+This is the guide's Pattern-3 signature in full: fixed-cadence re-dispatch deaths for hours,
+zero exit-code variation, repository > 5 GB, routine git operations triggering the kill. The
+guide's own bf-1s6c3 evidence block (Pattern 3 section) carries the same shape.
+
+### 8.3 False-positive determination: not a false positive as to cause; alert already discharged
+
+| Rule (guide §False Positive Detection) | Test | bf-1s6c3 | Verdict |
+|---|---|---|---|
+| 1 — time gap | work committed < 30 s before crash | attempt 4 committed merge `42a7b07` at 21:47:07Z and was killed at 21:48:06.650Z — **59.6 s**, and the deaths were mid-attempt (median run 2.7 min) | **Not triggered** |
+| 2 — success pattern | crash → retry → success (self-healed transient) | the 76th attempt did exit 0 — but via the auto-split *changing the task shape* (bead-only children, no `git push`), with the 18 GB cause untouched. A persistent cause outlasting the retry loop is Infrastructure, not transient (guide Rule 2 caveat, written for this storm) | **Surface match only — does not downgrade the classification** |
+| 3 — system-wide event | 10+ crashes / 10 min | **3.12 / 10 min** (kill window) | **Not triggered** |
+
+**Determination.** The crash is **not a false positive as to cause**: workers died mid-task of
+an environmental kill for the entire storm (guide's FALSE_POSITIVE class requires a
+post-completion-cleanup / completed-bead premise, which does not hold). **The alert is,
+however, already discharged:** the subject bead bf-1s6c3 closed 2026-08-16, and its deliverable
+is represented on `main` by the later reconciliation `46293c5` — re-verified live for this
+section as an ancestor of `main`, while `42a7b07` itself is **not** (it survives only on
+`pre-squash-history-20260816`), and the close reason's `7dd79eb` plus the older `2832106` both
+fail `git cat-file` (dead pre-squash SHAs). The two-layer reading, per canonical report §5.3:
+*what killed the workers* = infrastructure / repository bloat; *what the alert warrants today* =
+nothing further — a verification-only disposition.
+
+### 8.4 Next steps based on the classification
+
+Pattern 3's remediation ladder, live status re-checked 2026-09-07 for this classification
+(supersedes the parallel classification doc's 2026-09-06 snapshot where they differ):
+
+| # | Action | Status (re-verified 2026-09-07) |
+|---|---|---|
+| 1 | Pack the object store (`safe-git-gc.sh`; never bare `git gc --aggressive`) | ✅ done 2026-09-01 — today: `.git` **102 MB**, 83 loose objects (daily churn), pack 99.11 MiB, garbage 0 |
+| 2 | Keep bead state out of git | ✅ `.beads/` → 0 tracked files (`.gitignore:66` `.beads/`, `:70` `*.jsonl`) |
+| 3 | Pre-commit > 10 MB gate **with an installer** | ✅ shipped 2026-09-06 (`dfa60a9`); `./scripts/setup-git-hooks.sh --check` exits 0 today — **supersedes the parallel classification doc's "item 3 = open gap" note** |
+| 4 | Bound the bare-gc/push pack-objects path | ✅ `./scripts/setup-git-gc-config.sh --verify` passes today |
+| 5 | Scheduled repo-health + bounded gc | ✅ the `domain-check-*` systemd user timers are installed and holding future triggers |
+| 6 | Re-dispatch stop-condition for satisfied work (the amplifier that turned 1 kill into 71) | ❌ NEEDLE-side, outside this repository — remains the systemic finding |
+
+**Net next steps: none for this event in this repository.** Items 1–5 are in place and were
+re-verified live for this section; the only open lever is item 6, which lives in the NEEDLE
+fleet. Full remediation rationale: canonical report §8/§9. Divergence check at write time:
+`HEAD...origin/main` = 0/0 at `9ae17f2`.

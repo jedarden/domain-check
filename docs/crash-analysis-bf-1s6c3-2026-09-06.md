@@ -1661,3 +1661,111 @@ dispatch.
 The fix holds under the original crash conditions at reproducible scale: the death steps
 still die when unbounded (the mechanism is real), the deployed bounds let both finish,
 and the two prevention layers stop the bloat from forming at all.
+
+### Verification-results documentation 2026-09-07 (domchk-536fb6e7 — the document-the-fix-verification step)
+
+This bead's dispatch ("Document crash fix verification results") names four deliverables — the
+test case and what it reproduces, the no-OOM/normal-resource verification, regression-test
+results, and a summary report in `docs/verification/` referencing bf-1s6c3, plus a
+before/after comparison. Every one is already rendered by committed siblings: the harness and
+its before/after table are the two subsections above (domchk-2125075e built it,
+domchk-1835a393 ran and documented it), and the `docs/verification/` report exists as
+`crash-fix-verification-report-bf-1s6c3-2026-09-01.md` — superseded-bannered by
+domchk-a18b2c06 ("keep for provenance; do not cite it forward") — with the fresh record being
+that bead's `bf-1s6c3-recommendations-verification-2026-09-07.md`. Per the workspace dedup
+rule (and domchk-4e8821ca's identical precedent, subsection above) this bead ships **no new
+document**: at ~460 crash docs a further summary report would fork, not freshen, the record.
+What it ships is this dated subsection — its own first-hand re-verification of all four
+acceptance criteria, 2026-09-07 04:20–04:40 EDT:
+
+**The test case and what it reproduces (re-run clean by this bead):**
+`scripts/test-bf-1s6c3-crash-condition.sh` **7/7, exit 0** — rebuilds the bloat the way
+bf-1s6c3 actually formed it (32 commits of one near-identical 64 MiB JSONL snapshot →
+1122 MiB loose, A1), re-creates both death steps unbounded inside `MemoryMax=512M`
+(bare `git push` — 71/76 of the original deaths — and bare `git gc --aggressive --prune=now`
+— the Aug-14 variant: both killed by memcg OOM with the loose set intact, A2/A3), then proves
+the deployed bounds flip both to **exit 0 inside the same 512M** (B1 gc 67 s, B2 push 12 s
+with the remote receiving HEAD), and that `.gitignore` (C) plus the installed pre-commit hook
+(D) refuse every payload shape that caused the bloat. Companion replay
+`scripts/test-gc-memory-bounds.sh` **12/12, exit 0** — the exact Aug-14 crash command under
+`MemoryMax=768M`: pack-objects peak RSS **320,532 KB**, where the unbounded original exceeded
+the 12 GiB dispatch scope and produced the Aug-14 kill storms (bf-173o7e / bf-4x12ec).
+
+**Crash verification — no OOM, normal resource usage (live repo/host, this bead's runs):**
+`.git` 102 MB · 31 loose objects / 380 KiB · **1 pack** / 99.11 MiB (the three packs of the
+earlier §12 runs have since been consolidated) · in-pack 11,360 · garbage 0 ·
+`git fsck --full` exit 0 (dangling objects only) · `git ls-files .beads` → 0 ·
+`git log --all -- .beads/` → 0 commits on every ref · `setup-git-gc-config.sh --verify`
+exit 0 (windowMemory=2g / threads=1 / deltaCache=1g, worst case ≈3072 MiB inside the 12 GiB
+dispatch ceiling) · `setup-git-hooks.sh --check` exit 0 (installed hook byte-identical to
+source) · `check-repo-health.sh` exit 0 · `resource-monitor.sh --once` all OK
+(**45 G memory available, 45 G disk free, load 5.59, PSI pressure 0%, no unsafe gc running**)
+· all seven `domain-check-*` timers hold future triggers. Kernel OOM attribution over 7 days:
+144 `oom-kill` lines, every one inside a synthetic test scope (`bf1s6c3-push-a2/b2` and
+`bf1s6c3-gc-a3` — this harness's own intended kills — `bf4yjq-crash-*`, `mw-oom*`,
+`safe-git-gc-run-*`); **zero live dispatch-scope victims** — the §5 steady state.
+
+**Regression tests (all pass at HEAD):** `go test ./...` red in exactly one test —
+`TestServerStartsAndStopsResourceMonitor` ("resource monitor outlived the server") in
+`internal/server`, where this shared worktree carries a co-tenant's uncommitted
+resource-monitor work (`server.go`, `server_safeguards_test.go` modified;
+`resource_monitor.go` + its test untracked). `git archive HEAD` extracted to /tmp, same
+package run there: **ok 4.492 s, exit 0** — the committed state is green and the red is
+in-flight co-tenant work, the same attribution domchk-4e8821ca recorded on its pass. The
+20-test suite (`scripts/test-crash-fix-bf-1s6c3.sh`) re-run: **19/20**, its single failure
+being that same `go test` step.
+
+**Before/after** — the full table is in domchk-1835a393's subsection above; this bead's live
+half of it: repository 102 MB / 31 loose objects / 1 pack (was ~18 GB / 17.16 GB loose /
+4,482 objects), both death steps exit 0 under the deployed bounds (were 71/76 kills), zero
+live OOM victims in 7 days (were 71 kills in 4.5 h), payload shapes refused at commit time
+(were 17+ × ~237 MB commits landed).
+
+**Disposition:** the fix-verification record this bead was dispatched to create exists in
+committed form — the harness subsections above and the two `docs/verification/` reports —
+and nothing this pass probed regressed. No new document; this subsection is the bead's
+deliverable.
+
+### Re-verification 2026-09-07 (domchk-2a28452d — the domchk-7dc70ccd chain's classification step)
+
+This bead is the second link of the gather → classify → investigate chain whose first link is
+the `domchk-7dc70ccd` subsection above (forensic dep edge: `domchk-7dc70ccd` blocks this bead).
+Its dispatched deliverable — crash classification, pattern analysis, false-positive
+determination and next steps — is rendered by the new **§8** of
+`docs/crash-bf-1s6c3-basic-info.md`, the basic-facts sheet the gather step shipped. Per the
+dedup rule no new classification document was created: the parallel chain's committed
+classification (`docs/crashes/bf-1s6c3-crash-classification-2026-09-06.md`, domchk-56b5ba67)
+is cited and matched, and this report's §5/§6 remain authoritative.
+
+**First-hand re-verification (all figures this bead's own recomputes, 2026-09-07):**
+
+- **Census recounted** from the committed extracts (945 + 513 lines): `agent.completed` × 76 →
+  exit −1 × 71, 124 × 4, 0 × 1; `outcome.classified` crash/timeout/success = 71/4/1;
+  `outcome.handled` alerted/deferred/none = 71/4/1
+- **Cadence/density:** first kill 21:36:44.519Z (dur 316,572 ms) → last kill 01:24:06.842Z =
+  227.4 min kill window; median inter-kill gap 173.7 s (74–731); median inter-completion gap
+  176.7 s; 3.12 kills/10 min over the kill window (2.68 over the 265 min kill→final-completion
+  span); kill durations median 160,886 ms (62,523–431,048)
+- **Attempt 4:** death 21:48:06.650Z, dur 285,151 ms — 59.6 s after merge `42a7b07`
+  (2026-08-12T17:47:07-04:00 = 21:47:07Z, parents `47e7758` + `00117cb`)
+- **Excluded alternates re-checked in the extracts:** `max_turns` × 0; HTTP 502/503 × 0;
+  `transform.completed` × 76 (one per attempt); `exit_code` 129/137 × 0 (sentinel reading
+  re-confirmed)
+- **Ancestry:** `42a7b07` **not** an ancestor of `main` (contained only by
+  `pre-squash-history-20260816`); `46293c5` **is**; `2832106` and `7dd79eb` both fail
+  `git cat-file`
+- **Repository today:** `.git` 102 MB · 83 loose objects · pack 99.11 MiB · garbage 0 ·
+  `git ls-files .beads` → 0 (`.gitignore:66` `.beads/`, `:70` `*.jsonl`)
+- **Guard layers re-checked live:** `setup-git-hooks.sh --check` exit 0 (item 3's installer
+  shipped `dfa60a9` 2026-09-06 — this supersedes the parallel classification doc's open-gap
+  note); `setup-git-gc-config.sh --verify` pass; `domain-check-*` user timers holding future
+  triggers
+- **Convergence:** `HEAD...origin/main` → 0/0 at `9ae17f2`; subject bead bf-1s6c3 **closed**
+
+**Verdict (unchanged, confirmed):** Infrastructure — repository bloat, `crash-response-guide`
+Pattern 3, every criterion present (§5.2). FP rules 1–3 applied: R1 not triggered (59.6 s,
+mid-attempt deaths), R2 surface match only (auto-split changed the task shape; cause
+persistent), R3 not triggered (3.12/10 min) — the infrastructure classification rests on the
+exit-code mapping plus the Pattern-3 signature. Alert disposition: **no further action** —
+subject closed, deliverable represented on `main` by `46293c5`, repo repaired and holding.
+Deliverable: `docs/crash-bf-1s6c3-basic-info.md` §8 (the chain's own basic-facts sheet).
