@@ -72,4 +72,25 @@ echo "⚙️  Git GC Configuration:"
 git config --local --get-regexp "^gc\." | sed 's/^/  /' || echo "  No local GC configuration found"
 echo ""
 
+# 9. Unpushed-commit backlog (gap analysis M-1, docs/crash-prevention-gaps-bf-1ea4g.md):
+# bf-1ea4g died 56 times in `git push` against a 422-commit unpushed backlog that
+# accumulated silently across ~30 killed attempts — nothing measured commit-ahead
+# between close-time gates. Report-only per the G-2 correction: remediation stays
+# with the unconditional bounded nightly gc; this check only names the precondition.
+if BACKLOG_OUT="$(bash "$SCRIPT_DIR/check-unpushed-backlog.sh" "$REPO_ROOT" 2>&1)"; then
+    BACKLOG_RC=0
+else
+    BACKLOG_RC=$?
+fi
+sed 's/^/  /' <<<"$BACKLOG_OUT"
+mkdir -p "$REPO_ROOT/.beads/logs"
+if [ "$BACKLOG_RC" -eq 1 ]; then
+    echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") CRITICAL repo-health: unpushed backlog at or above 200 commits — a push will materialize the whole series in one pack-objects run (bf-1ea4g shape)" >> "$REPO_ROOT/.beads/logs/repo-health.log"
+elif [ "$BACKLOG_RC" -eq 0 ] && grep -q "⚠️  WARN" <<<"$BACKLOG_OUT"; then
+    echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") WARN repo-health: unpushed backlog at or above 50 commits" >> "$REPO_ROOT/.beads/logs/repo-health.log"
+elif [ "$BACKLOG_RC" -eq 2 ]; then
+    echo "⚠️  backlog check skipped (usage error)"
+fi
+echo ""
+
 echo "✅ Comprehensive health check complete!"
