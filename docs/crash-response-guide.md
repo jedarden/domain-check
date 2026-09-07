@@ -1007,6 +1007,17 @@ Other Exit Code?
   FALSE-POSITIVE premise; the SIGHUP mechanism; dead SHAs `2832106`/`7dd79eb` → real merge
   `42a7b07`, on-`main` reconciliation `46293c5`). Cite it, **not**
   `docs/comprehensive-crash-investigation-report-2026-09-01.md` (superseded for bf-1s6c3)
+
+- **bf-1ea4g canonical record (2026-09-07):**
+  `docs/investigations/bf-1ea4g-root-cause-determination-2026-09-02.md` — 57 attempts /
+  56 `exit -1` kills on 2026-08-13; kill **INFRASTRUCTURE** (unbounded `git push`
+  pack-objects over a 422-commit unpushed backlog in the repo-bloat era, inside the
+  12 GiB dispatch scope) / alert **FALSE_POSITIVE** (the bead self-recovered and closed
+  the same morning). The consolidated one-stop view is
+  `docs/crash-inventory-bf-1ea4g-summary.md`; raw artifacts live in
+  `docs/crashes/bf-1ea4g/`. Cite these, **not** the 2026-09-02-era SIGHUP /
+  healthy-repo mechanism (superseded by that doc's dated banner and its §2026-09-07
+  re-determination)
 - **Mitigation Strategies:** `docs/crash-mitigation-strategies.md`
 
 - **Specific Crashes:** 
@@ -1029,7 +1040,8 @@ Other Exit Code?
 ---
 
 **Guide Status:** ✅ Complete  
-**Last Updated:** 2026-09-07 (third pass, from the bf-1s6c3 canonical report
+**Last Updated:** 2026-09-07 (fourth pass — bf-1ea4g canonical-record block added to
+Related Documentation, domchk-0a6edc46); third pass, from the bf-1s6c3 canonical report
 `docs/crash-analysis-bf-1s6c3-2026-09-06.md`: exit 124 added to the classification table,
 INFRASTRUCTURE row and "What Causes Crashes" moved off the superseded SIGHUP framing,
 Rule 1/Rule 2 false-positive caveats for re-dispatch storms, re-dispatch-amplifier corollary,

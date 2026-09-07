@@ -869,3 +869,119 @@ and the journald start date are independent re-derivations that agree
 byte-exact with the bundle (commit 2ce9cd9), the bf-4k2ws §12.3 census, and
 the re-determination above; figures from other documents are cited, not
 restated.
+
+## 2026-09-07 comprehensive investigation report (domchk-0a6edc46)
+
+Appended per the corpus dedup-append convention (no new bf-1ea4g doc; nothing
+above is rewritten). This section renders the "Document investigation findings
+and recommendations" dispatch's five acceptance criteria — a complete report with
+all sections, root cause documented with evidence, preventive recommendations
+specified, the report linked to the crash-response guide, and the knowledge base
+updated — against the current determination. The consolidated one-stop view
+remains `docs/crash-inventory-bf-1ea4g-summary.md`; the artifact bundle is
+`docs/crashes/bf-1ea4g/` (commit 2ce9cd9).
+
+### C1. Evidence summary
+
+| # | Evidence | Where it lives | This session |
+|---|---|---|---|
+| 1 | 57 dispatch attempts 07:17:49Z → 09:08:30Z: 56 × `exit_code: -1`, then 1 × exit 0 | `docs/crashes/bf-1ea4g/attempt-index.tsv` (header + 57 rows) | ✅ re-counted live |
+| 2 | Attempt 30 died mid-`git push`: transcript `449405f5` ends on an unanswered `tool_use` at 08:23:31.123Z; kill record `agent.completed exit_code: -1` at 08:23:44.918Z (92,079 ms) | bundle `session-transcript-attempt30-449405f5.jsonl` + `needle-events-…-attempt30.jsonl` | cited (2ce9cd9) |
+| 3 | 54 of the 57 surviving transcripts end inside `git push` (2 in `git commit`, 1 = `bf close`) | re-determination §3 above | cited (75ed2d8) |
+| 4 | No kernel record for Aug-13 can exist (journald single boot from 2026-08-15 19:56:33 EDT); nearest kernel proof of the mechanism is bf-198ne, Aug-16: 720-commit backlog / 5.6 GB, `task=git` `CONSTRAINT_MEMCG` at 100 % of the 12 GiB dispatch `MemoryMax` | re-determination §5/§7; `docs/crashes/bf-198ne-crash-report.md` | cited |
+| 5 | The bead self-recovered: closed 2026-08-13T09:10:16.731Z by attempt 57, which succeeded by *skipping* the push (snapshot to `/tmp`) | `bead show bf-1ea4g` | ✅ re-verified live |
+| 6 | Code exonerated: the killed process was `git`; zero domain-check defects across the corpus | re-determination §7 above | cited |
+| 7 | Then vs now: Aug-13 = 422-commit unpushed backlog with `.beads/` still tracked; today = 105 MB `.git`, 284 loose objects, 1 pack 99.11 MiB, 0 garbage, `fsck` exit 0 (dangling-only), 0/0 divergence | `git count-objects -vH` / `git fsck` | ✅ re-verified live |
+
+Classification, both layers — not a contradiction: **the kill was
+INFRASTRUCTURE** (repository-bloat-era kill regime); **the alert was
+FALSE_POSITIVE** (the work did not need rescuing — the bead closed successfully
+the same morning).
+
+### C2. Analysis timeline
+
+**The incident (2026-08-13, UTC):** bead created 07:14:47 → 57 dispatch attempts
+from 07:17:49, 56 killed — each retry committed its snapshot before pushing, so
+the backlog grew per kill (self-amplifying loop) → 09:08:39 attempt 57 succeeds
+by writing its snapshot to `/tmp` and *not* pushing → 09:10:16 bead closed. Full
+table: inventory §2.
+
+**The investigation (2026-08-16 → 2026-09-07):**
+
+| Date | Step |
+|---|---|
+| 2026-08-16 | First corpus docs; bf-198ne kernel-proves the push-side mechanism |
+| 2026-09-01 | Repository de-bloat verified (18 GB era → ~92 MB, holding) |
+| 2026-09-02 | This determination written: alert-level FALSE_POSITIVE **correct**, mechanism "SIGHUP cascade / healthy repo" **wrong** (superseded in place by the banner at the top of this document); the alert-layer six fixes and the `pack.windowMemory` bounds land the same day |
+| 2026-09-06 | Repo health re-verified five days on; `exit -1` reclassified fleet-wide as needle's unrecorded-signal sentinel (no signal number) |
+| 2026-09-07 | Chain completes: alert level re-verified (domchk-596f8499), mechanism re-determined from the attempt transcripts (domchk-c2b8c832), artifact bundle committed (domchk-93ac565b), system-resource analysis (domchk-508e54c0), consolidated inventory (domchk-6a5f4207), prevention-gap analysis (domchk-29af544b), this report |
+
+The arc's own lesson: for five days the report a search surfaced first taught a
+mechanism that one afternoon of transcript analysis disproved, once transcripts
+were paired to attempts by first-line dispatch tag.
+
+### C3. Root cause (documented with evidence)
+
+Stated in §2026-09-07 root-cause re-determination §8 above and not re-derived
+here: **unbounded `git push` (pack-objects) materializing a 422-commit unpushed
+backlog that still carried retired bead-forge object mass, on a repo still
+tracking `.beads/` state, inside the dispatch scope's 12 GiB `MemoryMax` →
+memcg-OOM-class SIGKILL, recorded as `exit_code: -1`.** Amplifiers: the
+self-amplifying retry loop (56 kills), no git-transport memory bound before
+2026-09-02, pre-dedup alerting (88 alert beads minted against one closed bead),
+and fleet-wide CPU saturation (71/71 samples, 07:00–10:00Z, peak 19.87).
+Confidence: HIGH on the operation and the mechanism class; MEDIUM that memcg OOM
+was this exact instant's killer — unknowable, no Aug-13 kernel record survives.
+
+### C4. Preventive measures — bound to root cause, live-verified
+
+| Root-cause element | Safeguard (landed) | Live verification | Status |
+|---|---|---|---|
+| Unbounded push/gc pack memory | `pack.windowMemory=2g`, `deltaCacheSize=1g`, `pack.threads=1` repo+global (`setup-git-gc-config.sh`; bounds gc **and** push) | `--verify` exit 0: worst case ≈3072 MiB < 12 GiB scope | ✅ closed — replay-proven (`test-gc-memory-bounds.sh`, bf-4k2ws §16) |
+| Bead-state mass in git | `.beads/`, `*.jsonl`, `*.db` gitignored | `.gitignore:66` `.beads/`, `:70` `*.jsonl`; `git ls-files .beads` = 0 | ✅ closed |
+| Oversized commits | 10 MB pre-commit gate (`scripts/pre-commit-repo-size-hook`) | hook installed, byte-identical to tracked source, `setup-git-hooks.sh --check` exit 0 | ✅ closed |
+| Unmonitored repo health | systemd timers: repo-health 02:00, incremental gc 03:00, full gc Sun 04:00, hourly alert-triage | 8 `domain-check-*` timers, all future-NEXT | ✅ closed |
+| One-alert-per-kill storm | dedup + closed-bead filter + cooldown + classifier (2026-09-02 six fixes) | `test-crash-alert-fixes.sh` 12/12 per the bf-4k2ws §16 re-run (b9d2907) | 🟡 partial — `docs/alert-deduplication-gap-analysis-2026-09-07.md` D-1..D-10 open; 28 open/in-progress bf-1ea4g title-matches counted today, 25 days after the target closed |
+| Retry loop with no stop-condition | none — policy-level, and must not be filed as a print-only detection rule | — | 🔴 open (H-1, `docs/crash-prevention-gaps-bf-1ea4g.md`) |
+| No commit-ahead counter anywhere | none — M-1 proposal: `rev-list --count @{upstream}..HEAD` in `check-repo-health.sh`, warn ≥50 / critical ≥200 | — | 🔴 open (M-1) |
+| Dispatch-scope memory telemetry | none — monitoring is host-wide; the 12 GiB memcg that did the killing is unobserved | — | 🔴 open (M-2) |
+
+**Recommendations, in priority order:** (1) file M-1 — the one detection rule
+this crash uniquely motivates; (2) drain the residual bf-1ea4g alert pool
+through the hourly alert-triage sweep rather than new investigations; (3) run
+crash-mechanism replays only in throwaway clones (see C6); (4) nothing further
+on the kill mechanism itself — it is bounded and replay-proven.
+
+### C5. Related crash patterns and previous investigations
+
+- **bf-198ne** (2026-08-16) — the same mechanism kernel-proven with sizes attached (`docs/crashes/bf-198ne-crash-report.md`)
+- **bf-1s6c3 / bf-4yjq** (2026-08-12) — the bloat era itself: 18 GB `.git` / 17.16 GB loose; canonical write-up `docs/crash-analysis-bf-1s6c3-2026-09-06.md`
+- **bf-4k2ws** (2026-08-13, same day) — 55-kill same-mechanism storm ending 13 minutes before this bead's first dispatch (the documented rolling-handoff pattern); its canonical determination §12/§13/§16 own the patterns, mitigations, and fix-effectiveness record
+- Corpus map and claim-conflict matrix: `docs/crash-inventory-bf-1ea4g-summary.md` §6–§7
+
+### C6. Knowledge-base updates
+
+- **Crash-response guide linked (this session):** `docs/crash-response-guide.md` →
+  "Related Documentation" now carries the bf-1ea4g canonical-record block.
+- `docs/crash-documentation-index.md` already lists the consolidated inventory
+  (2026-09-07 entry by domchk-6a5f4207).
+- **Dated incident note (first-hand, 2026-09-07 10:22–10:30 EDT):** a
+  crash-mechanism replay test for this bead family (domchk-9d840579, "bounded
+  push over an unpacked backlog") committed and pushed an **empty tree** to
+  shared `main` (`2e8ce7a`: 2,722 files / 303,789 lines deleted from origin),
+  and a second worker briefly stacked a 1-file commit on it (`38db68ac`). The
+  fleet repaired forward in seven minutes (`2ec91ecd` "restore: full repo tree
+  after empty-tree commit 2e8ce7a (fleet repair)", 10:29:45 EDT; re-verified as
+  the last pre-wipe tree `5cf76be` plus exactly the co-tenant's gap-analysis
+  doc). The kill operation itself stayed memory-bounded — the new hazard is
+  **where replays run**: against the fleet's shared worktree, a replay can
+  destroy shared history even when its bounds hold. Replays belong in throwaway
+  clones; that residual is registered here for the H-1/M-1 owner doc. This
+  incident's own RCA belongs to its own bead, not this section.
+
+**Attribution:** items marked "✅ re-verified live" were re-run first-hand in
+this clone today (attempt-index row count, `bead show`, `git count-objects`/
+`fsck`/`ls-files`/`check-ignore`, `setup-git-gc-config.sh --verify`,
+`setup-git-hooks.sh --check`, `systemctl --user list-timers`, and the repair
+delta above); everything else is cited to the section or commit that derived
+it, per the corpus's attribution convention.
