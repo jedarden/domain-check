@@ -1331,6 +1331,127 @@ the mitigation doc's live-verified stack.
 (subject bf-1s6c3 closed; its named instant is attempt 48's kill + 5.6026 s per the
 classification subsection above), its stale `verification-failed` label removed after this
 pass. No further action for this event.
+
+### Immediate-cause analysis 2026-09-07 (domchk-8b615c48 — the gather→analyze→classify chain's analysis step, attempt 58's kill)
+
+This bead is the middle child of the three-bead chain created 2026-09-02 03:30Z:
+domchk-904abc88 (collect — closed, subsection above) → **domchk-8b615c48 (this bead —
+immediate cause)** → domchk-0a00e94c (root cause + classification — open). Its scope is the
+immediate cause of the `exit -1` at the chain's named instant only; tracing the causal chain
+back to the bloat and classifying per the framework belong to the downstream bead. The
+collection subsection supplies the instant→attempt-58 mapping; everything below is this
+bead's first-hand re-read of the same committed evidence.
+
+**Immediate cause (the answer to "what killed the process"):** the kernel's cgroup-memory
+OOM killer sent an uncatchable SIGKILL to attempt 58's agent while `git push origin main`
+was running — recorded by needle as `agent.completed` `exit_code=-1`,
+`duration_ms=285898`, at `2026-08-13T00:28:30.196295497Z` (seq 6261, extract line L158).
+Per §5.1, `-1` is needle's `wait()` sentinel for *died by signal, code unrecorded*, not a
+signal number. The push was the attempt's 19th and final Bash tool call
+(`call_3342606599de4db9a50a0cb4`, issued `00:28:15.495Z`) and the **only call in the
+session with no recorded result** — the kill lands **14.701 s** after the push was issued,
+inside its `git pack-objects`. That pack-objects ran against the ≈18 GB `.git`
+(≈17 GB loose objects, including the 17+ identical ~237 MB `.beads/*.jsonl` snapshots)
+inside the dispatch scope's 12 GiB `MemoryMax`, and the attempt had re-staged the bloat
+material itself 45 s earlier (`git add .beads/ .needle-predispatch-sha` at
+`00:27:29.680Z` — `.beads/` was not yet gitignored on 2026-08-13, so each attempt fed the
+push a fresh ~237 MB blob). This is the push-side memcg-OOM mechanism later kernel-proven
+for bf-198ne (`oom-kill:constraint=CONSTRAINT_MEMCG`, memcg `usage 12582912kB`,
+`limit 12582912kB`, `task=git` — `docs/crashes/bf-198ne-crash-report.md:56`).
+
+**Timeline of events leading to the kill** (all UTC; sources: extract
+`needle-events-2026-08-13-bf-1s6c3.jsonl` L148–L177 and session transcript
+`9a709a38-09b4-42ff-8213-9be744ffb7ef`, both re-read first-hand for this bead):
+
+| Time | Event | Source |
+|---|---|---|
+| 00:23:41.623940977 | Attempt 57 released (`release_success`) + alerted — attempt 58 is its successor | seqs 6243–6244 (L148–L149) |
+| 00:23:44.047163899 | Attempt 58 claimed | seq 6249 (L151) |
+| 00:23:44.059808202 | Attempt 58 dispatched — same fixed retry prompt as all 76 (`prompt_len=70670`, `prompt_hash=aaa143d4…`) | seq 6258 (L155) |
+| 00:23:44.949 | Session first record (`sessions-index.tsv` row 58; 324,203 B) | transcript |
+| 00:23:59.462 → 00:28:15.495 | 19 Bash calls, all git operations: divergence inspection (`git log --oneline origin/main..github/main`, `git log --graph`, `git rev-parse HEAD origin/main github/main`) → `git add .beads/ .needle-predispatch-sha` (00:27:29.680, result recorded) → `git commit -m "chore: update needle predispatch SHA"` (00:27:46.615, **result recorded** — the commit completed) → **`git push origin main` (00:28:15.495, no result ever recorded)** | transcript |
+| **00:28:30.196295497** | **The kill — `agent.completed`, `exit_code=-1`, `duration_ms=285898`; push + 14.701 s** | seq 6261 (L158) |
+| 00:28:30.204702034 | `outcome.classified` → `crash` (8.4 ms after the kill) | seq 6264 (L160) |
+| 00:28:36.425380287 | Heartbeat `HANDLING_RELEASE_DONE` — the chain dispatch's named instant `00:28:36.425389752` is this heartbeat (kill + 6.229094255 s; ~9.5 µs clock-provenance drift, per the collection subsection) | seq 6270 (L166) |
+| 00:28:38.648722216 | Attempt 58 released + alerted (`outcome.handled` → `alerted`) | seqs 6271–6272 (L167–L168) |
+| 00:28:40.881312950 | Attempt 59 claimed, dispatched 00:28:40.892446323 with the byte-identical prompt | seqs 6277, 6286 (L170, L174) |
+| 00:33:36.817529664 | Attempt 59 killed the same way — `exit_code=-1`, 295,626 ms (extract ends the window here) | seq 6289 (L177) |
+
+The persistence is part of the reading: attempt 59, re-dispatched 2.2 s after the kill with
+the identical prompt against the identical repository condition, died identically — the
+cause was a standing repository condition, not a transient. This is one of the 71
+memcg-OOM deaths (attempt 58 = `agent.completed` #58 of 76, recounted from both extracts),
+not a distinct crash and not a 600 s timeout.
+
+**Ruled out as the immediate cause:**
+
+- **600 s timeout** — the kill arrives at 285,898 ms, roughly half the cap, and timeouts in
+  this storm present as `exit 124` (the four 600,018–600,024 ms attempts); this death is
+  neither.
+- **SIGHUP cascade** — `-1` alone says only *died by signal*; it cannot by itself pick the
+  signal. But no SIGHUP emitter is in evidence anywhere in the storm's records, the
+  historical SIGHUP-cascade framing is superseded (§ headnote), and the kill's correlation
+  with the git operation's memory profile (mid-push, every attempt, always fatal) matches
+  the memcg mechanism the recovered kernel records prove for the same-repo push variant.
+  No SIGHUP indicator exists for this instant.
+- **Service failure (inference gateway)** — no 5xx signature in any of the 76 attempts
+  (§5.4); the transform/dispatch pipeline succeeded on every attempt.
+- **Code defect** — all 19 of attempt 58's tool calls are git operations; the task never
+  touched domain-check code, consistent with the standing no-defect finding.
+- **Post-completion false positive** — this death was mid-task: the push never returned,
+  so the attempt was still executing when it died. (The separate, genuine false-positive
+  *component* — 72 of 76 dispatches running against an already-satisfied task — is §5.3's
+  two-layer reading and concerns the alert, not this kill.)
+
+**System resource state at crash time — not recoverable, and why.** The system journal on
+this box has exactly one boot, first entry `2026-08-15 19:56:33 EDT` (re-verified live
+2026-09-07: `journalctl --list-boots` → single boot; no entries exist for Aug-13). The
+pre-journal kernel records for Aug-12/13 were lost to the Aug-14 16:39 EDT reboot. So no
+per-kill memcg line, load average, or disk figure exists for 00:28:36Z, and any host-level
+number quoted "at the instant" would be reconstruction, not measurement (§4.3). The memcg
+attribution for this kill therefore rests on the corpus-level evidence: the recovered
+push-side kernel records for bf-198ne (same repo, same operation class, exact 12 GiB bound
+hit), the fully-present Pattern-3 signature (§5.2), and the bounded-replay tests
+(`scripts/test-gc-memory-bounds.sh`, `scripts/test-bf-1s6c3-crash-condition.sh`).
+
+**Evidence cited and where it lives (all committed, `MANIFEST.sha256` re-verified 5/5 for
+this bead):**
+
+- `docs/crashes/bf-1s6c3/needle-events-2026-08-13-bf-1s6c3.jsonl` L148–L177 — attempt 58's
+  full window, L158 the kill, L160 the classification, L166 the named instant's heartbeat
+- `docs/crashes/bf-1s6c3/sessions-index.tsv` row 58 — session UUID, byte count,
+  `last_issued_command = git push origin main`
+- `docs/crashes/bf-1s6c3/bf-1s6c3-crash-sessions-2026-08-12_13.tar.gz` — the transcript
+  (also still live at
+  `~/.claude/projects/-home-coding-domain-check/9a709a38-09b4-42ff-8213-9be744ffb7ef.jsonl`,
+  324,203 B — byte count matches the index)
+- `docs/crashes/bf-198ne-crash-report.md` — the kernel-proven push-side memcg records
+- `docs/crash-analysis-bf-1s6c3-2026-09-06.md` §§4–5 — the corpus-level attribution and
+  Pattern-3 signature this analysis builds on
+
+**Live re-verification (this bead's own runs, 2026-09-07):**
+
+| Check | Result |
+|---|---|
+| Bundle integrity | `sha256sum -c MANIFEST.sha256` → 5/5 OK |
+| Census recount (both extracts, 945 + 513 lines) | `agent.completed` × 76 → exit −1 × 71, 124 × 4, 0 × 1; attempt 58 = #58 of 76 |
+| Attempt-58 window re-read | L158 kill byte-identical to the collection subsection's mapping (`exit_code=-1`, `duration_ms=285898`, `00:28:30.196295497Z`) |
+| Transcript last-call check | 19 Bash calls, all with recorded results except the final `git push origin main` (00:28:15.495Z) → kill gap 14.701 s |
+| Journal retention | single boot, first entry 2026-08-15 19:56:33 EDT — no Aug-13 records exist |
+| Repository now | 12 loose objects · pack 99.11 MiB · garbage 0 · `git fsck --full` exit 0 · `git ls-files .beads` → 0 · `HEAD...origin/main` → 0/0 |
+
+**Bottom line:** attempt 58 was killed by a kernel memcg-OOM SIGKILL (`exit -1`) 14.7 s
+into its `git push origin main`, whose pack-objects could not fit the freshly re-staged
+`.beads/` snapshot within the dispatch scope's 12 GiB cap against an ≈18 GB repository.
+The named instant `00:28:36.425389752Z` is the post-kill release heartbeat 6.229 s later,
+not a second event. Nothing in this kill implicates domain-check code, the inference
+gateway, or an agent-workflow failure.
+
+**Chain handoff:** this closes the analysis step; closing the bead unblocks
+domchk-0a00e94c (root cause + classification), which inherits the attempt-58 mapping above.
+Canonical §§5–6 already render the classification and root cause the downstream dispatch
+asks for, so its work is the same verify-live-and-append path the sibling chains took.
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
