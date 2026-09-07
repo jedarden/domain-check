@@ -304,8 +304,9 @@ git count-objects -vH
    ```
    Per-clone, so a fresh clone is unprotected until
    `./scripts/setup-git-hooks.sh install` is run (idempotent; installs
-   `.githooks/pre-commit` — the installed hook is byte-identical to the tracked
-   source, superseding the drifted `scripts/pre-commit-repo-size-hook` copy).
+   `scripts/pre-commit-repo-size-hook` — the canonical tracked source, and the
+   file `--check` byte-compares against; `.githooks/pre-commit` is a stale
+   2026-09-01-era second copy that nothing executes, `core.hooksPath` unset).
    Self-test: `scripts/test-setup-git-hooks.sh`. Shipped 2026-09-06 (`dfa60a9`)
    as the last open gap in this layer (G-1). This hook is the backstop that
    would have blocked the 237MB `.beads/*.jsonl` commits.

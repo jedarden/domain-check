@@ -1109,3 +1109,88 @@ executed live at HEAD `e72af3c`. §14 and §15 appended by `domchk-b3966b66` —
 §14 a consolidation quoting §1–§13 under §6's rule and restating the
 §7-listed `domchk-e3e443bf` deliverable, §15 re-deriving no figures; their
 first-hand lines and closure actions are itemized in their section footers.*
+
+---
+
+## 16. Fix-effectiveness verification — the resolution holding live (bead `domchk-34871e96`, 2026-09-07)
+
+Dispatched to "verify fix effectiveness and update crash documentation" — the
+terminal step of this alert's fix chain: fix spec `domchk-9bd1f524` (§10) →
+implement `domchk-aa986d4b` (closed: battery run, no files changed) →
+commit/push `domchk-05d44870` (closed resolved-no-commit: the fix was already
+on `origin/main`) → this. §13 recorded the stack and its battery at `e72af3c`,
+the maintenance guide carries chain A's fix-chain verification record
+(`domchk-26ccd69b`), and §14.5 consolidated the summary view. This section
+adds what none of those state: the battery re-run first-hand at today's tip,
+and the live-environment recurrence check.
+
+### 16.1 What was changed, and when
+
+No new code (§10.4's rule: run the battery, change nothing unless a line
+fails — nothing failed in this run either). The resolution is the
+already-committed safeguard stack, each piece bound to its artifact and
+re-verified this session: persistent `pack.windowMemory=2g` /
+`pack.deltaCacheSize=1g` / `pack.threads=1` in repo **and** global scope
+(bounds bare-gc **and** push pack-objects; `setup-git-gc-config.sh --verify`
+exit 0, ≈3072 MiB worst case, all three keys resolving from local scope), the
+`.beads/` + `*.db` + `*.jsonl` gitignore (`.gitignore:66-70`;
+`git ls-files .beads` = 0), the 10 MB pre-commit gate (`dfa60a9`,
+2026-09-06), the bounded fail-fast gc run path, and the alert-layer fixes
+(`scripts/crash-alert-manager.sh` et al.).
+
+### 16.2 Verification method and results — first-hand, 2026-09-07, HEAD `a52883e` = `origin/main`
+
+Dirty battery subjects (co-tenant-modified in the shared worktree) ran from
+`git show HEAD:` / `git archive HEAD` copies, per §13.4's convention:
+
+1. `setup-git-gc-config.sh --verify` → exit 0, ≈3072 MiB worst case within
+   the 6 GiB ceiling
+2. `safe-git-gc.sh --check-only` (HEAD copy) → resource checks pass
+   (47,653 MB available / 28 G disk / load 4.75), "GC not needed", exit 1 =
+   the documented healthy answer (§13.5 delta 1)
+3. `test-safe-git-gc-limits.sh` → 33/33
+4. `test-gc-memory-bounds.sh` → 12/12 — **the crash-condition replay**: the
+   sibling incidents' kill command `git gc --aggressive --prune=now` exits 0
+   under `MemoryMax=768M`, pack-objects peak RSS 320,488 KB (crash-era runs
+   exceeded the 12 GiB dispatch scope)
+5. `test-crash-alert-fixes.sh` → 12/12 (HEAD archive; the dirty worktree
+   copy, with a co-tenant's uncommitted 13th test, runs 13/13)
+6. Repository: `.git` 105 MB, one pack 99.11 MiB, garbage 0, `git fsck
+   --full` exit 0 (dangling only), 0 tracked `.beads` files; 234 loose
+   objects / 2.40 MiB at dispatch — reproducing §14's footer snapshot
+   byte-exact — 251 / 2.56 MiB by write time (normal churn ahead of the
+   03:00 gc)
+7. Timers: 7/7 `domain-check-*` future-scheduled (service 2 min,
+   crash-pattern 10 min, resource 5 min, repo-health 02:00, auto-gc 02:30,
+   gc 03:00, full-gc Sun 04:00)
+8. Divergence: `origin/main..HEAD` and reverse both 0
+
+### 16.3 Outcome — the crash class has not recurred in live work
+
+Kernel recurrence check (`journalctl -k`, 2026-09-01 → 2026-09-07): 279
+memcg `oom-kill` lines, **every one** from a synthetic test/replay scope —
+`safe-git-gc-run-*` / `safe-git-gc-*` (the bounds harness deliberately
+forcing kills under a 768 MiB cgroup), `bf1s6c3-push/gc-*` and
+`bf4yjq-crash-*` (crash-signature replays), `mw-oom*` / `probe-hog` /
+`run-isolated` / `mw-abort-test` probes. **Zero from live dispatch scopes.**
+The mechanism that produced this incident's 55 exit-−1 kills on 2026-08-13
+has not recurred in real agent work since the fix landed; the memcg kills
+that remain are the fix's own test harness proving the bound holds, which is
+the fix working, not failing. Verdict: **effective**. This section plus the
+CLAUDE.md hook-prose correction below are the only changes this bead made.
+
+**Delta (documentation, not safeguard):** CLAUDE.md's hook sentence had the
+two tracked copies' roles swapped. `setup-git-hooks.sh` installs
+`scripts/pre-commit-repo-size-hook` — the canonical source per its own
+header, last touched by `dfa60a9`, and the file `--check` byte-compares
+against; `.githooks/pre-commit` (1,705 B, 2026-09-01 era, `14e292a`) is a
+stale second tracked copy nothing executes (`core.hooksPath` unset, so
+`.git/hooks` is live). Corrected this session — the old sentence could have
+led a reader to "restore" the stale 1,705-byte hook over the canonical one.
+
+*§16 appended by `domchk-34871e96`, 2026-09-07. §16.2–§16.3 are first-hand
+this session; §16.1's component list quotes §10/§13's bindings under §6's
+rule. Related open bead `domchk-03295497` — the family's residual
+implement-template step, unassigned since 2026-09-02 with notes concluding
+"no code changes needed", its other blocker `domchk-ef95dd4c` closed — is
+closed alongside this section on the strength of this verification.*
