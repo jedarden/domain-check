@@ -266,10 +266,117 @@ that sprawl is what this section exists to stop.
 | `docs/crash-investigations/bf-4k2ws/root-cause-analysis-final-bf-4k2ws.md` and the rest of the 2026-09-02 corpus (SIGHUP cascade / "did not crash") | **Superseded** on premise and mechanism; their task-completion finding (8/8 criteria, closed 08-16) stands |
 | `docs/investigations/bf-4k2ws-crash-verification-2026-09-02.md` | Superseded by this document's §2/§3 (its figures were re-verified and extended) |
 
+## 8. Incident chronology summary (bead `domchk-4311aaa8`, 2026-09-07)
+
+Dispatched to "write a summary of what happened" for `bf-4k2ws` (chronology,
+alert generation, FALSE-POSITIVE clarification, timestamp confusion). Appended
+here per §6 instead of adding yet another separate `bf-4k2ws` document. Every
+figure below was re-derived this session from the primary log, the live bead
+store, and `origin/main`; all of it reproduces §1–§2 byte-exact, with two small
+deltas flagged.
+
+### 8.1 Chronology (all times UTC, 2026-08-13 unless dated)
+
+| Instant | Event |
+|---|---|
+| 01:57:53.592Z | `bf-4k2ws` created ("Analyze divergent Forgejo and GitHub branch states"). **Bead-existence instant, not a crash instant** — see 8.4 |
+| 02:01:22.561Z | predecessor `bf-1s6c3` completes exit 0 on the same worker/session `8446529e` — and is itself orphaned 5.2 s later (02:01:27.732Z), the same verify-then-close debt that later amplifies this storm |
+| 02:01:29.710Z | `bf-4k2ws` claimed — **7.15 s** after the predecessor's completion |
+| 02:03:33.620Z | attempt 1 killed (exit −1, 123.6 s in). Storm begins |
+| 02:03:40.611Z | first `HANDLING_RELEASE_DONE` heartbeat; first alert bead created 6 ms later (02:03:40.617Z) — one alert per kill starts here |
+| 02:03 → 04:48 | attempts 1–32: **30 mid-task kills** + the night's first 2 dispatch-cap timeouts (attempts 16, 17, 600.0 s each) |
+| 04:48:09.546Z | attempt 33 — **first genuine success** (exit 0, 379.0 s); `verification.passed` 17 ms later |
+| 04:48:15.306Z | `bead.orphaned` — the verified success is discarded back onto the queue; the loop does not end |
+| 04:48 → 07:14 | attempts 34–61: **25 post-completion kills** (attempts 34–57, 60) re-doing already-satisfied work, plus 3 more dispatch-cap timeouts (attempts 58, 59, 61) |
+| 07:03:53.920Z | last kill (attempt 60, 528.9 s — the longest); its alert fires 07:04:03.300Z |
+| 07:14:06.478Z | attempt 61 times out (fourth-to-last 600 s cap hit) |
+| 07:17:41.039Z | attempt 62 — **second genuine success** (exit 0, 193.4 s); `verification.passed`; orphaned again 6.4 s later (07:17:47.390Z) |
+| 2026-08-16 15:35:42Z | `bf-4k2ws` **closed**, all 8 acceptance criteria met; deliverables in the 08-16 squash `c27899f` |
+
+Attempt census (§2, reproduced): **62 attempts = 55 kills (exit −1) + 5
+timeouts (exit 124, all 600.02 s ± 20 ms) + 2 successes (exit 0)**. Kills ran
+123.6–528.9 s, median 252.9 s, none cap-adjacent. Zero `max_turns` mentions in
+the whole day's 395 completions.
+
+### 8.2 Crash alert generation
+
+The pre-0.4.2 needle `handle_crash` path ran, per kill: `outcome.classified`
+(crash) → `bead.released` → **`outcome.handled {"action": "alerted"}`** → one
+new alert bead. Verified on both sides of the ledger:
+
+- **In the worker log:** exactly **55** `action=alerted` events for
+  `bf-4k2ws`, first 02:03:43.020Z, last 07:04:03.300Z — one per kill, no
+  fingerprint, no dedup, no cooldown.
+- **In the bead store:** exactly **55** beads titled `ALERT: Agent crash on
+  bead bf-4k2ws`, all created inside the storm window (02:03:40.617Z →
+  07:04:00.881Z). Status today: **17 closed, 36 open, 2 in_progress** —
+  the determination doc's §3.6 "~37 still open" is exactly 36 open + 2
+  in_progress (first delta). The wider pool of beads *naming* `bf-4k2ws`
+  (alert + downstream investigation/verification beads) is 183:
+  118 closed / 59 open / 6 in_progress.
+
+Each alert bead's creation timestamp is the `HANDLING_RELEASE_DONE` heartbeat
+of its kill — within **6 ms** of it (bead 1: 02:03:40.617Z vs heartbeat
+02:03:40.611Z; bead 2: 02:09:27.299Z vs 02:09:27.293Z; bead 3: 02:13:47.524Z
+vs 02:13:47.517Z), and the heartbeats themselves land **5.1–9.8 s after** the
+real kill across all 60 completions. The alert that seeded this investigation
+chain, `bf-15k67` (instant 02:33:47.409682217Z), is attempt 8: kill at
+02:33:41.384776124Z (173.9 s run) → heartbeat 02:33:47.409670765Z (**6.025 s
+after death**) → bead row written **11.5 µs** after the heartbeat.
+
+### 8.3 FALSE POSITIVE — what that determination does and does not mean
+
+Three layers, which the superseded 2026-09-02 corpus flattened into one:
+
+1. **The kills were real.** 55 genuine mid-run deaths, recounted from the
+   primary log (§2). "FALSE POSITIVE" never meant "no crash occurred" — that
+   premise was superseded by the reclassification (`ef39024`, 2026-09-07).
+2. **The false positives were in the alert layer, and they were of two
+   kinds.** (a) *Multiplication*: 55 alert beads for one root cause, because
+   `handle_crash` alerted per kill with no fingerprint/dedup/cooldown — the
+   defect the `scripts/crash-alert-manager.sh` fixes exist for. (b) *Stale
+   target*: the loop's two verified successes were orphaned instead of
+   closing, so 25 of the 55 kills (and their alerts) fired for work that was
+   already done; and every alert after 2026-08-16 15:35:42Z — the bulk of the
+   ~180-bead downstream pool — fired against an already-closed bead.
+3. **The current classification** is **INFRASTRUCTURE (repository-bloat-era
+   kill regime) with a separate, already-fixed alert-layer defect** (§3.6).
+   `bf-4k2ws` itself is a *victim* bead, not a false alarm: the task
+   completed 8/8, its four deliverable docs are on `origin/main`
+   (`docs/divergence-analysis-bf-4k2ws-2026-08-13-pre-merge.md`,
+   `docs/branch-divergence-bf-4k2ws-2026-08-13.md`,
+   `docs/branch-divergence-analysis-bf-4k2ws-current.md`,
+   `docs/branch-divergence-analysis.md`), the storm window holds **zero**
+   commits on `main` or `origin/main` (re-verified live today), and branch
+   divergence is **0/0** at today's fetch.
+
+### 8.4 Timestamp confusion, disentangled
+
+Every wrong figure in the superseded corpus traces to one of five distinct
+timestamp layers:
+
+| Layer | What it stamps | bf-4k2ws values |
+|---|---|---|
+| Bead creation | when the bead row was written | 01:57:53.592Z — **3.6 min before the first claim and 5.7 min before the first kill**; quoting it as "crash time" is the oldest corpus error |
+| Death (`agent.completed`) | the actual kill | 55 instants, 02:03:33.620Z → 07:03:53.920Z; **the only correct "crash timestamps"** |
+| Alert/heartbeat | `HANDLING_RELEASE_DONE`, then the bead write | death + 5.1–9.8 s; an alert instant **never names a distinct crash** — read back to the preceding `agent.completed` instead (e.g. 02:33:47.409Z = attempt 8, not a 56th event) |
+| Timezone | needle/JSONL logs are **UTC (`Z`)**; journald stamps **local EDT (−4 h)** | the storm ran 21:57 EDT Aug-12 → 03:17 EDT Aug-13 local; and no journald record of it can exist — the single boot begins 2026-08-15 19:56:33 EDT (re-verified live today) |
+| Closure | `bead close` | 2026-08-16 15:35:42Z — three days *after* the storm; anything timestamped later describes a closed bead |
+
+Exit-code layer, same confusion family: `−1` is the unrecorded-signal sentinel
+(kernel kill), `124` is the 600 s dispatch cap (attempts 16, 17, 58, 59, 61 —
+**not** max-turns; zero max-turns evidence exists anywhere in the day's log),
+`0` is success. "62 attempts" and "55 crashes" are both correct counts of
+different things (second delta, purely presentational: the 5 timeouts sit at
+attempts 16, 17, 58, 59, 61 in the recovered sequence, so kill #N ≠ attempt #N
+anywhere after attempt 15).
+
 ---
 
-*Determination by `domchk-7f838f36`, 2026-09-07. Every count in §2 was
+*Determination by `domchk-7f838f36`, 2026-09-07; §8 appended by
+`domchk-4311aaa8`, 2026-09-07. Every count in §2 was
 re-derived this session from
 `~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl` and the
 live repository state; no figure is cited from prior reports without
-independent reproduction.*
+independent reproduction. §8's counts were likewise re-derived from the same
+primary log, the live bead store, and `origin/main`.*
