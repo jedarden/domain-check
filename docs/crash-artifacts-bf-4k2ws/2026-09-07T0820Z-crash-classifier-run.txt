@@ -1,6 +1,0 @@
-# crash-classifier.sh run for bf-4k2ws
-captured 2026-09-07T08:22:24Z
-
-$ ./scripts/crash-classifier.sh bf-4k2ws
-ERROR: Bead trace not found: .beads/traces/bf-4k2ws/trace.jsonl
-exit code: 2  (2 = missing artifacts per script docs)

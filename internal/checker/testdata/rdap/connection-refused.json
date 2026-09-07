@@ -1,5 +1,0 @@
-{
-  "error_type": "connection_refused",
-  "description": "Simulated dial error - connection refused",
-  "registry": "rdap.example.com"
-}

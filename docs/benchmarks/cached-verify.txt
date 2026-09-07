@@ -1,1 +1,0 @@
-/home/coding/.local/bin/hey: line 1: Not: command not found

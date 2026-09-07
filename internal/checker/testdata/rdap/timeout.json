@@ -1,5 +1,0 @@
-{
-  "error_type": "timeout",
-  "description": "Simulated context deadline exceeded",
-  "registry": "rdap.example.com"
-}
