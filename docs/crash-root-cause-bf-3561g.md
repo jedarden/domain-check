@@ -8,6 +8,9 @@
 **NOT** SIGHUP, **NOT** a domain-check code defect
 **Confidence: HIGH** — every figure in this document was re-derived from primary sources by
 this analysis pass (§5), independent of the phase beads' own derivations.
+**Addendum:** §8 (2026-09-07, `domchk-1534f0bc`) — live re-verification of every
+load-bearing figure, plus where the `domchk-83a0645c` chain's later formal
+determinations (signal −1 / reproducibility / classification) now live.
 
 **Companion documents:**
 [`docs/crash-artifacts-bf-3561g.md`](crash-artifacts-bf-3561g.md) (consolidated artifacts
@@ -256,3 +259,65 @@ phase 1 [`docs/crash-logs-catalog-bf-3561g.md`](crash-logs-catalog-bf-3561g.md) 
 phase 2 [`docs/crash-context-bf-3561g/MANIFEST.md`](crash-context-bf-3561g/MANIFEST.md) ·
 phase 3 [`docs/cascade-timeline-bf-3561g-2026-08-16.md`](cascade-timeline-bf-3561g-2026-08-16.md) ·
 [`docs/bead-bf-3561g-scope-and-original-task.md`](bead-bf-3561g-scope-and-original-task.md)
+
+---
+
+## 8. Addendum 2026-09-07 — live re-verification and the chain's formal determinations (domchk-1534f0bc)
+
+Bead `domchk-1534f0bc` ("Document the root cause with supporting evidence", child #4 of
+the `domchk-83a0645c` chain) re-verified every load-bearing figure in this document
+first-hand on 2026-09-07 and found all of it standing. This section records that
+verification, maps the document's verdict onto the three formal determinations the chain
+landed after this document was written, and disposes of the one acceptance criterion this
+document could not have met on its own — referencing the chain's child bead #1, which
+closed a day later. Nothing in §1–§7 changes.
+
+### 8.1 Live re-verification (2026-09-07, first-hand)
+
+| Claim (this document) | Re-derived from | Result |
+|---|---|---|
+| kernel extract md5 `49ae1f99…`; `CONSTRAINT_MEMCG`, `task=git,pid=2718298`, scope `run-p2695224-i212383579` (line 106); usage = limit 12,582,912 kB, `failcnt 8948` (line 30); anon-rss 12,301,708 kB = 11.73 GiB (line 107) | [`docs/crash-context-bf-3561g/kernel-oom-kill-2026-08-16T172127Z.txt`](crash-context-bf-3561g/kernel-oom-kill-2026-08-16T172127Z.txt) | ✅ byte-exact |
+| 9 crashes exit −1, 17:13:04.749Z → 17:29:52.577Z, durations 48.95–305.38 s (median 103.2 s); crash #4 = 305,382 ms @ 17:21:28.132Z; success = line 1546, exit 0, 123,399 ms @ 17:31:56.062Z | `.beads/events.jsonl` lines 1499 / 1508 / 1520 / 1527 / 1531 / 1534 / 1537 / 1540 / 1543 / 1546 | ✅ all ten rows exact |
+| last tool_use = `git gc --aggressive --prune=now` | [`docs/crash-context-bf-3561g/agent-transcript-d7cd18df-head-tail.jsonl`](crash-context-bf-3561g/agent-transcript-d7cd18df-head-tail.jsonl) — final tool_use re-read ("Run git gc to pack loose objects…") | ✅ |
+| trace-slot trap: `.beads/traces/bf-3561g/` holds the success run, not a crash | `metadata.json` — exit 0, 59,043 ms, captured 2026-08-17T11:06:29Z | ✅ |
+| repository de-bloated and holding | `du -sh .git` → **104 MB**; `git count-objects -vH` → 193 loose / 2.03 MiB, 1 pack 99.11 MiB, **0 garbage** | ✅ (§5.5's 93 MB was the 2026-09-06 reading; 90.43 → 90.75 → 99.11 MiB pack across the same-day snapshots is normal churn, packed by the daily 03:00 gc — not creep, and nowhere near the 500 MB healthy bound) |
+| pack-memory bounds in force on the exact killer path | `./scripts/setup-git-gc-config.sh --verify` → exit 0, worst case ≈3072 MiB (windowMemory 2g / deltaCache 1g / threads 1) | ✅ |
+| the class is extinct, not merely quiet | `.beads/events.jsonl` census: **247** exit −1 crash events total — 245 (2026-08-16, last 17:29:52.577Z) + 1 (2026-08-17) + 1 (2026-08-26 22:54:48Z), **0 since** | ✅ |
+
+### 8.2 Where the chain's formal determinations now live
+
+| Chain criterion | Determination | Committed record |
+|---|---|---|
+| What caused signal −1 (`domchk-6abaa850`) | kernel memcg-OOM SIGKILL of that run's own `git` child; `−1` is needle's abnormal-death sentinel, not SIGHUP and not a signal number | [`docs/crash-artifacts-bf-3561g.md`](crash-artifacts-bf-3561g.md) §6/§8 + the umbrella's dated Notes correction |
+| Reproducible or intermittent (`domchk-ebf9c1f7`) | **REPRODUCIBLE** by trigger condition — unbounded git op × bloated repo × 12 GiB `MemoryMax` — not intermittent | §14 of the same report |
+| Classification (`domchk-d6893165`) | **INFRASTRUCTURE_EVENT**; WORKFLOW_FAILURE / SERVICE_FAILURE / CODE_DEFECT each ruled out on the record | §15 of the same report |
+| Fix (`domchk-67b3bcd1`, closed) | crash-alert system landed (commit `5aac26b`); per §15.4 both mechanism legs are already landed and verified — **no open work item** | `scripts/crash-alert-manager.sh` et al. |
+
+Each determination confirms the verdict of §1; none revises it.
+
+### 8.3 Evidence provenance — chain child bead #1 (`domchk-93d95e41`)
+
+The crash evidence this document analyses was inventoried by chain child #1
+`domchk-93d95e41` ("Examine crash evidence from child bead #1", closed 2026-09-07T10:48Z),
+whose close notes verify all seven evidence items: the session event-stream kill boundary
+(`~/.needle/logs/claude-code-glm-4.7-lab-domain-check-b7afe97d-2026-08-16.jsonl` lines
+2952–2962), worker log lines 2013–2018, `.beads/events.jsonl` line 1527, the two committed
+journald extracts (MD5s matching the MANIFEST exactly, re-checked 2026-09-07), the crashed
+run's own transcript extract, and the two evidence traps it flags — the single-slot trace
+holding the success run, and the alert timestamp being a handler clock read (+8.4 µs after
+a heartbeat) rather than a log key. Child #1's handoff also settled storage for this
+bead's acceptance criterion: *a new `docs/crash-analysis-*.md` is not needed — the
+committed corpus already renders it*. This addendum is therefore appended here, and no new
+file was created under that glob for this chain.
+
+### 8.4 Prevention status (§6 recommendations re-stamped 2026-09-07)
+
+Landed and verified live (§6 items 1–4): repository de-bloat holding at ~104 MB / 0
+garbage; persistent `pack.windowMemory` bounds covering both the bare `git gc` and
+`git push` paths that killed this run; crash-alert fixes (closed-bead filter, dedup,
+completion awareness, cooldown, classification); 10 MB pre-commit gate plus the daily
+02:00 repo-health timer. Still open, unchanged from §6 items 5–9: alert fan-out surge
+suppression at *generation* time (the amplifier leg the 2026-09-02 fixes do not cover),
+the bare-gc-in-task-specs convention, trace-slot provenance discipline, fleet hygiene for
+the three stale Open children of the closed umbrella (domchk-ee8f5300 / domchk-e8c835b8 /
+domchk-ab71919d), and alert-timestamp hygiene.
