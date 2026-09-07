@@ -4,7 +4,9 @@
 **Scope:** This directory holds preserved artifacts and incident analyses. Procedures and
 status live one level up — start at [`../crash-documentation-index.md`](../crash-documentation-index.md).
 
-**Last Updated:** 2026-09-06 (added bf-1s6c3 crash analysis and this catalog)
+**Last Updated:** 2026-09-06 (added bf-1s6c3 crash analysis and this catalog; added the
+comprehensive [`crash-analysis-bf-1s6c3-2026-09-06.md`](../crash-analysis-bf-1s6c3-2026-09-06.md)
+write-up to Incident analyses)
 
 ---
 
@@ -24,6 +26,7 @@ re-verified repeatedly since.
 | Document | Subject | Summary |
 |----------|---------|---------|
 | [`bf-1s6c3-crash-analysis-2026-08-12.md`](bf-1s6c3-crash-analysis-2026-08-12.md) | **bf-1s6c3** (Forgejo/GitHub history merge) | Full crash analysis: 76-dispatch kill storm on the bloated 18 GB repository (71 × exit −1, 4 × timeout, 1 × success); deliverable `42a7b07` landed mid-storm; classification **infrastructure — repository bloat → memcg OOM**, not a code defect. Reconciles the dispatch's cited `2026-08-12T22:24:04` timestamp (a `HANDLING_RELEASE_DONE` heartbeat 7.2 s after the real kill) and corrects the dead-SHA citations (`7dd79eb`, `2832106`). |
+| [`../crash-analysis-bf-1s6c3-2026-09-06.md`](../crash-analysis-bf-1s6c3-2026-09-06.md) | **bf-1s6c3** (Forgejo/GitHub history merge) | Comprehensive crash report — the write-up layer of the 2026-09-06 investigation chain (domchk-ed3ed12b): all eight sections, from a 76-dispatch timeline through artifact analysis with live re-verification, Pattern-3 classification rationale, RCA (push-side memcg OOM, amplified by a no-backoff re-dispatch loop with no stop-condition for satisfied work), impact, prevention status and follow-ups. Supersedes the 2026-09-01 bf-1s6c3 corpus (its §11). Consolidated sibling record: [`crashes/bf-1s6c3-comprehensive-investigation-2026-09-06.md`](../crashes/bf-1s6c3-comprehensive-investigation-2026-09-06.md). |
 | [`repository-bloat-root-cause-analysis-2026-08-12.md`](repository-bloat-root-cause-analysis-2026-08-12.md) | **2026-08-12 bloat crisis** (period-level) | Root cause analysis for the whole episode: 17+ identical ~237 MB `.beads/*.jsonl` snapshots committed → 18 GB repo / 17 GB loose objects → systematic OOM SIGKILL of git operations. Cleanup (18 GB → 138 MB) and the preventive layers that followed. |
 | [`bf-4yjq-resolution-record-2026-09-01.md`](bf-4yjq-resolution-record-2026-09-01.md) | **bf-4yjq** (git remote/mirror divergence; 50-kill storm 2026-08-12) | Resolution record: mitigation implemented and verified. |
 
