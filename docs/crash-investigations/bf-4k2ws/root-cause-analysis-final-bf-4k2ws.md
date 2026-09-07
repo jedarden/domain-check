@@ -1,5 +1,14 @@
 # Root Cause Analysis: bf-4k2ws Crash Investigation
 
+> **SUPERSEDED (2026-09-07):** the "did not crash" premise and the SIGHUP-cascade
+> root cause below are wrong — 55 real exit −1 kills occurred on 2026-08-13
+> (02:01–07:18Z), recounted first-hand from the surviving worker log. Current
+> determination: **INFRASTRUCTURE** (repository-bloat-era kill regime), in
+> [`docs/crashes/bf-4k2ws-crash-report.md`](../../crashes/bf-4k2ws-crash-report.md)
+> (correction section) and
+> [`docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`](../../investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md).
+> The task-completion finding (8/8 criteria met, closed 2026-08-16) stands.
+
 **Investigation Task:** domchk-28e40fc1 (Analyze Crash Root Cause)
 **Original Bead ID:** bf-4k2ws
 **Investigation Date:** 2026-09-02
