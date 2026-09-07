@@ -1,5 +1,14 @@
 # Root Cause Analysis: Agent Exit Code -1
 
+> **⚠️ SUPERSEDED 2026-09-06** — the mechanism call here stands (signal death; infrastructure;
+> no code defect), but the specifics below do not: exit −1 is needle's signal-death
+> **sentinel**, not a signal number, and the bf-1s6c3 event is a **76-dispatch / 71-kill
+> storm** resolved by the cleanup verified at **93–94 MB on 2026-09-01** — not the
+> "2026-08-16 → 138 MB" figure below. Not every exit −1 is an OOM kill: later census shows
+> the bloat signature is exit −1 *storms*, while steady-state exit −1 is near-zero. See
+> [bf-1s6c3-comprehensive-investigation-2026-09-06.md](bf-1s6c3-comprehensive-investigation-2026-09-06.md)
+> §5.1. Retained below for history only.
+
 **Analysis Date:** 2026-09-01  
 **Investigation Bead:** domchk-c7ecec48  
 **Evidence Source:** domchk-0550073d (crash evidence collection)  

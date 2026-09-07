@@ -523,6 +523,113 @@ on-`main` reconciliation is `46293c5` with 0/0 divergence today. Excluded altern
 defect (the task never touched application code). **Alert disposition: no further action for
 this event.**
 
+### Prevention-documentation update 2026-09-07 (domchk-64e1461a — the guide-update step)
+
+This bead carried this report's findings into `docs/crash-response-guide.md`: exit 124 added to
+the Quick Reference classification table; the INFRASTRUCTURE classification row and the
+"What Causes Crashes" line moved off the superseded SIGHUP framing (§11/§12 item 3); Rule 1 and
+Rule 2 false-positive caveats (deliverable-landed-mid-storm → verify-then-close debt;
+exit-0-after-a-storm is a surface match when the task shape changed rather than the
+environment); the re-dispatch-amplifier corollary under Rule 3 (~10 s cycle, alerts scale 1:1
+with kills); the push-side bf-1s6c3 evidence block (71 of 76 deaths at `git push`) added to
+Pattern 3 alongside bf-4yjq; the surge example aligned to the committed 3-in-5-minutes detector
+threshold; the host-memory-gate limitation note (the `free -g` pre-task gate cannot see the
+repository-size axis); and the pre-commit-hook prevention bullet pointed at the now-committed
+installer (`dfa60a9`). Related-Documentation pointers now cite this report and mark the
+2026-09-01 corpus superseded.
+
+Live re-verification run by this bead before citing (all 2026-09-07, first-hand):
+
+- Repository: `.git` 102 MB · 78 loose objects / 544 KiB · garbage 0 · `git fsck --full` clean ·
+  `git ls-files .beads` → 0
+- Ancestry re-checked: `42a7b07` = commit (2026-08-12T21:47:07Z, "Merge reconciliation: Forgejo
+  and GitHub remote histories") and **not** an ancestor of `main`; `46293c5` **is**
+- `./scripts/setup-git-gc-config.sh --verify` exit 0 — effective windowMemory=2g / threads=1 /
+  deltaCache=1g, worst case ≈3072 MiB within the 12 GiB dispatch-scope ceiling
+- `./scripts/setup-git-hooks.sh --check` exit 0 — installed hook byte-identical to tracked source
+- `scripts/crash-pattern-detection.sh` `CRASH_SURGE_THRESHOLD=3` over a 5-minute window —
+  confirmed in the committed script before aligning the guide's surge example to it
+
+### Re-verification 2026-09-07 (domchk-42769e52 — a context-and-failure-mode bead of the bf-3laof alert pool)
+
+This bead ("Analyze crash bf-1s6c3 context and failure mode", child of alert **bf-3laof**)
+was dispatched with the alert's own timestamp — 2026-08-12T22:08:37.503833103Z — as "the
+crash". The deliverable its four acceptance criteria ask for (crash context, failure mode,
+timeline, artifact catalog) is rendered by **§1–§2, §5–§6, §3 and §4** above, so per the
+workspace dedup rule this bead shipped no new document. Its additions are the live
+re-verification below plus one fact the report did not previously carry: **which of the 71
+deaths produced this particular alert.**
+
+**New: alert bf-3laof ↔ its death, mapped from the committed extracts.** The alert's
+timestamp is *not* the death instant — it is a crash-handler heartbeat (seq 4972,
+22:08:37.503644680Z, 0.19 ms before the alert's recorded time; bf-3laof was created
+22:08:37.515Z). The death it reports:
+
+| Field | Value | Source |
+|---|---|---|
+| Attempt | **12 of 76** (dispatch ordinal 12; session start 22:06:28.504, UUID `be156451`, 249,210 transcript bytes) | extract + `sessions-index.tsv` |
+| Death | seq 4963 `agent.completed` **2026-08-12T22:08:29.040179609Z**, `exit_code: -1`, duration 120,931 ms (~121 s) | extract |
+| Alert latency | **8.5 s** death → alert timestamp (inside the known 8–120 s handler-heartbeat range) | extract |
+| Last-issued command | `git push origin main` — the push-step kill signature shared by 60 of the 71 deaths (§4.2) | `sessions-index.tsv` |
+| Handling | `outcome.classified` = `crash` (seq 4966) → `bead.released` `release_success` (22:08:41.001) → `outcome.handled` = `alerted` (seq 4975) — that alert **is** bf-3laof | extract |
+| Aftermath | session 13 dispatched 22:08:45.538, ~16 s after the death — the no-backoff re-dispatch cycle of §6 | `sessions-index.tsv` |
+
+So the failure mode behind *this specific alert* is the same as the storm's: attempt 12 died
+by signal 121 s into its run, at its push, against the ≈18 GB repository. The alert is one of
+the 71 `alerted` outcomes for one undrainable cause (§6); the 2026-08-12T22:08:37Z timestamp
+joins 21:36:51Z (§3) as a *handling* instant, not a distinct crash.
+
+**Live re-verification (re-run 2026-09-07, all byte-exact against this report):**
+
+- **Census recounted** from the committed extracts: `agent.completed` × 76 → exit −1 × 71,
+  124 × 4, 0 × 1; `outcome.classified` crash/timeout/success = 71/4/1; `outcome.handled`
+  alerted/deferred/none = 71/4/1; first claim 21:31:27.663Z; last completion 02:01:22.561Z
+- **Ancestry:** `42a7b07` = commit, 2026-08-12T21:47:07Z "Merge reconciliation: Forgejo and
+  GitHub remote histories" — **not** an ancestor of `main`; `46293c5` **is**; `2832106` and
+  `7dd79eb` both fail `git cat-file`
+- **Repository:** `.git` 102 MB · 82 loose objects / 560 KiB · packs 99.13 MiB · garbage 0 ·
+  `git fsck --full` clean · `git ls-files .beads` → 0
+- **Convergence:** `rev-list --left-right --count HEAD...origin/main` → 0 / 0; Forgejo
+  `origin/main` = local `HEAD` = `5d29b47` (the report's `21b5a85` was true at the 09-07
+  re-verifications above; only the tip has advanced since, divergence still zero)
+- **Prevention layers 3–4:** `scripts/setup-git-gc-config.sh --verify` exit 0;
+  `scripts/setup-git-hooks.sh --check` exit 0 (installed hook byte-identical to source)
+- **Host today:** 45 G memory available, 53 G disk free, load ~6 — healthy
+
+**Dispositions:** context/failure-mode/timeline/artifacts → §1–§6 (verified above). Alert
+bf-3laof → no further action; closure belongs to its dedicated closure bead, not this
+analysis child.
+
+### Re-verification 2026-09-07 (domchk-877f7ea9 — the documentation-consolidation step)
+
+Dispatched to verify a five-document bf-1s6c3 corpus. Every path checked first-hand:
+
+- **Three of the five named paths exist** as stated: `docs/crashes/bf-1s6c3-investigation.md`,
+  `docs/crashes/repository-bloat-crash-bf-1s6c3-2026-08-12.md`,
+  `docs/crashes/exit-code-minus-one-root-cause-analysis-final.md`.
+- **A fourth exists only archived:** `docs/crash-root-cause-analysis-bf-1s6c3-final.md` was
+  moved by `git mv` into `docs/archive/crash-investigations/` (commit `a883044`, on
+  `origin/main`); the archived blob is byte-identical to the pre-move one (`f3544fb6`), and
+  `docs/archive/crash-investigations/README.md` marks the directory as historical.
+- **The fifth filename never existed:** `docs/crash-fix-verification-report-bf-1s6c3-2026-09-01.md`
+  has zero git history. It conflates two real documents —
+  `docs/crash-fix-implementation-report-bf-1s6c3-2026-09-01.md` (live, top level) and
+  `docs/archive/crash-investigations/crash-resolution-verification-bf-1s6c3-2026-09-01.md`
+  (archived). No document was fabricated to fill the name.
+- **The dispatch's own acceptance figures are §5.1 supersessions:** "18 GB → 138 MB" (verified
+  93–94 MB on 2026-09-01) and the "17+ days stable" point-in-time claim.
+- **Consolidation shipped by this bead:** dated supersession banners added to the three live
+  docs that still lacked one (`repository-bloat-crash-bf-1s6c3-2026-08-12.md`,
+  `exit-code-minus-one-root-cause-analysis-final.md`,
+  `crash-fix-implementation-report-bf-1s6c3-2026-09-01.md`), matching the banner already on
+  `bf-1s6c3-investigation.md` — each now points at §5.1 (and, for the implementation report's
+  stale "DO NOT RETRY YET" guidance, at the remediation record's supersession note).
+- **CLAUDE.md crash-prevention section: present and accurate**, re-verified live 2026-09-07:
+  `.git` 102 MB · 82 loose objects / 560 KiB · 3 packs 99.13 MiB · garbage 0 ·
+  `git fsck --full` exit 0 · `git ls-files .beads` → 0 · `HEAD...origin/main` → 0/0 ·
+  `./scripts/setup-git-gc-config.sh --verify` exit 0 (worst case ≈3072 MiB within ceiling) ·
+  `./scripts/check-repo-health.sh` exit 0.
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
