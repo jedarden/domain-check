@@ -252,6 +252,16 @@ exist only because someone later found better evidence.
 *Requirement:* retain kernel OOM + journald records for ≥30 days, rotate
 rather than overwrite `.beads/traces/`, record all timestamps in UTC, and keep
 `gc.log`/`gc.pid` after gc runs.
+*Extension (2026-09-07, bf-1ea4g gap analysis M-3 — domchk-87ef5683):* add
+**worker/session transcripts, retained ≥30 days**, to that list — and rank
+them the highest-value line of the four. Kernel records prove *that* a memcg
+kill happened; transcripts prove *what the agent was doing* when it died,
+which is what four wrong root causes in the bf-1ea4g corpus lacked. That
+mechanism went undetermined for 25 days because its Aug-13 kernel/journald
+record is structurally absent (single journald boot begins 2026-08-15), while
+last-tool-call analysis over the 57 surviving session transcripts settled it
+in one session. Nothing currently requires transcripts to be kept at all.
+See `docs/crash-prevention-gaps-bf-1ea4g.md` §4 M-3.
 
 ### Gaps outside this repo (NEEDLE / infrastructure requirements)
 
@@ -297,7 +307,7 @@ Phase 1 is entirely inside this repo.
 
 | # | Item | Addresses |
 |---|------|-----------|
-| 7 | **G-8** — retention: 30-day kernel/journald, rotated traces, UTC-only timestamps, keep `gc.log` | P6 |
+| 7 | **G-8** — retention: 30-day kernel/journald, rotated traces, UTC-only timestamps, keep `gc.log`; **+ worker/session transcripts ≥30 days (highest-value line, added 2026-09-07 per bf-1ea4g M-3)** | P6 |
 | 8 | Reconcile the five competing crash distributions (see §6) into one measured, dated classification and retire the rest | P3 |
 | 9 | Sweep docs that assert a specific signal for `exit -1` and replace with the R-DOC-1 wording | P6 — stops misclassification at the source |
 | 10 | Re-classify `server.go` SIGHUP work as service hygiene (G-6) so it stops being cited as fleet crash prevention | P3 |
