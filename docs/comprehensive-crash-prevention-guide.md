@@ -69,7 +69,7 @@ This guide documents all preventive measures implemented to prevent agent crashe
 
 **Preventive Measures:**
 - ✅ **Implemented**: `scripts/crash-alert-manager.sh` - Automated crash processing
-- ✅ **Implemented**: `scripts/crash-classifier.sh` - Crash classification (FALSE_POSITIVE, SERVICE_FAILURE, INFRASTRUCTURE, CODE_DEFECT)
+- ✅ **Implemented**: `scripts/crash-classifier.sh` - Crash classification (FALSE_POSITIVE, SERVICE_FAILURE, INFRASTRUCTURE; CODE_DEFECT is documented prose with no emission path — see the correction below)
 - ✅ **Implemented**: `scripts/alert-deduplication.sh` - Duplicate alert prevention
 - ✅ **Implemented**: 6 critical fixes (closed bead filtering, duplicate detection, exit code validation, completion awareness, alert cooldown, crash classification)
 
@@ -82,6 +82,26 @@ This guide documents all preventive measures implemented to prevent agent crashe
 > morning; 12 were still unresolved 25 days later. Evidence and next steps:
 > [`docs/alert-deduplication-gap-analysis-2026-09-07.md`](alert-deduplication-gap-analysis-2026-09-07.md)
 > (D-1..D-10) and the bf-1ea4g gap analysis §6.
+
+> **⚠️ Correction (2026-09-07, domchk-c1b09ba2):** CODE_DEFECT has no emission
+> path. At HEAD `60f8a87` `crash-classifier.sh` can print only FALSE_POSITIVE /
+> SERVICE_FAILURE / INFRASTRUCTURE / UNKNOWN — CODE_DEFECT appears in its usage
+> and next-steps text only, and `classify-signal-crash.sh` never mentions it —
+> so "test all four classification paths" resolves to three real paths plus the
+> UNKNOWN fallback, and no test can exercise a fourth. Consistent with the
+> repo-wide zero-defect finding: no crash in the corpus has ever been an
+> application error. The four alert *filters* (closed bead, duplicate,
+> completion/exit-code, cooldown) are covered, verified live at this HEAD:
+> `test-crash-alert-fixes.sh` 12/12 (the fixes 1–6 marker suite),
+> `test-closed-bead-filter.sh` 7/7 (closed bead bf-2vtzg through the real
+> manager in a sandbox), `test-crash-alert-classification-wiring.sh` 13/13
+> (real classifier → real manager, hermetic: max_turns → FALSE_POSITIVE,
+> HTTP 503 → SERVICE_FAILURE, neutral crash → INFRASTRUCTURE),
+> `test-crash-classifier-signals.sh` 39/39, `test-alert-cooldown.sh` 54/54
+> (rapid-crash sequence against a sandboxed state file),
+> `test-alert-dedup-check.sh` 41/41 (gate + tracker). The "22/24 tests passing"
+> evidence line below predates all of these; every suite named here is
+> all-green.
 
 **Evidence:** Test suite shows 22/24 tests passing
 
@@ -189,7 +209,7 @@ tail -f .beads/logs/service-monitor.log
    - **FALSE_POSITIVE:** No action needed
    - **SERVICE_FAILURE:** Check gateway status, retry with backoff
    - **INFRASTRUCTURE:** Check system logs, verify work completion
-   - **CODE_DEFECT:** Standard debugging process
+   - **CODE_DEFECT:** Standard debugging process (never emitted by the classifier — see the Hypothesis #3 correction; an application-error crash classifies as UNKNOWN)
 
 ---
 
