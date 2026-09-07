@@ -211,3 +211,35 @@ Prior art for the close reason: the bf-6d3d6 chain (closed end-to-end
 bead-rs store; doc paths verified against HEAD (`9b83c81` at draft, `63ca904`
 at commit); `crash-classifier.sh bf-mje3pd` re-run first-hand; script sizes
 are HEAD blob sizes from the same hour.*
+
+---
+
+## Addendum 2026-09-07 (domchk-a47705c9) — classification recorded
+
+Split step 2 of bf-3dxljn ran against this note. **Classification recorded:
+INFRASTRUCTURE** (repository-bloat regime sub-type, mechanism regime-matched
+not kernel-proven), consistent with §4 above and with 63ca904. Full record:
+`docs/crashes/bf-mje3pd-crash-classification-domchk-a47705c9-2026-09-07.md`.
+Mismatches found: **none with this note.** Two additions to §3's tooling
+inventory, from that dispatch's first-hand runs:
+
+1. **The §3 classifier caveat now has an exit code: 2.** This note's run
+   captured the `ERROR: Bead trace not found` line but not the status;
+   `crash-classifier.sh bf-mje3pd` exits **2** with it (re-run live, f5e6377).
+2. **`scripts/classify-signal-crash.sh` (listed in §3 as available) has two
+   caveats that matter if a later child tries it:** its `#!/bin/bash` shebang
+   does not execute on NixOS (run `bash scripts/classify-signal-crash.sh`), and
+   it is **state-based, not record-based** — it reads today's repo size /
+   memory / load, takes no bead argument, and on today's repaired 105 MB repo
+   prints "LIKELY SIGHUP CASCADE (Signal 1)". That output is the framing guide
+   note 2 (`docs/crash-response-guide.md:28`) supersedes and says nothing about
+   the 2026-08-13 crash; it is inadmissible as corroboration in either
+   direction.
+
+Consistency check against the existing verification reports: all four records
+(guide tree, 63ca904, `docs/verification/bf-mje3pd-crash-analysis.md`, the
+archived bf-3za7vh report) agree on INFRASTRUCTURE / not-a-false-positive /
+no code defect. The verification report's supporting figures (SIGKILL asserted
+from −1, 9 × exit −1 / 2 successes / 13 attempts, 2h15m, 3-6GB pack-objects,
+592 commits ahead, crontab advice) are already corrected in §2 above and in
+63ca904; none of them changes the classification.
