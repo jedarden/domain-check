@@ -302,6 +302,31 @@ first recorded in the determination doc's §13.5):
    extract the helpers alongside it or run it in place; those skips are warnings, not
    failures, and the gateway line remains the only hard one.
 
+**Re-verification, 2026-09-07 second pass** (bead `domchk-26ccd69b`, re-dispatched
+after its first attempt died post-commit/pre-close): every load-bearing claim above
+re-verified live at HEAD = origin/main — `--verify` exit 0 (worst case ≈3072 MiB);
+`--check-only` exit 1 "GC not needed"; limits suite **33/33**; `test-gc-memory-bounds.sh`
+at a HEAD extract **12/12**, the crash replay's pack-objects peak RSS 320532 KB
+(byte-consistent with the 320528 KB above); `.git` 105 MB, 251 loose / 2.56 MiB,
+1 pack 99.11 MiB, garbage 0, `fsck --full` exit 0 (dangling-only), 0 tracked `.beads`
+files, `setup-git-hooks.sh --check` exit 0. Two more deltas for future battery runners:
+
+3. **The limits suite's memory-floor assertion is a live race.** It sets
+   `SAFE_GC_MIN_AVAIL_MEM` to `MemAvailable + 1 MB` and expects exit 2 — but if
+   available memory *rises* by ≥1 MB between the suite's sample and the script's
+   check, the fail-fast path legitimately doesn't trip (rc=0). Observed
+   `MemAvailable` moving +95 MB in 4 s under fleet load; one run of 33 failed only
+   that line, the immediate re-run was 33/33. Re-run before blaming code.
+4. **`test-gc-memory-bounds.sh` must run from the repo root, and apples-to-apples
+   means a full HEAD extract.** It resolves `setup-git-gc-config.sh` via
+   `ROOT=$PWD` (not `SCRIPT_DIR`), so running a bare extract from a scratch dir
+   fails every setup/verify line and cascades the integration section into a
+   `timeout 300` SIGTERM (exit 143, "RSS 0 KB", loose objects left behind) — the
+   lone-extract failure mode, again. Extract the suite *and* its sibling under a
+   `scripts/` directory and run from that tree's root. (Same session, the
+   working-tree copy also carried a co-tenant's in-flight edit adding a push-side
+   integration test; only the HEAD extract isolates the committed 12.)
+
 ---
 
 ## Prevention Checklist
