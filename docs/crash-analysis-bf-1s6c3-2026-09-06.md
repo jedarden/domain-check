@@ -682,6 +682,95 @@ satisfied by the committed files above, and the workspace already holds ~460 cra
 another near-duplicate would add noise, not record. This dated subsection is the bead's
 only change.
 
+### Re-verification 2026-09-07 (domchk-c3955b52 — a further parallel chain's root-cause step)
+
+This bead is the "Analyze root cause of bf-1s6c3 crash" link of another parallel
+gather → classify → investigate instance (`domchk-6be24808` → `domchk-c3955b52`); its
+classification predecessor closed with "Infrastructure — repository bloat". The deliverable
+its acceptance criteria ask for — proximate cause, contributing factors, evidence citations,
+one-time-vs-systemic determination, code-defect check — is rendered by **§6 (root cause), §5
+(classification it builds on) and §8 (mitigation)** above. Per the workspace dedup rule this
+bead shipped **no new document**; what follows is its own first-hand re-verification plus the
+three items this report previously carried only in fragments.
+
+**Live re-verification (all re-run 2026-09-07, byte-exact against this report):**
+
+- **Census recounted** from the committed extracts (945 + 513 lines): `agent.completed` × 76
+  → exit −1 × 71, 124 × 4, 0 × 1; `outcome.classified` (`data.outcome`) → crash × 71,
+  timeout × 4, success × 1; `outcome.handled` → alerted × 71, deferred × 4, none × 1;
+  `transform.completed` × 76; first claim 21:31:27.663203161Z; last completion
+  02:01:22.561923995Z
+- **Push-step concentration recounted** from `sessions-index.tsv` (76 rows): 60 ×
+  `git push origin main`, 10 × `git push github main` — the §4.2 table confirmed at source
+- **Ancestry:** `42a7b07` = commit, 2026-08-12T21:47:07Z "Merge reconciliation: Forgejo and
+  GitHub remote histories", parents `47e7758` + `00117cb` — **not** an ancestor of `main`
+  (contained only by `pre-squash-history-20260816`); `46293c5` **is**; `2832106` and
+  `7dd79eb` both fail `git cat-file`
+- **Repository:** `.git` 102 MB · 120 loose objects / 856 KiB · in-pack 11,182 / 99.13 MiB ·
+  garbage 0 · `git fsck --full` exit 0 (dangling trees only) · `git ls-files .beads` → 0 ·
+  `.gitignore:66` `.beads/`, `:68` `*.db`, `:70` `*.jsonl`
+- **Convergence:** `rev-list --left-right --count HEAD...origin/main` → 0 / 0
+- **Prevention layers 3–4:** `scripts/setup-git-gc-config.sh --verify` exit 0 (effective
+  windowMemory=2g / threads=1 / deltaCache=1g, worst case ≈3072 MiB within the 12 GiB
+  dispatch-scope ceiling); `scripts/setup-git-hooks.sh --check` exit 0 (installed hook
+  byte-identical to tracked source)
+- **Host today:** 45 GiB memory available, 53 GB disk free, load 7.22 — healthy. Host
+  memory/load *at crash time* remain unknowable (§4.3); the violated axis was
+  repository size (§6), so the dispatched resource-pressure step resolves to the repo-size
+  axis, not the host axis
+- **Journald boundary re-checked:** first boot entry **2026-08-15 19:56:33 EDT** — no kernel
+  record for 2026-08-12 can exist, as §4.3 states
+
+**New: the checkpoint-pattern leg is now closed at source.** §4.3 records that the offending
+blobs "were packed away" and the bloat is canon-sourced. This bead verified that directly:
+`git log --all --oneline -- .beads/` → **0 commits across every ref** — the 17+ identical
+~237 MB `.beads/*.jsonl` snapshot commits are unreachable from *any* surviving ref, and the
+largest blob in the entire current object store is 14,970,288 bytes (§4.3's figure,
+re-confirmed). The offending objects are therefore confirmed gone, not merely unreferenced:
+the bloat figures remain canon-sourced (`docs/crashes/bf-4yjq-cleanup-verification.md`) and
+cannot be re-measured.
+
+**New: the code-defect exclusion strengthened from tree identity.** The task's own statement
+(`bead show bf-1s6c3`) is "Create merge commit reconciling Forgejo and GitHub histories" —
+all five acceptance criteria are merge mechanics; none names application behaviour. The two
+deliverable-level merges are **tree-preserving**:
+
+| Commit | tree vs parent 1 | tree vs parent 2 | Reading |
+|---|---|---|---|
+| `42a7b07` (deliverable) | **identical** | differs | Reconciliation kept side 1's entire content and grafted side 2's *ancestry* only — zero content delta |
+| `46293c5` (on-`main`) | **identical** | **identical** | Pure history join — zero content delta |
+
+So the storm's attempts authored, modified and executed **no application code**: the
+102-file parent-vs-parent divergence (which does include `internal/server/handlers_api.go`)
+was resolved by adopting side 1 wholesale, not by editing source. This is stronger than
+§5.4's "the task never touched domain-check code" — the deliverable *could not* have
+introduced a code defect, because its trees introduce no change.
+
+**New: the one-time-vs-systemic determination.** Not a one-time event — a three-layer
+systemic pattern, each layer with its own status:
+
+1. **Underlying cause — bead state committed to git** (§6): systemic across the fleet on
+   2026-08-12 (same evening: bf-31mno 350 kills, bf-4yjq 50, bf-2xygo 4; 460 `exit_code=-1`
+   event-wide). **Repaired and structurally prevented** — `.gitignore` + 0 tracked `.beads`
+   files + the committed pre-commit hook (layer 3, `dfa60a9`), all re-verified above.
+2. **Kill mechanism — unbounded pack-objects vs. the dispatch scope** (§6 immediate): systemic
+   on 2026-08-12 and again Aug-14/16 (bf-173o7e gc-side, bf-198ne push-side — kernel-proven).
+   **Bounded** since the `pack.windowMemory`/`threads`/`deltaCacheSize` config (layer 4,
+   verified above at ≈3 GiB worst case); bf-198ne re-verified resolved.
+3. **Amplifier — ~10 s no-backoff re-dispatch with no stop-condition for satisfied work** (§6
+   amplifying): systemic, NEEDLE-fleet-side, **still open** (§8 item 6 / §9 action 2). This is
+   the layer that converted one kill into 71 deaths and 71 alerts; until it ships, a
+   satisfied-work storm remains reachable from any future persistent kill cause.
+
+**Root-cause verdict (unchanged, confirmed):** Infrastructure — repository bloat (Pattern 3).
+Proximate: memcg-OOM SIGKILL of `git push`'s pack-objects inside the 12 GiB dispatch scope
+against an ≈18 GB object store (71 of 76 attempts died at the push step). Contributing:
+repo-side — bead-state snapshots in git + no pre-commit backstop at the time; fleet-side —
+the re-dispatch amplifier. **Alert disposition: no further action for this event** — the bead
+is closed, the deliverable is represented on `main` by `46293c5`, and the repository
+condition is repaired and verified holding. Closure of parent alert bf-5cd2d belongs to its
+dedicated closure bead (§9 action 4).
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
