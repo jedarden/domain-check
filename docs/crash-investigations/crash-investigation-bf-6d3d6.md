@@ -314,3 +314,163 @@ Snapshot at write time (2026-09-07): 267 loose objects / 2.71 MiB, 1 pack
 
 **Re-verification completed**: 2026-09-07  
 **Investigating bead**: domchk-9caed39b (claude-code-glm-5.3-flash-lab-roam-10)
+
+---
+
+## §3 Systemic analysis: the feedback loops, the failure points, and why recovery did not self-stabilize (2026-09-07, bead domchk-c382e224)
+
+Dispatched to analyze the bf-6d3d6 crash patterns and identify the systemic
+issues in the crash-recovery workflow, on the premise that "741
+crash-recovery commits accumulating … created resource exhaustion." Body §4
+sketched the loop and §2.5 corrected its causal weight, but neither renders
+this dispatch's specific asks — named failure points, an explanation of the
+missing self-stabilization, and process failures enumerated for correction —
+so they are consolidated here per the dedup-append convention. Every figure
+below was re-verified first-hand on 2026-09-07 (§3.5); the repo-state snapshot
+is this append's own run, not §2.7's.
+
+### §3.1 The feedback loop, stated precisely (and what actually caused the 741)
+
+Two coupled loops ran, and they are worth separating because the body's §4
+fused them:
+
+**Loop A — the kill loop (infrastructural, not self-sustaining).** ~17–18 GB
+of loose objects (17+ identical 237 MB `.beads/*.jsonl` snapshots) made
+pack-objects the expensive step of every `git push` and gc; running inside a
+12 GiB per-dispatch memcg scope, those operations were killed
+(`CONSTRAINT_MEMCG`, needle's `exit_code=-1` sentinel). Any dispatch that
+touched the repo could die. bf-6d3d6's own six kills are the era regime
+acting on a bead whose real work was one `git merge-base` (§2.4: the
+merge-base ran; zero work was ever lost).
+
+**Loop B — the bookkeeping loop (the one that minted the commits).** Each
+kill, under pre-0.4.2 one-alert-per-kill, minted an alert bead; each alert
+and each retry re-dispatch spawned investigation work; and the workflow's
+standing convention was to record dispatch bookkeeping and investigation
+output as commits to the shared repo — `.needle-predispatch-sha` updates,
+"docs: complete crash investigation …" reports, alert verification reports.
+So kills produced commits, and commits (via the unpushed backlog they
+extended) raised the pack-objects cost that produced kills. That is the
+feedback loop, and it is real.
+
+**The correction that matters for the causal story:** the 741 commits did not
+*cause* the resource exhaustion — object size did; the commit backlog
+*amplified* the cost of the push/gc kill site (§2.5.1). And the commits were
+overwhelmingly **bookkeeping and documentation, not repair**: §2.4 shows
+nothing needed repairing across all six kills (zero work lost), so the
+"crash-recovery commit" population is dispatch-state churn plus write-ups,
+not damage repair. The 741 figure itself stays an unrecomputable era
+measurement (§2.2); its surviving corroboration is the pre-squash backup
+branch — re-verified today: **722 commits, 180 (≈25%) crash-labeled
+subjects**.
+
+### §3.2 Specific workflow failure points in crash recovery
+
+Mapped to bf-6d3d6's own retry cycle (§2.3), each point is a place the
+workflow could have stopped and did not:
+
+| # | Failure point | bf-6d3d6 instance | Evidence |
+|---|---|---|---|
+| F-1 | **Kill detection with no work-completion check.** A kill raised an alert without asking whether the deliverable had already landed. | Attempt 1 committed the deliverable 29 s *before* its kill; all six kills were post-deliverable, yet each minted an alert. | §2.3; needle log: 6 × `exit_code=-1 outcome=Crash(-1)` + 1 × `exit_code=0 outcome=Success` (re-verified 2026-09-07) |
+| F-2 | **Retry with no stop-condition.** Re-dispatch did not check whether the bead's deliverable already existed on disk. | Attempts 2–6 re-ran a completed bead — six kills, six alert beads, and no change to the outcome. | §2.3, §2.4 ("Work lost: none") |
+| F-3 | **One alert bead per kill.** The alert layer's cardinality equalled the kill count, so the loop's output grew with its input. | 6 kills → 6 alert beads (`bf-1qht8`, `bf-1936h`, `bf-w4fwe`, `bf-2r30u`, `bf-14ydo`, `bf-5npjj`). | §2.3, §2.6 |
+| F-4 | **Per-dispatch state recorded as shared-main commits.** `.needle-predispatch-sha` churn put a commit on main per dispatch. | 735 commits in the current lineage touch the file; 604 carry a `predispatch` subject, with `crash investigation` (117) and `crash recover` (25) subjects overlapping the same population. | `git log -- .needle-predispatch-sha` (§3.5) |
+| F-5 | **Alert premises regenerated from templates, not from state.** Alert/dispatch text carried era figures and SHAs verbatim, unvalidated against the repo. | This bead family's templates named fabricated SHA `b6d1439` (§2.2) and restated "741 crash-recovery commits" five weeks after the regime was repaired — including in this dispatch. | §2.2, §2.6; bf-4k2ws §14.6 |
+
+### §3.3 Why the crash-recovery system did not self-stabilize
+
+A self-stabilizing loop needs negative feedback: some signal whose magnitude
+grows with the damage and which acts to reduce the loop's drive. The workflow
+had none — and, worse, its only couplings were positive:
+
+1. **Nothing measured the accumulating state.** There was no commit-ahead
+   counter (M-1, 🔴 open in the bf-1ea4g determination), no dispatch-scope
+   memory telemetry (M-2, 🔴 open), no work-completion check at alert time
+   (G-9 — an external ask, later answered at the alert layer by the
+   2026-09-02 fix stack). A loop whose participants cannot see its output
+   cannot damp it.
+2. **Retry and alert behavior scaled with failures, not with progress.** A
+   kill produced a retry and an alert *regardless* of what the killed attempt
+   had achieved (F-1, F-2, F-3). Progress — a committed deliverable —
+   produced no signal at all.
+3. **The loop's waste was denominated in the same currency as its cause.**
+   Bookkeeping commits extended the unpushed backlog, which is exactly the
+   quantity that made the kill site expensive. So Loop B fed Loop A, and
+   Loop A's kills fed Loop B.
+
+**The arc, measured** — commits per day touching `.needle-predispatch-sha`
+in the current lineage (dedicated bookkeeping commits; the final two are the
+2026-09-07 empty-tree accident `2e8ce7a` and its repair `2ec91ec`, incidental
+touches):
+
+| Day | 08-09 | 08-16 | 08-17 | 08-25 | 08-26 | 09-01 | 09-02 | 09-07 |
+|---|---|---|---|---|---|---|---|---|
+| Commits | 1 | 53 | 262 | 155 | 233 | 21 | 8 | 2 |
+
+Two facts in this table settle the question. First, the churn **grew for two
+weeks** (1 → 53 → 262): between bf-6d3d6's six kills on 08-13 and the 08-16
+squash the loop ran on undamped, and the backlog itself grew (422 → 741, §2.5.2).
+Second, the 08-17 wave is the **largest single day, the day after the squash**
+folded the backlog — removing the amplifier alone did not stop the loop,
+because the loop's drive was the alert/retry behavior, not the backlog. Decay
+begins only with the fix stack landing externally: needle 0.4.2
+(`needle-stable.pre-0.4.2-20260819` backup name) introduced alert dedup, and
+the fuller decay to zero tracks needle 0.6.0 (built 2026-09-01) plus the
+2026-09-02 crash-alert fix stack.
+
+**What actually ended it** — six external interventions, each cutting one leg
+of the loop, none generated by the loop itself:
+
+| Intervention | Date | Leg cut |
+|---|---|---|
+| Squash `c27899f` folds the 741-commit backlog | 2026-08-16 | Loop A's amplifier |
+| `.beads/` gitignored (repo-wide `*.jsonl`/`*.db`) + 10 MB pre-commit gate | 2026-09-01 era, hook G-1 closed 09-06 | The resource driver itself (object size) |
+| `pack.windowMemory=2g` / `deltaCacheSize=1g` / `threads=1`, repo + global | 2026-09-02 | The kill site (unbounded pack-objects) |
+| needle ≥0.4.2 alert dedup (end of one-alert-per-kill) | ~2026-08-19 | F-3 |
+| `crash-alert-manager.sh` 6-fix stack (closed-bead filter, dedup + processed-alert tracking, completion awareness, cooldown, classification) | 2026-09-02 | F-1, F-3, part of F-5 |
+| `verify-work-completion.sh` pre-close gate writing `.beads/state/work-completion/` markers | 2026-09 | F-1, F-2 (triage side) |
+
+### §3.4 Process failures that need correction
+
+Five, with fix status as of 2026-09-07 — the first three are the minimum the
+dispatch asks for, and PF-3 is the one this analysis adds that no prior
+section of the corpus records:
+
+| ID | Process failure | Status 2026-09-07 |
+|---|---|---|
+| **PF-1** | **Alert cardinality equalled kill cardinality** (F-3): one bead per kill, so a single bead's bad afternoon minted six investigations of already-finished work. | ✅ Fixed at source (needle ≥0.4.2 dedup) and at response layer (2026-09-02 stack, `crash-alert-manager.sh` carries the six FIX markers; suite 12/12 per CLAUDE.md 2026-09-06). Residue: `bf-14ydo` and `bf-5npjj` still **Open** — re-verified today — 25 days after the target closed `Completed`. |
+| **PF-2** | **Retry without a deliverable/stop-condition** (F-2): re-dispatch never asked whether the work was already on disk, so it paid full kill exposure to reproduce a finished deliverable. | 🔴 **Open** — bf-1ea4g's H-1 retry stop-condition remains unimplemented (bf-1ea4g root-cause determination, recommendations table). `verify-work-completion.sh` covers the triage side only, not the retry decision. |
+| **PF-3** | **Dispatch bookkeeping committed to the shared repo** (F-4): `.needle-predispatch-sha` is a per-dispatch HEAD marker (never crash evidence) written as a commit on `main`, contributing 604 predispatch-subject commits to the current lineage and lengthening the backlog the kill site choked on. | 🔴 **Open and still live** — the file is **tracked and not gitignored** today (`git ls-files` hit; no `.gitignore` rule), and every dispatch still dirties it. `.beads/` was gitignored for exactly this reason; this file is the remaining un-gitignored member of the same class. |
+| **PF-4** | **Alert/dispatch premises unvalidated against repo state** (F-5): era figures and SHAs propagated verbatim into new work items, dispatching agents to re-create existing deliverables (this bead family: fabricated `b6d1439`, stale pre-consolidation path, stale 741 premise). | 🟡 Partial — the vector is documented (bf-4k2ws §14.6) and the dedup-append convention is the working mitigation, but no mechanical premise validation exists; this dispatch is a live instance (it restates the 741 premise as fact — corrected here and in §2.5). |
+| **PF-5** | **No feedback from the loop to its operators** — no commit-ahead counter, no dispatch-scope telemetry, so nothing could observe the churn growing (M-1, M-2 🔴 open; G-10 external). | 🔴 Open — M-1 (`rev-list --count @{upstream}..HEAD` warn ≥50 / critical ≥200 in `check-repo-health.sh`) remains the highest-leverage single detection rule and is unimplemented. |
+
+The systemic diagnosis in one sentence: **the crash-recovery workflow was a
+positive-feedback amplifier bolted onto an infrastructural kill regime, with
+no measurement of its own accumulation and no stop-condition on any of its
+edges — so it ran until each leg was cut externally, and the two legs still
+uncut (PF-2, PF-3) remain live today.**
+
+### §3.5 Method (reproducible, this section's own run 2026-09-07)
+
+```
+git rev-list --count origin/main..HEAD; git rev-list --count HEAD..origin/main   # 0 / 0
+git rev-list --count pre-squash-history-20260816                                 # 722
+git log --format=%s pre-squash-history-20260816 | grep -icE 'predispatch|crash recover|crash investigation|crash alert|signal -1'   # 180
+git ls-files .needle-predispatch-sha; grep -c predispatch .gitignore             # tracked / no rule
+git log --oneline -- .needle-predispatch-sha | wc -l                             # 735
+git log --format=%s -- .needle-predispatch-sha | grep -icE 'predispatch'          # 604
+git log --format=%ad --date=short -- .needle-predispatch-sha | sort | uniq -c    # per-day arc (§3.3)
+grep 'bf-6d3d6' ~/.needle/logs/needle-claude-code-glm-4_7-lab-domain-check.log.2 | grep -o 'exit_code[^,]*' | sort | uniq -c
+bead show bf-14ydo bf-5npjj                                                      # both Open
+```
+
+Snapshot at write time: 327 loose objects / 3.16 MiB, `.git` 106 MB,
+divergence 0/0. Cross-references: gaps and statuses from
+`docs/crash-prevention-requirements.md` (G-1 closed 2026-09-06, G-2 withdrawn
+2026-09-07, G-9/G-10 open external asks); H-1/M-1/M-2 from
+`docs/investigations/bf-1ea4g-root-cause-determination-2026-09-02.md`.
+
+---
+
+**Systemic analysis completed**: 2026-09-07  
+**Investigating bead**: domchk-c382e224 (claude-code-glm-5.3-flash-lab-domain-check)
