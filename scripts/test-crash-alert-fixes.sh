@@ -192,6 +192,43 @@ fi
 test_count=$((test_count + 1))
 echo ""
 
+# Test 13: Functional check - closed bead bf-2vtzg does not trigger a new alert.
+# Runs the manager against a sandbox copy (its BEAD_DIR follows the script's own
+# location, so trace/log writes land in the sandbox, not the live store) with a
+# synthetic exit-code -1 trace. `bead show` still resolves the real workspace
+# because the suite runs from the repo root - which is the point: the real
+# bf-2vtzg bead is Closed, so CRITICAL FIX 1 must skip alert creation.
+echo "Test 13: Verifying closed bead bf-2vtzg does not trigger a new alert..."
+mkdir -p "$PROJECT_ROOT/.beads/state"
+SANDBOX="$(mktemp -d "$PROJECT_ROOT/.beads/state/tmp-closed-bead-test.XXXXXX")"
+mkdir -p "$SANDBOX/scripts" "$SANDBOX/.beads/traces/bf-2vtzg"
+cp "$CRASH_ALERT_MANAGER" "$SANDBOX/scripts/crash-alert-manager.sh"
+printf '{"bead_id":"bf-2vtzg","exit_code":-1}\n' > "$SANDBOX/.beads/traces/bf-2vtzg/metadata.json"
+touch "$SANDBOX/.beads/traces/bf-2vtzg/trace.jsonl"
+
+BEAD_STATUS_TEST="$(bead show bf-2vtzg 2>/dev/null | grep -i 'status' | head -1 || true)"
+set +e
+RUN_OUTPUT="$(bash "$SANDBOX/scripts/crash-alert-manager.sh" bf-2vtzg 2>&1)"
+RUN_RC=$?
+set -e
+
+if [[ "$BEAD_STATUS_TEST" =~ [Cc]losed ]] \
+    && [[ $RUN_RC -eq 0 ]] \
+    && echo "$RUN_OUTPUT" | grep -qi "already CLOSED" \
+    && [[ ! -f "$SANDBOX/.beads/logs/alert-state.json" ]] \
+    && ! echo "$RUN_OUTPUT" | grep -q "Genuine crash detected"
+then
+    echo -e "${GREEN}✓ PASS${NC} - closed bead bf-2vtzg skipped (exit 0, no alert generated)"
+    pass_count=$((pass_count + 1))
+else
+    echo -e "${RED}✗ FAIL${NC} - closed bead bf-2vtzg was not skipped cleanly (rc=$RUN_RC, bead status: ${BEAD_STATUS_TEST:-unavailable})"
+    echo "$RUN_OUTPUT" | tail -5
+    fail_count=$((fail_count + 1))
+fi
+rm -rf "$SANDBOX"
+test_count=$((test_count + 1))
+echo ""
+
 # Summary
 echo "=========================================="
 echo "Test Summary"
@@ -206,6 +243,7 @@ if [[ $fail_count -eq 0 ]]; then
     echo ""
     echo "✅ Crash alert fixes are properly implemented:"
     echo "   - Closed bead filtering (CRITICAL FIX 1, 5)"
+    echo "   - Closed bead functional check (bf-2vtzg sandbox: no alert)"
     echo "   - Duplicate detection (CRITICAL FIX 2, 3)"
     echo "   - Completion awareness (CRITICAL FIX 4, 6)"
     echo "   - Alert cooldown mechanism"

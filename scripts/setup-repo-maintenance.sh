@@ -55,8 +55,10 @@ if [[ "$REMOVE" == true ]]; then
 
   timers=(
     "domain-check-repo-health.timer"
+    "domain-check-auto-gc.timer"
     "domain-check-git-gc.timer"
     "domain-check-git-gc-full.timer"
+    "domain-check-alert-triage.timer"
   )
 
   for timer in "${timers[@]}"; do
@@ -77,10 +79,14 @@ if [[ "$REMOVE" == true ]]; then
   files=(
     "domain-check-repo-health.service"
     "domain-check-repo-health.timer"
+    "domain-check-auto-gc.service"
+    "domain-check-auto-gc.timer"
     "domain-check-git-gc.service"
     "domain-check-git-gc.timer"
     "domain-check-git-gc-full.service"
     "domain-check-git-gc-full.timer"
+    "domain-check-alert-triage.service"
+    "domain-check-alert-triage.timer"
   )
 
   for file in "${files[@]}"; do
@@ -97,14 +103,18 @@ if [[ "$REMOVE" == true ]]; then
   echo -e "${GREEN}✓ Repository maintenance automation removed${NC}"
 
 else
-  # Check if timers already exist
+  # Note when timers already exist. This is a REFRESH, not a skip: re-copying
+  # the unit files and daemon-reloading is how an installed-but-stale unit
+  # ever gets updated (the stale-unit trap documented in CLAUDE.md — an edited
+  # unit file does nothing until the manager reloads), and it is how a newly
+  # added unit (e.g. domain-check-auto-gc) reaches a box that installed the
+  # earlier three already. enable/start below are idempotent, so refreshing
+  # over live timers is safe.
   if systemctl --user is-enabled --quiet domain-check-repo-health.timer 2>/dev/null; then
-    echo -e "${YELLOW}⚠ Repository maintenance systemd timers already exist${NC}"
+    echo -e "${YELLOW}⚠ Repository maintenance systemd timers already exist — refreshing unit files${NC}"
     echo ""
-    systemctl --user list-timers | grep domain-check || true
+    systemctl --user list-timers 'domain-check-*' --all --no-pager || true
     echo ""
-    echo "To reinstall, run: $0 --remove && $0"
-    exit 0
   fi
 
   echo -e "${GREEN}Installing systemd service and timer files...${NC}"
@@ -117,6 +127,8 @@ else
   service_files=(
     "domain-check-repo-health.service:domain-check-repo-health.service"
     "domain-check-repo-health.timer:domain-check-repo-health.timer"
+    "domain-check-auto-gc.service:domain-check-auto-gc.service"
+    "domain-check-auto-gc.timer:domain-check-auto-gc.timer"
     "domain-check-git-gc.service:domain-check-git-gc.service"
     "domain-check-git-gc.timer:domain-check-git-gc.timer"
     "domain-check-git-gc-full.service:domain-check-git-gc-full.service"
@@ -128,11 +140,21 @@ else
     target="${source_target##*:}"
     target_path="$HOME/.config/systemd/user/$target"
 
-    if [[ -f "$source" ]]; then
-      cp "$source" "$target_path"
-      echo -e "${GREEN}✓ Installed $target${NC}"
-    else
+    if [[ ! -f "$source" ]]; then
       echo -e "${YELLOW}⚠ Source file not found: $source${NC}"
+      continue
+    fi
+    # Some installed units are hard links to the tracked source (identical
+    # inode), so a plain `cp` aborts with "same file" — and under `set -e`
+    # that killed the whole install before daemon-reload/enable. Content
+    # decides: identical → nothing to do; different → replace the destination
+    # outright (--remove-destination handles the hard-linked case), leaving a
+    # plain file that future refreshes compare the same way.
+    if [[ -e "$target_path" ]] && cmp -s "$source" "$target_path"; then
+      echo -e "${GREEN}✓ $target already up to date${NC}"
+    else
+      cp --remove-destination "$source" "$target_path"
+      echo -e "${GREEN}✓ Installed $target${NC}"
     fi
   done
 
@@ -146,6 +168,7 @@ else
   # Enable and start timers
   timers=(
     "domain-check-repo-health.timer"
+    "domain-check-auto-gc.timer"
     "domain-check-git-gc.timer"
     "domain-check-git-gc-full.timer"
   )
@@ -170,12 +193,14 @@ if [[ "$REMOVE" == false ]]; then
   echo -e "${GREEN}✓ Repository maintenance automation installed${NC}"
   echo ""
   echo -e "${YELLOW}What happens next:${NC}"
-  echo "  • Daily repository health check at 2 AM"
+  echo "  • Daily repository health check at 2 AM (detection)"
+  echo "  • Daily threshold-triggered auto gc at 2:30 AM (remediates only when the repo crossed a bloat threshold)"
   echo "  • Daily standard git gc at 3 AM"
   echo "  • Weekly full git gc (Sunday 4 AM)"
   echo ""
   echo -e "${YELLOW}Logs:${NC}"
   echo "  • $REPO_ROOT/.beads/logs/repo-health.log"
+  echo "  • $REPO_ROOT/.beads/logs/auto-gc.log"
   echo "  • $REPO_ROOT/.beads/logs/git-gc.log"
   echo ""
   echo -e "${YELLOW}To check timer status:${NC}"
@@ -183,6 +208,7 @@ if [[ "$REMOVE" == false ]]; then
   echo ""
   echo -e "${YELLOW}To view logs:${NC}"
   echo "  journalctl --user -u domain-check-repo-health.service"
+  echo "  journalctl --user -u domain-check-auto-gc.service"
   echo "  journalctl --user -u domain-check-git-gc.service"
   echo ""
   echo -e "${YELLOW}To remove: $0 --remove${NC}"

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Pre-flight Health Check
 # Run before starting agent tasks to ensure service availability and repository health
-# Returns exit code 0 if healthy, 1 if unhealthy
+# Returns exit code 0 if healthy, 1 if unhealthy, or 75 when deferred because
+# a system event is active (scripts/system-event-mode.sh). That deferral is a
+# load-shedding directive, not a failed check, so it is not relaxable by
+# --warn-only.
 #
 # Implements Proposal 3.4 from crash mitigation strategies:
 # - Pre-task repository health check to prevent OOM crashes from repository bloat
@@ -17,6 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SERVICE_MONITOR="$SCRIPT_DIR/service-monitor.sh"
 REPO_HEALTH_CHECK="$SCRIPT_DIR/check-repo-health.sh"
+SYSTEM_EVENT_GATE="$SCRIPT_DIR/system-event-mode.sh"
 
 # Parse arguments
 VERBOSE=false
@@ -85,6 +89,36 @@ run_check() {
   fi
 }
 
+# Check 0: System event gate — DEFER new work while a crash/memory surge is
+# active (bf-3561g RCA §6 recommendation 5 / gap G-3). Runs first and exits
+# immediately on a latched event, so neither the rest of the preflight nor the
+# task it gates adds load to a box that is already shedding it. 75 = EX_TEMPFAIL.
+echo -e "${BLUE}System Event${NC}"
+if [[ -f "$SYSTEM_EVENT_GATE" ]]; then
+  SE_RC=0
+  SE_OUT=$(bash "$SYSTEM_EVENT_GATE" check 2>&1) || SE_RC=$?
+  if [[ $SE_RC -eq 75 ]]; then
+    echo -e "   ${YELLOW}⏸${NC} deferred: system event active — do not start new work"
+    if [[ -n "$SE_OUT" ]]; then
+      echo "$SE_OUT" | sed 's/^/   /'
+    fi
+    echo ""
+    echo "Deferred: system event active. Retry when the event clears (scripts/system-event-mode.sh status)."
+    exit 75
+  elif [[ $SE_RC -eq 0 ]]; then
+    echo -e "   ${GREEN}✓${NC} No system event active"
+    ((CHECKS_PASSED+=1))
+  else
+    # Fail open: an unreadable gate must not block the preflight itself.
+    echo -e "   ${YELLOW}⚠${NC} System event gate unreadable (exit $SE_RC) — skipping check"
+    echo "$SE_OUT" | sed 's/^/   /'
+    ((CHECKS_PASSED+=1))
+  fi
+else
+  echo -e "${YELLOW}⚠${NC} system-event-mode.sh not found (skipping)"
+fi
+echo ""
+
 # Check 1: Service availability (inference gateway)
 echo -e "${BLUE}Service Availability${NC}"
 if bash "$SERVICE_MONITOR" --once > /tmp/service-monitor.$$ 2>&1; then
@@ -103,10 +137,15 @@ echo ""
 # Check 2: Repository health
 echo -e "${BLUE}Repository Health${NC}"
 if [[ -f "$REPO_HEALTH_CHECK" ]]; then
-  # Check if repository size is acceptable
-  REPO_SIZE=$(du -s .git 2>/dev/null | awk '{print $1/1048576}')  # Convert KB to GB
+  # Check if repository size is acceptable.
+  # Compare in integer KB (1GB = 1048576KB): bash has no floating point and
+  # `bc` is not installed on this box, so the previous `bc -l` comparison
+  # always failed open (127 -> "0") and passed repos of any size — a 1.2GB
+  # synthetic repo reported "passed" before this was fixed 2026-09-06.
+  REPO_SIZE_KB=$(du -s .git 2>/dev/null | awk '{print $1}')
+  REPO_SIZE=$(awk -v kb="${REPO_SIZE_KB:-0}" 'BEGIN{printf "%.3f", kb/1048576}')
 
-  if [[ $(echo "$REPO_SIZE > 1" | bc -l 2>/dev/null || echo "0") -eq 1 ]]; then
+  if [[ "${REPO_SIZE_KB:-0}" -gt 1048576 ]]; then
     echo -e "   ${RED}✗${NC} Repository size (${REPO_SIZE}GB) exceeds threshold (1GB)"
     echo -e "   ${YELLOW}Recommended actions:${NC}"
     echo "     1. Run repository cleanup: ./scripts/safe-git-gc.sh --full"
@@ -117,7 +156,10 @@ if [[ -f "$REPO_HEALTH_CHECK" ]]; then
     ((CHECKS_PASSED+=1))
 
     if [[ "$VERBOSE" == true ]]; then
-      bash "$REPO_HEALTH_CHECK" 2>&1 | head -20
+      # `|| true`: head -20 closes the pipe once it has its lines, and under
+      # `set -o pipefail` the SIGPIPE'd (141) pipeline would abort this script
+      # mid-run whenever the health output exceeds 20 lines — it always did.
+      bash "$REPO_HEALTH_CHECK" 2>&1 | head -20 || true
     fi
   fi
 else

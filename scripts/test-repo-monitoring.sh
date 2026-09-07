@@ -428,6 +428,121 @@ test_git_fsck() {
   fi
 }
 
+# Test: repo-health-monitor pack/loose calibration (bf-1ea4g gap L-2)
+#
+# A healthy repo holds several small packs as normal bounded-gc churn, so the
+# fragmentation warning must key on packed MASS, not pack count — and
+# loose-object MASS must be checked, because the historical bloat
+# (bf-1s6c3/bf-4yjq) was a few hundred huge objects that a count threshold
+# never sees. Built hermetically in a scratch repo so box state cannot flake it.
+test_repo_health_monitor_pack_calibration() {
+  log_test "repo-health-monitor keys fragmentation on pack SIZE, not count (L-2)"
+
+  local monitor="./scripts/repo-health-monitor.sh"
+  if [[ ! -x "$monitor" ]]; then
+    log_fail "monitor not found/executable: $monitor"
+    return 1
+  fi
+  local monitor_abs
+  monitor_abs="$(cd "$(dirname "$monitor")" && pwd)/$(basename "$monitor")"
+
+  local scratch
+  scratch=$(mktemp -d /tmp/rhm-calib.XXXXXX) || { log_fail "mktemp failed"; return 1; }
+  local git_author="-c user.name=test -c user.email=test@example.com"
+
+  local src tgt i
+  tgt="$scratch/tgt"
+  git init -q --bare "$tgt" 2>/dev/null
+  # gc.auto=0 keeps fetched packs from being consolidated; fetch.unpackLimit=1
+  # keeps small fetches in pack form (the default unpacks <100 fetched objects).
+  git -C "$tgt" config gc.auto 0
+  git -C "$tgt" config fetch.unpackLimit 1
+  git -C "$tgt" config transfer.unpackLimit 1
+
+  for i in 1 2 3; do
+    src="$scratch/src$i"
+    git init -q "$src" 2>/dev/null
+    echo "payload $i" > "$src/file$i.txt"
+    git -C "$src" add "file$i.txt"
+    git $git_author -C "$src" commit -q -m "src$i"
+    git -C "$src" gc -q --quiet 2>/dev/null
+    git -C "$tgt" fetch -q "$src" main 2>/dev/null || true
+  done
+
+  local pack_count
+  pack_count=$(git -C "$tgt" count-objects -v | grep '^packs:' | awk '{print $2}')
+  if [[ "${pack_count:-0}" -lt 3 ]]; then
+    rm -rf "$scratch"
+    log_skip "could not construct a 3-pack scratch repo (got ${pack_count:-0} packs)"
+    return 0
+  fi
+
+  local out rc
+
+  # A: DEFAULT pack thresholds + 3 tiny packs must stay silent — this is the
+  #    exact state the pre-calibration script false-alarmed on.
+  out=$(cd "$tgt" && REPO_SIZE_WARN_GB=9999 DISK_FREE_WARN_GB=0 \
+        LOOSE_OBJECTS_WARN=999999 LOOSE_SIZE_WARN_MB=999999 \
+        "$monitor_abs" --cron 2>&1)
+  rc=$?
+  if [[ $rc -eq 0 ]] && ! grep -q "fragment" <<<"$out"; then
+    log_pass "3 small packs / tiny mass: no fragmentation warning with default thresholds"
+  else
+    rm -rf "$scratch"
+    log_fail "default thresholds flagged a healthy 3-pack tiny repo (exit $rc): $(grep -i fragment <<<"$out" | head -1)"
+    return 1
+  fi
+
+  # B: the signal must still fire when the packed MASS crosses the threshold
+  out=$(cd "$tgt" && REPO_SIZE_WARN_GB=9999 DISK_FREE_WARN_GB=0 \
+        LOOSE_OBJECTS_WARN=999999 LOOSE_SIZE_WARN_MB=999999 \
+        PACK_FILES_WARN=2 PACK_SIZE_WARN_MB=0 \
+        "$monitor_abs" --cron 2>&1)
+  rc=$?
+  if [[ $rc -eq 1 ]] && grep -q "Fragmented and heavy pack store" <<<"$out"; then
+    log_pass "fragmentation warning fires once packed mass exceeds PACK_SIZE_WARN_MB"
+  else
+    rm -rf "$scratch"
+    log_fail "fragmentation warning did not fire with PACK_SIZE_WARN_MB=0 (exit $rc)"
+    return 1
+  fi
+
+  # C: loose-object MASS is checked, not just count — one big loose blob must
+  #    warn under a 1MB mass threshold while trivially passing the count band.
+  echo "rr" > "$tgt/big.txt"
+  head -c 2097152 /dev/zero | tr '\0' 'x' > "$tgt/big.bin"
+  git -C "$tgt" add big.txt big.bin 2>/dev/null
+  git $git_author -C "$tgt" commit -q -m "big loose blob" 2>/dev/null
+
+  out=$(cd "$tgt" && REPO_SIZE_WARN_GB=9999 DISK_FREE_WARN_GB=0 \
+        LOOSE_OBJECTS_WARN=999999 LOOSE_SIZE_WARN_MB=1 \
+        PACK_FILES_WARN=999 PACK_SIZE_WARN_MB=999999 \
+        "$monitor_abs" --cron 2>&1)
+  rc=$?
+  if [[ $rc -eq 1 ]] && grep -q "loose object mass" <<<"$out"; then
+    log_pass "loose-object MASS warning fires on a big loose blob under the count band"
+  else
+    rm -rf "$scratch"
+    log_fail "loose-mass warning did not fire with LOOSE_SIZE_WARN_MB=1 (exit $rc)"
+    return 1
+  fi
+
+  # D: the same state must stay silent at a relaxed mass threshold
+  out=$(cd "$tgt" && REPO_SIZE_WARN_GB=9999 DISK_FREE_WARN_GB=0 \
+        LOOSE_OBJECTS_WARN=999999 LOOSE_SIZE_WARN_MB=999999 \
+        PACK_FILES_WARN=999 PACK_SIZE_WARN_MB=999999 \
+        "$monitor_abs" --cron 2>&1)
+  rc=$?
+  if [[ $rc -eq 0 ]]; then
+    log_pass "same state silent when mass thresholds are relaxed"
+  else
+    log_fail "relaxed thresholds still warned: $(grep WARN <<<"$out" | head -1)"
+  fi
+
+  rm -rf "$scratch"
+  return 0
+}
+
 # Main test runner
 main() {
   echo "=== Repository Monitoring and Bloat Prevention Test Suite ==="
@@ -444,6 +559,7 @@ main() {
   test_repo_size_monitoring_exists
   test_preflight_includes_repo_size
   test_repo_size_thresholds
+  test_repo_health_monitor_pack_calibration
   test_auto_gc_trigger_exists
   test_safe_git_gc_exists
   test_repo_health_check_exists

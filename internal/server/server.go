@@ -15,10 +15,23 @@ import (
 	"github.com/jedarden/domain-check/internal/config"
 )
 
+// resourceRunner is the slice of ResourceMonitor the server's lifecycle
+// needs. It is an interface so tests can wrap the monitor and observe when
+// its sampling goroutine starts and stops.
+type resourceRunner interface {
+	Run(ctx context.Context, interval time.Duration)
+}
+
 // Server wraps an http.Server with graceful shutdown support.
 type Server struct {
 	http *http.Server
 	log  *slog.Logger
+
+	// monitor samples this process's resource usage for the early-warning
+	// log (see resource_monitor.go). New installs the default; tests may
+	// replace it with one whose thresholds and interval are observable.
+	monitor         resourceRunner
+	monitorInterval time.Duration
 }
 
 // New creates a new HTTP server with the given configuration and handler.
@@ -37,7 +50,8 @@ func New(cfg *config.Config, handler http.Handler, log *slog.Logger) *Server {
 			IdleTimeout:    120 * time.Second, // reaps keep-alive connections idle for 2 min
 			MaxHeaderBytes: 1 << 20,           // 1MB
 		},
-		log: log,
+		log:             log,
+		monitorInterval: resourceMonitorInterval,
 	}
 }
 
@@ -90,6 +104,22 @@ func (s *Server) Run(ctx context.Context) error {
 			errCh <- err
 		}
 	}()
+
+	// SAFEGUARD: in-process resource early-warning monitor. The box-level
+	// resource-monitor.timer watches the whole machine; this watches THIS
+	// process, so a leak still far below system-wide pressure produces a
+	// warning (and a log trail) before the memcg OOM killer or a
+	// goroutine/fd limit acts. It only warns - it never takes corrective
+	// action. Its context is owned here so the sampling goroutine stops on
+	// every Run exit path, not just cancellation of the parent context.
+	monitor := s.monitor
+	if monitor == nil {
+		monitor = NewResourceMonitor(s.log)
+	}
+	_ = monitor
+	monitorCtx, stopMonitor := context.WithCancel(context.Background())
+	defer stopMonitor()
+	go monitor.Run(monitorCtx, s.monitorInterval)
 
 	// handlerStart anchors the handler duration metric. A signal can only be
 	// observed after the select begins, so measuring from here cannot
@@ -189,6 +219,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // window exists for scheduler skew on a loaded host and costs a genuinely
 // programmatic shutdown one short pause before draining.
 const signalAttributionWindow = 100 * time.Millisecond
+
+// resourceMonitorInterval is how often the in-process early-warning monitor
+// samples heap and goroutine usage (see resource_monitor.go). Sampling is
+// cheap (two runtime reads) and a leak that matters develops over minutes, so
+// a fine interval buys nothing.
+const resourceMonitorInterval = 30 * time.Second
 
 // waitForSignal drains one pending signal name from sigCh, or "" if none
 // arrives within d.

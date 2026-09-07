@@ -61,7 +61,9 @@ echo "Pack files: $PACK_FILES"
 
 if [ "$PACK_FILES" -gt 20 ]; then
     echo "⚠️  High fragmentation (>$PACK_FILES pack files)"
-    echo "   Consider running: git gc --aggressive"
+    echo "   Consider running: ./scripts/safe-git-gc.sh --full"
+    echo "   (never bare 'git gc --aggressive' — it is banned, see"
+    echo "    docs/maintenance/repository-maintenance-guide.md)"
 else
     echo "✅ Acceptable fragmentation level"
 fi
@@ -70,6 +72,36 @@ echo ""
 # 6. Check git configuration
 echo "⚙️  Git GC Configuration:"
 git config --local --get-regexp "^gc\." | sed 's/^/  /' || echo "  No local GC configuration found"
+echo ""
+
+# 7. Verify the EFFECTIVE pack-memory bound (system -> global -> local — the
+# chain a bare git gc / git push actually sees; a repo-protected-only box can
+# still verify clean here). This is the load-bearing fix for the bf-3561g
+# crash (#4: bare 'git gc --aggressive --prune=now' → 11.73GiB anon → memcg
+# OOM), so its disappearance is a health failure worth an alert line.
+echo "🛡️  Effective Pack-Memory Bound:"
+if bash "$SCRIPT_DIR/setup-git-gc-config.sh" --verify > /tmp/dc-bound-verify.$$ 2>&1; then
+    sed 's/^/  /' /tmp/dc-bound-verify.$$
+else
+    echo "⚠️  NO effective pack-memory bound — any git gc/push is unbounded (crash #4 scenario)"
+    sed 's/^/  /' /tmp/dc-bound-verify.$$
+    mkdir -p "$REPO_ROOT/.beads/logs"
+    echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") CRITICAL repo-health: effective pack-memory bound MISSING — run ./scripts/setup-git-gc-config.sh --local --global" >> "$REPO_ROOT/.beads/logs/repo-health.log"
+fi
+rm -f /tmp/dc-bound-verify.$$
+echo ""
+
+# 8. Flag an aggressive gc/repack that safe-git-gc.sh did not launch
+echo "🕵️  Unmanaged Aggressive GC:"
+if [ -x "$SCRIPT_DIR/detect-unsafe-gc.sh" ]; then
+    if bash "$SCRIPT_DIR/detect-unsafe-gc.sh"; then
+        : # clear — detector already printed the ✅ line
+    else
+        echo "   ⚠️  see .beads/logs/repo-health.log; bare aggressive gc is banned"
+    fi
+else
+    echo "⚠️  detect-unsafe-gc.sh not found"
+fi
 echo ""
 
 # 9. Unpushed-commit backlog (gap analysis M-1, docs/crash-prevention-gaps-bf-1ea4g.md):

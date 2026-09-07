@@ -77,8 +77,8 @@ make check-health-full
 # Clean build artifacts
 make clean
 
-# Run aggressive GC if needed
-./scripts/cleanup-bloat.sh
+# Run memory-bounded bloat cleanup if needed
+./scripts/cleanup-bloat.sh --check-only
 ```
 
 ## Repository Health Scripts
@@ -109,13 +109,21 @@ Comprehensive health diagnostics:
 
 ### cleanup-bloat.sh
 
-Aggressive repository cleanup:
-- Runs `git gc --aggressive --prune=now`
-- Shows before/after size comparison
-- Displays object count statistics
+Crash-safe, memory-bounded bloat cleanup (replaces the bare
+`git gc --aggressive --prune=now` that caused the 2026-08-12/14 memcg-OOM
+crashes — see `docs/crashes/bf-173o7e-cleanup-verification.md`):
+- Pre-flight gate aborts before any mutation on low disk, low memory, high
+  load, a stale concurrent-gc lock, or a failed memory-bounded integrity check
+- Every git stage runs under a hard systemd `MemoryMax` scope plus an
+  RSS-sampling guard that kills the process group at the cap before the
+  kernel's OOM killer can
+- Staged execution with checkpoint/resume, progress heartbeat, and verbose
+  logging to `.git/cleanup-bloat.log`
 
 ```bash
-./scripts/cleanup-bloat.sh
+./scripts/cleanup-bloat.sh --check-only   # report needed/not-needed, change nothing
+./scripts/cleanup-bloat.sh --dry-run      # print the staged plan, change nothing
+./scripts/cleanup-bloat.sh                # run the bounded cleanup
 ```
 
 ### setup-git-gc-config.sh

@@ -1,73 +1,47 @@
-#!/bin/bash
-# Repository Bloat Cleanup Script
-# Removes large files from git history and runs aggressive garbage collection
-# Usage: ./cleanup-repo-bloat.sh
+#!/usr/bin/env bash
+# RETIRED — do not use.
+#
+# This script used to run `git filter-repo --force` (or BFG / filter-branch)
+# followed by a bare `git gc --aggressive --prune=now`. Both halves are
+# implicated in this workspace's crash history:
+#
+#   - The bare aggressive gc is the exact pattern that OOM-killed the box in
+#     bf-1s6c3 and bf-65lsdu (17GB+ of loose objects, exit code -1 mid-gc).
+#     Cleanup now goes through scripts/cleanup-bloat.sh, which pre-flights
+#     resources, monitors the git process tree's RSS, and checkpoints stages.
+#   - The history-rewrite half stripped .beads/ paths from history and ended
+#     by inviting a force-push to "verify history". Force pushes are
+#     prohibited here, and rewriting history is a deliberate one-off
+#     operation that must never sit behind an unattended "cleanup" name.
+#
+# Nothing calls this script. It is kept as a pointer so stale notes, aliases
+# or cron entries fail loudly instead of silently rewriting history.
+#
+# If you genuinely need objects removed from history, do it by hand, in a
+# throwaway clone, with an explicit plan — not via this file.
 
-set -e
+set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-echo "=== Repository Bloat Cleanup ==="
-echo "Repository root: $REPO_ROOT"
-echo
+cat >&2 <<EOF
+ERROR: scripts/cleanup-repo-bloat.sh is retired.
 
-# Check current repository size
-echo "Current repository size:"
-du -sh .git
-echo
+It ran an unbounded 'git gc --aggressive --prune=now' (the pattern that
+OOM-killed this box in bf-1s6c3 and bf-65lsdu) plus a forced history rewrite.
+Neither is safe to run unattended.
 
-# Run git fsck to check for corruption
-echo "Running git fsck..."
-timeout 30 git fsck --no-full || echo "fsck timed out or found issues (expected on large repos)"
-echo
+Replacements, in order of preference:
+  ./scripts/cleanup-bloat.sh --check-only   # is cleanup needed? (no changes)
+  ./scripts/cleanup-bloat.sh --dry-run      # pre-flight checks + staged plan
+  ./scripts/cleanup-bloat.sh                # monitored, staged bloat cleanup
+  ./scripts/cleanup-bloat.sh --resume       # continue an interrupted run
+  ./scripts/safe-git-gc.sh                  # routine maintenance gc
 
-# Remove large files from git history
-echo "Removing large files from git history..."
+History rewriting (removing .beads/ or other paths from past commits) is NOT
+automated: do it manually in a throwaway clone.
 
-# Use git filter-repo or BFG if available, otherwise use git filter-branch
-if command -v git-filter-repo &> /dev/null; then
-    echo "Using git-filter-repo..."
-    git filter-repo --invert-paths \
-        --path .beads/beads.base.jsonl \
-        --path .beads/beads.db \
-        --path .beads/issues.jsonl \
-        --path .beads/events.jsonl \
-        --path-glob '*.db.backup.*' \
-        --force
-elif command -v bfg &> /dev/null; then
-    echo "Using BFG Repo-Cleaner..."
-    bfg --strip-blobs-bigger-than 10M
-    git reflog expire --expire=now --all && git gc --aggressive --prune=now
-else
-    echo "Using git filter-branch (slower but built-in)..."
-    git filter-branch --force --index-filter \
-        'git rm --cached --ignore-unmatch .beads/beads.base.jsonl .beads/beads.db .beads/issues.jsonl .beads/events.jsonl' \
-        --prune-empty --tag-name-filter cat -- --all
-fi
+Nothing was modified. Refusing to continue (repo: $REPO_ROOT).
+EOF
 
-echo
-
-# Clean up references
-echo "Cleaning up references..."
-rm -rf .git/refs/original/
-git reflog expire --expire=now --all
-git gc --aggressive --prune=now
-echo
-
-# Set reasonable git gc thresholds to prevent recurrence
-echo "Configuring git gc thresholds..."
-git config gc.aggressiveDepth 50
-git config gc.aggressiveWindow 250
-git config gc.auto 256
-git config gc.autoPackLimit 50
-echo
-
-# Show new repository size
-echo "New repository size:"
-du -sh .git
-echo
-
-echo "=== Cleanup Complete ==="
-echo "Repository has been cleaned and optimized."
-echo "Please verify that git history is intact before force-pushing."
+exit 1

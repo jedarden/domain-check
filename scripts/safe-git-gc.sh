@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # Safe Git GC - Memory-efficient garbage collection with monitoring and resume
-# Usage: scripts/safe-git-gc.sh [--full] [--resume] [--check-only]
+# Usage: scripts/safe-git-gc.sh [--full] [--resume] [--check-only] [--auto-when-needed]
 #
 # Options:
-#   --full        Run all stages including deep compression (default: stages 1-2)
-#   --resume      Resume from last checkpoint
-#   --check-only  Only check if gc is needed, don't run
+#   --full              Run all stages including deep compression (default: stages 1-2)
+#   --resume            Resume from last checkpoint
+#   --check-only        Only check if gc is needed, don't run
+#   --auto-when-needed  Run only when the repository crosses a bloat threshold
+#                       (safe to call from monitors/timers: exits 0 without
+#                       touching anything when the repo is healthy). This is
+#                       the "--auto-when-needed" closing action named by
+#                       docs/crash-prevention-requirements.md G-2 — the repo
+#                       bloat behind bf-1s6c3/bf-4yjq grew because detection
+#                       existed but nothing automatically ran the bounded gc.
 #
 # Environment variables:
 #   SAFE_GC_MEMORY_MAX     Soft pack memory: drives pack.windowMemory (default: 2g)
@@ -21,9 +28,16 @@
 #   SAFE_GC_MIN_DISK_GB    Minimum free disk in GB (default: 5, and >= 1.5x repo size)
 #   SAFE_GC_MIN_AVAIL_MEM  Minimum available memory (default: cgroup ceiling + 1g)
 #   SAFE_GC_MAX_LOAD       Maximum 1-minute load average (default: 15)
+#   SAFE_GC_AUTO_LOOSE_COUNT  --auto-when-needed: loose-object threshold (default 1000)
+#   SAFE_GC_AUTO_PACKS        --auto-when-needed: pack-file threshold (default 5)
+#   SAFE_GC_AUTO_LOOSE_MB     --auto-when-needed: loose-object size threshold in
+#                             MiB (default 500). Loose size is the metric that
+#                             defined bf-1s6c3: 17.16 GB loose out of an 18 GB repo.
+#   SAFE_GC_AUTO_REPO_MB      --auto-when-needed: total .git size threshold in MiB
+#                             (default 1024 = the documented critical line)
 #
 # Exit codes:
-#   0  success (--check-only: gc IS needed)
+#   0  success (--check-only: gc IS needed; --auto-when-needed: ran OR not needed)
 #   1  failure (--check-only: gc not needed)
 #   2  fail-fast: invalid configuration or insufficient resources
 #
@@ -72,6 +86,17 @@ scope_unit_name() {  # scope_unit_name <role>
 GC_NEEDED=false
 GC_REASON=""
 
+# --auto-when-needed thresholds. These are the repo-bloat critical lines from
+# CLAUDE.md "Repository Size Limits" (total >1 GB critical, loose >500 MB
+# critical, loose count >1000 critical), plus the existing >5-packs rule.
+# auto-gc-trigger.sh historically triggered at 10 GB total — 10x past the
+# documented critical line, and blind to loose size, which is the metric that
+# defined bf-1s6c3. Override per-environment for tests.
+AUTO_LOOSE_COUNT_MAX="${SAFE_GC_AUTO_LOOSE_COUNT:-1000}"
+AUTO_PACK_COUNT_MAX="${SAFE_GC_AUTO_PACKS:-5}"
+AUTO_LOOSE_MB_MAX="${SAFE_GC_AUTO_LOOSE_MB:-500}"
+AUTO_REPO_MB_MAX="${SAFE_GC_AUTO_REPO_MB:-1024}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -83,6 +108,7 @@ NC='\033[0m' # No Color
 MODE="standard"
 RESUME=false
 CHECK_ONLY=false
+AUTO_WHEN_NEEDED=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -96,6 +122,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --check-only)
       CHECK_ONLY=true
+      shift
+      ;;
+    --auto-when-needed)
+      AUTO_WHEN_NEEDED=true
       shift
       ;;
     *)
@@ -180,6 +210,21 @@ validate_config() {
     log_error "SAFE_GC_DELTA_CACHE='$DELTA_CACHE' is not a valid size (use e.g. 1g)"
     rc=2
   fi
+
+  # --auto-when-needed thresholds must be plain non-negative integers; a
+  # garbage value would abort later inside a [[ -gt ]] comparison instead of
+  # failing fast here.
+  local pair
+  for pair in \
+    "SAFE_GC_AUTO_LOOSE_COUNT=$AUTO_LOOSE_COUNT_MAX" \
+    "SAFE_GC_AUTO_PACKS=$AUTO_PACK_COUNT_MAX" \
+    "SAFE_GC_AUTO_LOOSE_MB=$AUTO_LOOSE_MB_MAX" \
+    "SAFE_GC_AUTO_REPO_MB=$AUTO_REPO_MB_MAX"; do
+    if [[ ! "${pair##*=}" =~ ^[0-9]+$ ]]; then
+      log_error "${pair%%=*}='${pair##*=}' is not a non-negative integer"
+      rc=2
+    fi
+  done
   if [[ $rc -ne 0 ]]; then
     return "$rc"
   fi
@@ -349,35 +394,51 @@ acquire_gc_lock() {
 
 # Check if gc is needed. Sets GC_NEEDED / GC_REASON rather than exiting, so
 # --check-only can report the resource verdict in the same run and still exit
-# with the established contract (0 = needed, 1 = not needed, 2 = resources).
+# with the established contract (0 = needed, 1 = not needed, 2 = resources),
+# and --auto-when-needed can decide whether to run at all.
 check_gc_needed() {
   log "Checking if gc is needed..."
   GC_NEEDED=false
   GC_REASON=""
 
-  # Count loose objects (`count:` is the loose-object count in verbose output;
-  # there is no `loose:` key, so grep for that instead)
-  local loose_objects
-  loose_objects=$(git count-objects -v 2>/dev/null | grep '^count:' | awk '{print $2}' || echo "0")
+  # count-objects -v: `count:` is the loose-object count and `size:` the
+  # loose objects' size in KiB (there is no `loose:` key, so grep for those)
+  local stats loose_objects loose_kb loose_mb
+  stats=$(git count-objects -v 2>/dev/null || echo "")
+  loose_objects=$(grep '^count:' <<<"$stats" | awk '{print $2}' || echo "0")
+  loose_kb=$(grep '^size:' <<<"$stats" | awk '{print $2}' || echo "0")
+  loose_objects="${loose_objects:-0}"
+  loose_kb="${loose_kb:-0}"
+  loose_mb=$((loose_kb / 1024))
 
   # Count pack files
   local pack_count
   pack_count=$(find .git/objects/pack -name '*.pack' 2>/dev/null | wc -l)
 
-  # Get repo size
-  local repo_size
+  # Get repo size (MiB, integer — comparable against the threshold)
+  local repo_mb repo_size
+  repo_mb=$(du -sm .git 2>/dev/null | awk '{print $1}')
+  repo_mb="${repo_mb:-0}"
   repo_size=$(du -sh .git 2>/dev/null | awk '{print $1}')
 
-  log "  Loose objects: $loose_objects"
+  log "  Loose objects: $loose_objects (${loose_mb}MiB)"
   log "  Pack files: $pack_count"
-  log "  Repository size: $repo_size"
+  log "  Repository size: $repo_size (${repo_mb}MiB)"
 
-  if [[ $loose_objects -gt 1000 ]]; then
+  # Thresholds. Order is most-bloat-first so the reason names the worst
+  # offender; any single hit is enough to run.
+  if [[ $loose_objects -gt $AUTO_LOOSE_COUNT_MAX ]]; then
     GC_NEEDED=true
-    GC_REASON="Too many loose objects ($loose_objects > 1000)"
-  elif [[ $pack_count -gt 5 ]]; then
+    GC_REASON="Too many loose objects ($loose_objects > $AUTO_LOOSE_COUNT_MAX)"
+  elif [[ $pack_count -gt $AUTO_PACK_COUNT_MAX ]]; then
     GC_NEEDED=true
-    GC_REASON="Too many pack files ($pack_count > 5)"
+    GC_REASON="Too many pack files ($pack_count > $AUTO_PACK_COUNT_MAX)"
+  elif [[ $loose_mb -ge $AUTO_LOOSE_MB_MAX ]]; then
+    GC_NEEDED=true
+    GC_REASON="Loose objects too large (${loose_mb}MiB >= ${AUTO_LOOSE_MB_MAX}MiB) — the bf-1s6c3 signature"
+  elif [[ $repo_mb -ge $AUTO_REPO_MB_MAX ]]; then
+    GC_NEEDED=true
+    GC_REASON="Repository size at or above the critical line (${repo_mb}MiB >= ${AUTO_REPO_MB_MAX}MiB)"
   elif [[ -f "$CHECKPOINT_FILE" ]]; then
     local last_gc_size
     last_gc_size=$(jq -r '.repo_size // "unknown"' "$CHECKPOINT_FILE" 2>/dev/null || echo "unknown")
@@ -665,7 +726,11 @@ final_verification() {
 # Main execution
 main() {
   log "=== Safe Git GC Started ==="
-  log "Mode: $MODE"
+  if $AUTO_WHEN_NEEDED; then
+    log "Mode: $MODE (auto-when-needed)"
+  else
+    log "Mode: $MODE"
+  fi
   log "Memory: window=$MEMORY_MAX delta=$DELTA_CACHE ceiling=$CGROUP_MAX"
   log "Checkpoint file: $CHECKPOINT_FILE"
 
@@ -690,8 +755,9 @@ main() {
     reap_stale_progress
   fi
 
-  # The thresholds inside check_gc_needed only drive --check-only reporting.
-  # An explicit or scheduled run always executes the stages: an early exit here
+  # The thresholds inside check_gc_needed drive --check-only reporting and the
+  # --auto-when-needed gate. An explicit or scheduled run WITHOUT
+  # --auto-when-needed still always executes the stages: an early exit here
   # would let small bloat accumulate between nightly runs, and the previous
   # `if ! check_gc_needed` guard was dead code — outside --check-only mode the
   # function always returns 0.
@@ -712,6 +778,19 @@ main() {
     fi
     log_warning "GC not needed"
     exit 1
+  fi
+
+  # --auto-when-needed: the threshold-driven closing action (requirements G-2).
+  # Monitors and timers call this so bloat remediation no longer depend on a
+  # human reading a detection alert. Healthy repo → exit 0 without touching
+  # anything; crossed threshold → fall through to the same preflight, lock
+  # serialization and memory-capped stages as any explicit run.
+  if $AUTO_WHEN_NEEDED && ! $GC_NEEDED; then
+    log_success "Auto mode: gc not needed (thresholds: loose <= $AUTO_LOOSE_COUNT_MAX objects, packs <= $AUTO_PACK_COUNT_MAX, loose <= ${AUTO_LOOSE_MB_MAX}MiB, repo <= ${AUTO_REPO_MB_MAX}MiB)"
+    exit 0
+  fi
+  if $AUTO_WHEN_NEEDED; then
+    log_warning "Auto mode: gc needed — $GC_REASON"
   fi
 
   # Pre-flight checks

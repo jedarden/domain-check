@@ -4,6 +4,10 @@ Documentation=file:///home/coding/domain-check/docs/crash-response-guide.md
 
 [Service]
 Type=oneshot
+# Exit 1 = "elevated crash rate" (informational, logged for review) — not a
+# unit failure. Exit 2 = infrastructure event / workspace storm, which is the
+# signal that should mark this unit failed.
+SuccessExitStatus=1
 ExecStart=/home/coding/domain-check/scripts/crash-pattern-detection.sh
 WorkingDirectory=/home/coding/domain-check
 Nice=10

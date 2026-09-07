@@ -90,3 +90,62 @@ side in mechanism classification):
    bead closed.
 3. The alert-stamp timestamp (08:23:51.8065…) is repeatedly quoted as the
    crash time; the kill is 08:23:44.918359819Z (table above).
+
+---
+
+## Artifact fidelity re-verification — 2026-09-07 (domchk-ea755548)
+
+Collection child of the same 2026-09-02 split, cut from alert bead
+**bf-otbk6** (created 2026-08-13T08:45:05.914Z — the 08:45:05 instant, the
+other unresolved kill stamp in this family). Task scope is retrieve and
+organize crash data only; classification is owned by domchk-6b123791.
+
+**Retrieval result: the bundle above already satisfies every acceptance
+criterion this bead carries.** Rather than re-collect it, this dispatch
+re-derived the data from the primary source and verified the bundle against
+it. Nothing was re-collected and no file below was altered except this README
+(and its hash, re-pinned in `MANIFEST.sha256`).
+
+### Crash metadata (re-extracted first-hand 2026-09-07)
+
+| Field | Value |
+|---|---|
+| Target bead | bf-1ea4g — "Document local main branch state" (closed 2026-08-13T09:10:16Z) |
+| Alert beads | 56 in the store, one per kill (pre-0.4.2 needle, one-alert-per-kill). This chain's: **bf-otbk6** (08:45:05Z); the bundle's original target bf-1nb5u (08:23:51Z) is resolved by the table above |
+| Needle worker | `claude-code-glm-4.7-lab-domain-check` |
+| Session ID | `8446529e` |
+| Primary crash log | `~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl` — 3,111,314 bytes, 12,131 lines, **1,093 bf-1ea4g records** |
+| Attempts | 57 — first claim 07:17:49.928Z, last record 09:10:43.080Z |
+| Exit codes | **56 × `-1`, 1 × `0`** (attempt 57: dispatch 09:08:39.095Z, completed 09:10:39.562Z, 120,347 ms) |
+| `outcome.classified` | 56 × `crash`, 1 × `success` |
+| `outcome.handled` | 56 × `alerted`, 1 × `none` (the successful attempt) |
+| `bead.released` | 56 × `release_success`; attempt 57 has no release record — the bead closed |
+| `.beads/traces/` | **No bf-1ea4g slot survives.** Traces are single-slot per dispatch and the Aug-13 slots were reclaimed; the worker log above is the only surviving crash log for this bead. 525 `bf-*` slot dirs remain, none for bf-1ea4g |
+
+### Verification performed against the committed bundle
+
+- `MANIFEST.sha256`: **6/6 files OK** (`sha256sum -c`, re-run 2026-09-07).
+- `attempt-index.tsv` re-derived independently from the primary worker log and
+  compared field-by-field: **57/57 attempts, 0 mismatches** across
+  `dispatch_ts`, `completed_ts`, `exit`, `duration_ms`, `classified_ts`,
+  `released_ts`, `release_reason`.
+- bf-otbk6's named instant `2026-08-13T08:45:05.908593271+00:00` (alert
+  payload copy) matches attempt 42's `HANDLING_RELEASE_DONE` heartbeat
+  `08:45:05.908552183Z` at worker-log **L3673**, 6.10 s after attempt 42's kill
+  (`agent.completed` `exit_code: -1`, 76,159 ms, 08:44:58.908Z). Resolved
+  independently here and in
+  `docs/crash-context-bf-1ea4g-2026-08-13.md` (domchk-cf6855ad); both agree,
+  and the ~7 µs worker-log-vs-alert-payload skew matches the bf-1nb5u pattern
+  documented in the table above.
+
+### Corpus discrepancy observed in the live store
+
+Alert bead **bf-otbk6** (still Open, rev 24) carries a Notes claim the
+retrieved record contradicts: *"Task bf-1ea4g was completed successfully 8
+minutes BEFORE crash occurred."* The record shows the opposite — this kill is
+attempt 42 of a loop that ran 25 more minutes before attempt 57 closed the
+bead at 09:10:16Z, and attempt 30's transcript ends mid-tool-call 13.8 s
+before its kill (table above). Left uncorrected in the store: notes correction
+is outside this collection bead's scope and `bead update --notes` replaces
+wholesale. Flagged here so the classifier (domchk-6b123791) does not inherit
+the premise.
