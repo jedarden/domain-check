@@ -931,6 +931,82 @@ prevention layers exist to keep out.
 §8 and `docs/crashes/bf-4yjq-cleanup-verification.md`; re-verify, don't redo. Alert bf-3laof →
 no further action; closure belongs to its dedicated closure bead.
 
+### Re-verification 2026-09-07 (domchk-e9234a0d — the gather→classify→fix chain's fix step, alert bf-1wz2w / attempt 48)
+
+The final link of the chain whose classification step is the subsection above. The dispatch's
+literal fix path for a Pattern-3 verdict (`safe-git-gc.sh --full` + monitor) targets *extant*
+bloat, which does not exist — so per child 2's handoff no gc was run. The fix applied is the
+existing four-layer prevention stack, re-verified live end-to-end; the full "Fix Applied"
+section (justification, command table, per-layer status) is the attempt-48 artifact bundle's
+new **§9**. Summary of this bead's own re-runs:
+
+- **The kill-path bound:** `setup-git-gc-config.sh --verify` exit 0 — all three keys
+  (`windowMemory=2g`, `deltaCacheSize=1g`, `threads=1`) effective at **both** scopes a bare
+  `git push` sees (`~/.gitconfig` global *and* `.git/config` local), worst case ≈3072 MiB
+  within the 12 GiB dispatch-scope ceiling. Attempt 48's push ran four days before this
+  layer existed.
+- **Repository:** 103 MB `.git` · 149 loose / 1.10 MiB · 3 packs / 99.13 MiB · garbage 0 ·
+  `fsck --full` exit 0 · 0/0 divergence · largest blob 14,970,288 B (no bloat remnant) ·
+  `git ls-files .beads` → 0 · `git log --all -- .beads/` → 0 commits.
+- **Gates and schedule:** `setup-git-hooks.sh --check` exit 0; all seven `domain-check-*`
+  systemd user timers present and firing.
+- **Host:** 46 Gi memory available, 51 G disk free, load 7.23. `journalctl -k` oom-kill
+  attribution over 7 days: 96 lines, every one a synthetic/test scope (`safe-git-gc-*`
+  self-test bounds, `bf4yjq-crash-*` signature replays, generic gfp_mask notices) — zero
+  live dispatch-scope victims, the §5-pattern steady state.
+
+**No new mechanism, no gap found.** The chain's open tail is domchk-4e8821ca (verification
+layer + parent-bead closure); alert bf-1wz2w itself remains with its own closure chain.
+
+### Fix-implementation verification 2026-09-07 (domchk-29311899 — the implement-fix step of the §481/§685 chain)
+
+This bead is the "Implement fix based on root cause analysis" child of the chain
+`domchk-6be24808` (classification, §12 above) → `domchk-c3955b52` (root cause, §12 above) →
+**this bead** → `domchk-827a2661` (lessons learned, still open). Its dispatched fix list —
+pack down the bloat, keep bead state out of git, install the pre-commit hook, stand up
+continuous monitoring — is exactly §8 items 1–5, each closed by an earlier bead (items 1–2
+by the 2026-09-01 cleanup plus the gitignore; item 3 by `dfa60a9`/domchk-d9117f42; item 4 by
+the `pack.windowMemory` config; item 5 by the six timers; `499d44d`/domchk-9fe7fba1 later
+added the stack's rollback tooling). Per the dedup rule this bead shipped **no new fix
+code**; its deliverable is the first-hand re-verification that every layer is still in
+force, plus the one proof no predecessor had recorded: the memcg **replay** against the
+current bound — the fix measured against its own root cause, not merely present. It
+converges with the parallel fix step above (domchk-e9234a0d): no gc is warranted because no
+extant bloat exists to pack.
+
+**Fix-effectiveness verification (all re-run 2026-09-07, first-hand):**
+
+- **Root-cause replay:** `scripts/test-gc-memory-bounds.sh` **12/12** — the exact crash
+  command (`git gc --aggressive --prune=now`), rebuilt at reduced scale (8 × 64 MiB
+  incompressible blobs), **exited 0 under `MemoryMax=768M`** with pack-objects peak RSS
+  **320,536 KB < the 700 MiB cap** (the 2026-08-12 original exceeded the 12 GiB dispatch
+  scope). Layer 2's bound is proven effective, not just configured.
+- **Object store (layer 1):** `.git` 103 MB · 153 loose objects / 1.14 MiB · in-pack
+  11,182 / 99.13 MiB · garbage 0 · `git fsck --full` exit 0 (dangling trees only) ·
+  `git ls-files .beads` → 0 · `check-ignore` confirms `.gitignore:66/68/70`
+- **Checkpoint-pattern leg:** `git log --all -- .beads/` → 0 commits across every ref;
+  largest blob **14,970,288 B** (byte-exact vs the §12 root-cause entry above)
+- **Hook layer (layer 3):** `scripts/setup-git-hooks.sh --check` exit 0 (installed hook
+  byte-identical to tracked source); `test-setup-git-hooks.sh` **22/22**
+- **Pack-memory bound (layer 4):** `scripts/setup-git-gc-config.sh --verify` exit 0 —
+  effective windowMemory=2g / threads=1 / deltaCacheSize=1g, worst case ≈3072 MiB inside
+  the 6 GiB ceiling for the 12 GiB dispatch scope
+- **Monitoring (layer 5):** all seven `domain-check-*` timers hold future triggers (the six
+  verified 2026-09-06, plus a seventh `domain-check-auto-gc.timer` at 02:30 installed since
+  and not yet fired); journalctl shows `domain-check-git-gc.service` Starting→Finished in
+  ≈6 s on Sep 4, 5 and 6 — the nightly bounded gc operating, not merely scheduled
+- **Smoke tests:** `check-repo-health.sh` exit 0 · `preflight-health-check.sh` 4/4 ·
+  `test-crash-alert-fixes.sh` **12/12** — the alert-side mitigation of item 6's *symptom*
+  (closed-bead filtering, duplicate detection, completion awareness, cooldown)
+- **Convergence/ancestry:** `HEAD...origin/main` → 0/0; `42a7b07` still not an ancestor of
+  `main`, `46293c5` still is
+
+**Disposition:** the fix is accepted as already implemented — all in-repo layers of §8 are
+in force and proven live, so no new fix code was warranted. The chain's one open layer
+remains §8 item 6 / §9 action 2 (the NEEDLE-fleet-side re-dispatch stop-condition), outside
+this repository; nothing in-repo can close it. **Alert disposition: no further action for
+this event.**
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
