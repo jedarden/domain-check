@@ -222,6 +222,14 @@ Caveats that bound the claim:
   by its own closure-bead blockers. bf-14ydo has been closed and reopened
   four times historically; closing it from a triage pass bounces while its
   blockers are open, so closure belongs to those chains.
+  **Dated update (2026-09-07, later the same day — bf-14ydo's own closing
+  pass):** both of bf-14ydo's closure-bead blockers — `domchk-02bcb329` and
+  this report's own bead `domchk-0dd6ea6e` — are Closed in the store
+  (verified live immediately before closing), so the bead was closed from
+  its own chain as this report prescribes, with the corrected reason:
+  crashes genuine, zero work lost, alert a false positive only as
+  actionable work. **`bf-5npjj` remains Open**, still gated
+  (`domchk-81938e89` ← `domchk-6129d0c7`, both live at that check).
 - **Waste continued past the crash layer's fix:** stages of this very chain
   were dispatched on stale premises — a fabricated SHA (`b6d1439`), a
   pre-consolidation path, and the restated "741 commits" figure — five weeks
@@ -251,7 +259,7 @@ alive).
 
 | ID | Gap | Status | Recommended action |
 |---|---|---|---|
-| **PF-1** | Alert cardinality equalled kill cardinality | ✅ Fixed at source and response layer; **residue: `bf-14ydo` + `bf-5npjj` still Open** | Close them **only via their own closure-bead chains** (this report closes one leg of bf-14ydo's). Never from a triage pass — their closes bounce while blockers are open, and the close reasons citing "no crash occurred" and `b6d1439` are wrong as stated (crashes genuine; alert stale). |
+| **PF-1** | Alert cardinality equalled kill cardinality | ✅ Fixed at source and response layer; **residue: `bf-5npjj` still Open** — `bf-14ydo` closed 2026-09-07 via its own chain with a corrected reason (§5 dated update) | Close them **only via their own closure-bead chains** (this report closes one leg of bf-14ydo's). Never from a triage pass — their closes bounce while blockers are open, and the close reasons citing "no crash occurred" and `b6d1439` are wrong as stated (crashes genuine; alert stale). |
 | **PF-2** | Retry with no deliverable/stop-condition — re-dispatch never checked whether the work already existed | 🔴 Open (H-1, [bf-1ea4g root-cause determination](bf-1ea4g-root-cause-determination-2026-09-02.md)) | Implement a retry-time deliverable check: before re-dispatching a released bead, test its acceptance-criteria artifacts on disk/in-history (here: "does the state file exist in a commit?") and short-circuit to close. `verify-work-completion.sh` covers the triage side only, not the retry decision. This single check would have prevented attempts 2–7 entirely — five of six kills and three of six alerts. |
 | **PF-3** | Dispatch bookkeeping committed to shared main (`.needle-predispatch-sha` churn per dispatch) | 🔴 **Open and still live** — file tracked, no `.gitignore` rule (`git ls-files` hit verified this session) | Gitignore it or move it out of the repo, as was done for `.beads/`. It is the last un-gitignored member of the per-dispatch-state class this crash era minted. |
 | **PF-4** | Alert/dispatch premises regenerated from templates, unvalidated against repo state (fabricated `b6d1439`; stale path; stale "741") | 🟡 Partial — dedup-append convention + this corpus's premise-correction sections are the working mitigation | Add mechanical premise validation at dispatch time: any cited SHA must `cat-file -t` clean, any cited path must exist at the current tip, any era figure must be recomputable — else drop it from the template. Cheapest of all the remaining fixes. |
