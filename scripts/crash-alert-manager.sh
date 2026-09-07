@@ -38,6 +38,21 @@ RESOLUTION_TRACKER="$SCRIPT_DIR/crash-resolution-tracker.sh"
 # suppressed-crash summary to the first alert after it closes.
 COOLDOWN_SCRIPT="${COOLDOWN_SCRIPT:-$SCRIPT_DIR/alert-cooldown.sh}"
 
+# System-event gate integration (bf-3561g RCA §6 recommendation 5, gap G-3):
+# a system-wide crash/memory surge is exactly when alert fan-out does the most
+# damage — during the 2026-08-16 cascade 57 of 59 window-crashing beads were
+# ALERT beads. Before an alert is generated, the gate decides whether this
+# event window may carry one more; exit 4 = the event already has an alert, so
+# coalesce instead of fanning out into a new ALERT bead. (`check`, exit 75, is
+# preflight-health-check.sh's leg of the same gate.)
+SYSTEM_EVENT_GATE="${SYSTEM_EVENT_GATE:-$SCRIPT_DIR/system-event-mode.sh}"
+SUPPRESSION_LOG="$LOG_DIR/system-event-suppressions.jsonl"
+
+# Crash-storm circuit breaker integration (bf-65lsdu RCA §7):
+# trips after N consecutive infrastructure crashes on the same bead, so the
+# release-and-retry loop defers instead of re-dispatching a doomed task.
+CIRCUIT_BREAKER="$SCRIPT_DIR/crash-circuit-breaker.sh"
+
 # Initialize processed alerts file
 if [[ ! -f "$PROCESSED_ALERTS_FILE" ]]; then
     touch "$PROCESSED_ALERTS_FILE"
@@ -50,6 +65,25 @@ log_alert() {
     local message="$*"
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     echo "[$timestamp] [$level] $message" | tee -a "$ALERT_LOG"
+}
+
+# Record a suppressed (coalesced) alert, so surge-time fan-out is visible in
+# one place: how many alerts each event window absorbed, and for which beads.
+record_system_event_suppression() { # $1 = alert-gate exit code
+    local gate_rc="$1"
+    mkdir -p "$LOG_DIR"
+    # jq for JSONL; fall back to plain text if jq is unavailable or the gate
+    # output contains something the JSON round-trip chokes on.
+    if ! jq -n --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+               --arg bead "$BEAD_ID" \
+               --argjson gate_rc "$gate_rc" \
+               --arg detail "$(printf '%s' "${SYSTEM_EVENT_OUTPUT:-}" | head -1)" \
+               '{timestamp: $ts, bead_id: $bead, gate_exit: $gate_rc, detail: $detail}' \
+            >>"$SUPPRESSION_LOG" 2>/dev/null; then
+        printf '%s bead=%s gate_exit=%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            "$BEAD_ID" "$gate_rc" "$(printf '%s' "${SYSTEM_EVENT_OUTPUT:-}" | head -1)" \
+            >>"$SUPPRESSION_LOG"
+    fi
 }
 
 # Usage
@@ -68,10 +102,19 @@ Options:
   -h, --help       Show this help message
 
 Exit Codes:
-  0  No alert needed (false positive, duplicate, or cooldown)
+  0  No alert needed (false positive, duplicate, cooldown, or suppressed
+     by the system-event gate because the event window already has an alert)
   1  Alert generated (new genuine crash)
   2  Classification failed
   3  Error processing
+
+System-Event Gate (scripts/system-event-mode.sh alert-gate):
+  Consulted immediately before an alert is generated. While a system event
+  is active, the FIRST alert of that event window is allowed and recorded in
+  the gate's ledger; every further alert for the same event id is suppressed
+  here (exit 0, recorded in $SUPPRESSION_LOG) instead of fanning out into a
+  new ALERT bead. A missing or failing gate fails open, so crash alerting
+  never depends on the gate being runnable.
 
 Global Alert Cooldown (scripts/alert-cooldown.sh):
   The outermost suppression gate. The first alert of ANY classification opens
@@ -87,6 +130,12 @@ Classification Types (from crash-classifier.sh):
   - INFRASTRUCTURE   System resource exhaustion or infrastructure event
   - CODE_DEFECT      Actual application error or crash
   - UNKNOWN          Unable to classify
+
+Crash-Storm Circuit Breaker:
+  Every processed crash is recorded in scripts/crash-circuit-breaker.sh.
+  After N consecutive infrastructure crashes (-1/137) on the same bead the
+  breaker trips: repeat alerts are suppressed and the bead is deferred
+  instead of being release-and-retried.
 
 EOF
 }
@@ -209,6 +258,24 @@ if [[ ! -f "$TRACE_DIR/$BEAD_ID/trace.jsonl" ]]; then
     exit 3
 fi
 
+# CRASH-STORM CIRCUIT BREAKER: if the breaker is OPEN for this bead, the storm
+# is already handled — suppress repeat alerts (converts a 127-alert storm into
+# one alert and one deferral). Exit 4 from the breaker means blocked.
+if [[ -x "$CIRCUIT_BREAKER" ]]; then
+    set +e
+    BREAKER_CHECK_OUTPUT=$("$CIRCUIT_BREAKER" check "$BEAD_ID" 2>&1)
+    BREAKER_CHECK_RC=$?
+    set -e
+    if [[ $BREAKER_CHECK_RC -eq 4 ]]; then
+        log_alert "WARN" "Circuit breaker OPEN for $BEAD_ID - suppressing repeat alert (crash storm in progress)"
+        echo "Reason: Circuit breaker OPEN for $BEAD_ID (consecutive crash storm - bead deferred, not re-dispatched)"
+        echo "$BREAKER_CHECK_OUTPUT"
+        exit 0
+    fi
+else
+    log_alert "WARN" "Circuit breaker not found or not executable - crash-storm protection inactive"
+fi
+
 # RESOLUTION TRACKING: Check if crash is already resolved
 log_alert "INFO" "Checking resolution status for bead: $BEAD_ID"
 if [[ -x "$RESOLUTION_TRACKER" ]]; then
@@ -292,6 +359,36 @@ if [[ "$EXIT_CODE" == "0" ]]; then
     log_alert "INFO" "Bead completed successfully (exit code 0) - no alert generated"
     echo "Reason: Exit code 0 indicates successful completion, not a crash"
     exit 0
+fi
+
+# CRASH-STORM CIRCUIT BREAKER: record the outcome. A success resets the
+# consecutive-crash counter; an infrastructure crash (-1/137) advances it and
+# trips the breaker at the threshold, converting the release-and-retry storm
+# (bf-65lsdu: 127 identical doomed dispatches) into one deferral.
+if [[ -x "$CIRCUIT_BREAKER" ]]; then
+    BREAKER_EXIT_CODE="$EXIT_CODE"
+    if [[ -z "$BREAKER_EXIT_CODE" ]]; then
+        # metadata may be pretty-printed ("exit_code": -1) - extract space-tolerantly
+        BREAKER_EXIT_CODE=$(grep -o '"exit_code":[ ]*[0-9-]*' "$TRACE_DIR/$BEAD_ID/metadata.json" 2>/dev/null | head -1 | grep -o '[0-9-]*$' || echo "")
+    fi
+    if [[ -n "$BREAKER_EXIT_CODE" ]]; then
+        set +e
+        BREAKER_RECORD_OUTPUT=$("$CIRCUIT_BREAKER" record "$BEAD_ID" "$BREAKER_EXIT_CODE" 2>&1)
+        BREAKER_RECORD_RC=$?
+        set -e
+        if [[ $BREAKER_RECORD_RC -eq 1 ]]; then
+            log_alert "WARN" "CIRCUIT BREAKER TRIPPED for $BEAD_ID after repeated consecutive crashes"
+            log_alert "INFO" "$BREAKER_RECORD_OUTPUT"
+            # Back off / defer instead of letting the retry loop re-dispatch
+            if DEFER_OUTPUT=$("$CIRCUIT_BREAKER" defer "$BEAD_ID" 2>&1); then
+                log_alert "ACTION" "Bead $BEAD_ID deferred by circuit breaker (backoff instead of re-dispatch)"
+            else
+                log_alert "WARN" "Deferral of $BEAD_ID failed (bead CLI) - breaker stays open, dispatch still blocked by breaker check"
+            fi
+        fi
+    else
+        log_alert "WARN" "Could not determine exit code for $BEAD_ID - circuit breaker not updated"
+    fi
 fi
 
 # Extract classification type. Anchored token match, NOT head -1: the
@@ -409,6 +506,45 @@ if [[ -x "$COOLDOWN_SCRIPT" ]]; then
     fi
 else
     log_alert "WARN" "Alert cooldown module not found or not executable ($COOLDOWN_SCRIPT) — global cooldown inactive"
+fi
+
+# SYSTEM-EVENT GATE (bf-3561g RCA §6 recommendation 5 / gap G-3): the last
+# check before a new ALERT is generated. Exit 0 = this is the event's first
+# alert (the gate records it in its ledger) or no event is active. Exit 4 =
+# this event window already has an alert: record the suppression and coalesce
+# instead of fanning out — that fan-out is what turned the 2026-08-16 cascade
+# into 177 crashes across 59 beads.
+if [[ -x "$SYSTEM_EVENT_GATE" ]]; then
+    set +e
+    SYSTEM_EVENT_OUTPUT=$("$SYSTEM_EVENT_GATE" alert-gate "$BEAD_ID" 2>&1)
+    GATE_RC=$?
+    set -e
+    if [[ $GATE_RC -eq 4 ]]; then
+        log_alert "WARN" "System event gate SUPPRESS for $BEAD_ID — alert coalesced into the event's existing investigation"
+        record_system_event_suppression "$GATE_RC"
+        echo "Reason: deferred: system event active — alert suppressed (coalesced; recorded in $SUPPRESSION_LOG)"
+        echo "$SYSTEM_EVENT_OUTPUT"
+        exit 0
+    elif [[ $GATE_RC -eq 75 ]]; then
+        # alert-gate's contract is 0 or 4 only — 75 is `check`'s defer code.
+        # Handle it defensively anyway: an active event is precisely when a
+        # new alert bead must not be created.
+        log_alert "WARN" "System event gate returned 75 for $BEAD_ID (contract: 0 or 4) — suppressing anyway"
+        record_system_event_suppression "$GATE_RC"
+        echo "Reason: deferred: system event active — alert suppressed (gate returned defer 75)"
+        echo "$SYSTEM_EVENT_OUTPUT"
+        exit 0
+    elif [[ $GATE_RC -eq 0 ]]; then
+        log_alert "INFO" "System event gate ALLOW for $BEAD_ID (first alert of this event, or no event active)"
+    else
+        # Fail open: a broken or unreadable gate must not stop crash alerting.
+        log_alert "WARN" "System event gate failed for $BEAD_ID (exit $GATE_RC) — failing open"
+        if [[ -n "$SYSTEM_EVENT_OUTPUT" ]]; then
+            log_alert "WARN" "$SYSTEM_EVENT_OUTPUT"
+        fi
+    fi
+else
+    log_alert "WARN" "System event gate not found or not executable ($SYSTEM_EVENT_GATE) — event coalescing inactive"
 fi
 
 # Generate alert

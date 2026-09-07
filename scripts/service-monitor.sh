@@ -39,8 +39,11 @@ check_inference_gateway() {
     while [ $attempt -le $RETRIES ]; do
         log_info "Checking inference gateway (attempt $attempt/$RETRIES)..."
 
-        # Capture HTTP status code and body
-        response=$(curl -s -w "\n%{http_code}" -m "$TIMEOUT" "$INFERENCE_GATEWAY" 2>&1 || echo "000")
+        # Capture HTTP status code and body. -k is required: the gateway serves
+        # a self-signed cert, so without it curl exits 60 and this reports a
+        # healthy gateway as down every run (see docs on the gateway health
+        # check in CLAUDE.md and the cert false-alarm investigation).
+        response=$(curl -sk -w "\n%{http_code}" -m "$TIMEOUT" "$INFERENCE_GATEWAY" 2>&1 || echo "000")
         status_code=$(echo "$response" | tail -1)
         response_body=$(echo "$response" | head -n -1)
 
@@ -131,7 +134,7 @@ main() {
         log_error "Recommendation: Wait for service recovery or investigate gateway status"
         echo ""
         echo "Manual gateway check:"
-        echo "  curl -sf --max-time 5 $INFERENCE_GATEWAY || echo 'Gateway down'"
+        echo "  curl -skf --max-time 5 $INFERENCE_GATEWAY || echo 'Gateway down'"
         exit 1
     else
         log_info "PRE-FLIGHT CHECK PASSED: All services healthy"

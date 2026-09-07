@@ -282,6 +282,38 @@ check_memory_pressure() {
   return 0
 }
 
+# Check for an unmanaged aggressive git gc (bf-3561g remediation, RCA §6 rec 6).
+# detect-unsafe-gc.sh writes its own detail line to .beads/logs/repo-health.log;
+# this wrapper surfaces the same signal in the resource alert stream.
+check_unsafe_gc() {
+  verbose "Checking for unmanaged aggressive git gc..."
+
+  if [[ ! -x "$SCRIPT_DIR/detect-unsafe-gc.sh" ]]; then
+    verbose "  detect-unsafe-gc.sh not available, skipping"
+    return 0
+  fi
+
+  local detector_out rc=0
+  detector_out="$("$SCRIPT_DIR/detect-unsafe-gc.sh" --quiet 2>&1)" || rc=$?
+
+  case "$rc" in
+    0)
+      echo "UNSAFE_GC: none [OK]"
+      ;;
+    1)
+      if [[ "$ALERT_ON_WARNING" == true ]]; then
+        log_alert "WARNING" "Unmanaged aggressive git gc running (details: .beads/logs/repo-health.log)"
+      fi
+      echo "UNSAFE_GC: detected [WARNING]"
+      ;;
+    *)
+      verbose "  detect-unsafe-gc.sh exited $rc unexpectedly: $detector_out"
+      ;;
+  esac
+
+  return 0
+}
+
 # Single monitoring cycle
 monitor_cycle() {
   local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -292,6 +324,7 @@ monitor_cycle() {
   check_disk
   check_cpu
   check_memory_pressure
+  check_unsafe_gc
 
   echo
 }

@@ -83,7 +83,9 @@ extract_exit_code() {
     local bead_id="$1"
     local metadata_file=".beads/traces/${bead_id}/metadata.json"
     if [ -f "$metadata_file" ]; then
-        grep -oP '"exit_code":\s*-?\d+' "$metadata_file" 2>/dev/null | sed 's/"exit_code"://' | tr -d ' ' | head -1
+        # || true: no numeric exit_code in the slot must yield "" (fail-open
+        # contract), not a set -e/pipefail abort of the whole classification.
+        grep -oP '"exit_code":\s*-?\d+' "$metadata_file" 2>/dev/null | sed 's/"exit_code"://' | tr -d ' ' | head -1 || true
     fi
 }
 
@@ -211,7 +213,10 @@ check_trace_provenance() {
     fi
 
     local captured_at exit_code
-    captured_at="$(grep -oP '"captured_at":\s*"[^"]*"' "$metadata_file" 2>/dev/null | sed 's/"captured_at":\s*//; s/"//g' | head -1)"
+    # || true: a slot with no captured_at must read as "" (unverified), not
+    # silently abort the run under set -e/pipefail — the capture-race shape
+    # (domchk-bd1743e0) reaches this line with exactly such a slot.
+    captured_at="$(grep -oP '"captured_at":\s*"[^"]*"' "$metadata_file" 2>/dev/null | sed 's/"captured_at":\s*//; s/"//g' | head -1)" || true
     exit_code="$(extract_exit_code "$bead_id")"
     TRACE_INFO="trace slot holds a run captured ${captured_at:-<unknown>}, exit_code ${exit_code:-<unknown>}"
 
@@ -265,7 +270,7 @@ resolve_crash_epoch() {
         return 0
     fi
     if [ "$PROVENANCE" = "ok" ] && [ -f "$METADATA_DIR" ]; then
-        captured="$(grep -oP '"captured_at":\s*"[^"]*"' "$METADATA_DIR" 2>/dev/null | sed 's/"captured_at":\s*//; s/"//g' | head -1)"
+        captured="$(grep -oP '"captured_at":\s*"[^"]*"' "$METADATA_DIR" 2>/dev/null | sed 's/"captured_at":\s*//; s/"//g' | head -1)" || true
         if [ -n "$captured" ]; then
             t="$(iso_to_epoch "$captured")" || t=""
             [ -n "$t" ] && { echo "$t"; return 0; }
@@ -384,6 +389,129 @@ signal_repo_bloated() {
     fi
     if [ -n "$measured" ] && [ "$measured" -gt "$limit_bytes" ]; then
         echo ".git measures ${measured} bytes (limit ${limit_bytes})"
+        return 0
+    fi
+    return 1
+}
+
+# INFRASTRUCTURE signal: crash-record capture race (domchk-bd1743e0, spec in
+# docs/crash-fix-strategy-domchk-3b605127-2026-09-07.md §3.2, from
+# docs/crash-root-cause-domchk-4f0b8b43-2026-09-07.md §4-C). A kill wave can
+# take the needle worker BEFORE it writes the crash record — bf-57nao4's event
+# stream ends at its fatal dispatch, no complete/fail/crash/timeout ever
+# lands. For such a bead the events layer is silent, so classification falls
+# through to bare UNKNOWN: indistinguishable, to every downstream consumer,
+# from "we looked and there was no crash" (the corpus RCA's manual rule covers
+# humans; nothing covered the automated path). Signature asserted here:
+#   the bead's LAST event of any kind is a dispatch with no outcome record
+#   after it, AND an earlier run of the same bead ended complete exit=0 —
+#   the signature of a worker dying before it can record anything, rather
+#   than a bead that was never picked up. Prints the evidence when asserted.
+signal_capture_race() {
+    local bead_id="$1"
+    local events="${BEADS_EVENTS:-.beads/events.jsonl}"
+    [ -f "$events" ] || return 1
+    local evidence=""
+    evidence="$(python3 - "$events" "$bead_id" <<'PY' 2>/dev/null || true
+import json, sys
+
+path, bead = sys.argv[1], sys.argv[2]
+token = '"%s"' % bead
+last_kind = None
+last_ts = None
+n_dispatch = 0
+earlier_success = False
+with open(path, encoding="utf-8", errors="replace") as fh:
+    for line in fh:
+        if token not in line:
+            continue
+        try:
+            rec = json.loads(line.strip())
+        except ValueError:
+            continue
+        if rec.get("bead") != bead:
+            continue
+        kind = rec.get("event")
+        if not kind:
+            continue
+        last_kind, last_ts = kind, rec.get("ts")
+        if kind == "dispatch":
+            n_dispatch += 1
+        elif kind == "complete" and rec.get("exit_code") == 0:
+            earlier_success = True
+if last_kind == "dispatch" and n_dispatch and earlier_success:
+    print("last recorded event for %s is a dispatch (%s) with no complete/fail/crash/timeout after it, while an earlier run of the same bead completed exit=0" % (bead, last_ts))
+PY
+)"
+    [ -n "$evidence" ] || return 1
+    echo "$evidence"
+    return 0
+}
+
+# Epoch of the capture race's trailing dispatch — the best available bound for
+# the death instant (the worker died after dispatching, before recording).
+# Feeds the same completion-timing check every other branch runs, so a
+# deliverable that landed just before the silent dispatch still resolves
+# FALSE_POSITIVE instead of being swept into INFRASTRUCTURE.
+capture_race_epoch() {
+    local bead_id="$1"
+    local events="${BEADS_EVENTS:-.beads/events.jsonl}"
+    [ -f "$events" ] || return 1
+    python3 - "$events" "$bead_id" <<'PY' 2>/dev/null || true
+import calendar, json, re, sys
+
+path, bead = sys.argv[1], sys.argv[2]
+pat = re.compile(r"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})$")
+
+def epoch(ts):
+    m = pat.match(ts or "")
+    if not m:
+        return None
+    y, mo, d, h, mi, s, _frac, off = m.groups()
+    base = calendar.timegm((int(y), int(mo), int(d), int(h), int(mi), int(s), 0, 0))
+    if off and off != "Z":
+        sign = 1 if off[0] == "+" else -1
+        off = off[1:].replace(":", "")
+        base -= sign * (int(off[:2]) * 3600 + int(off[2:]) * 60)
+    return base
+
+last = None
+with open(path, encoding="utf-8", errors="replace") as fh:
+    for line in fh:
+        if '"%s"' % bead not in line:
+            continue
+        try:
+            rec = json.loads(line.strip())
+        except ValueError:
+            continue
+        if rec.get("bead") == bead and rec.get("event"):
+            last = rec
+if last is not None and last.get("event") == "dispatch":
+    e = epoch(last.get("ts"))
+    if e is not None:
+        print(e)
+PY
+}
+
+# Supporting-evidence leg: when the trace slot provably holds the incident run
+# (PROVENANCE=ok), a kill-shaped exit code or SIGKILL in its metadata backs the
+# capture-race verdict. Never quotes an unprovenanced slot — that is the
+# bf-3561g fabricated-evidence failure the classifier already guards against.
+# Prints the evidence when asserted.
+signal_trace_kill_evidence() {
+    local bead_id="$1"
+    [ "$PROVENANCE" = "ok" ] || return 1
+    [ -f "$METADATA_DIR" ] || return 1
+    local ec
+    ec="$(extract_exit_code "$bead_id")"
+    case "$ec" in
+        -1|137)
+            echo "trace slot (provenance ok) records exit_code ${ec}"
+            return 0
+            ;;
+    esac
+    if grep -q "SIGKILL" "$METADATA_DIR" 2>/dev/null; then
+        echo "trace slot (provenance ok) records SIGKILL"
         return 0
     fi
     return 1
@@ -525,6 +653,35 @@ classify_crash() {
             echo "Evidence: $repo_ev — bloat-OOM mechanism (bf-1s6c3/bf-4yjq pattern)"
         fi
         echo "Action: Check memory usage and available RAM"
+        return 0
+    fi
+
+    # Crash-record capture race (domchk-bd1743e0): the events layer is silent
+    # because the worker died before it could write the record. Consulted only
+    # here — every earlier branch has already had its chance — so a verdict
+    # that would have been bare UNKNOWN becomes INFRASTRUCTURE with the
+    # mechanism named, per docs/crash-fix-strategy-domchk-3b605127-2026-09-07.md
+    # §3.2. The completion-timing check still runs first, against the trailing
+    # dispatch instant: the worker demonstrably died after it dispatched.
+    local capture_evidence="" capture_epoch=""
+    if capture_evidence="$(signal_capture_race "$bead_id")"; then
+        capture_epoch="$(capture_race_epoch "$bead_id")" || capture_epoch=""
+        if [ -n "$capture_epoch" ] && \
+           commit_epoch="$(signal_commit_within_window "$bead_id" "$capture_epoch")"; then
+            echo "FALSE_POSITIVE"
+            echo "Reason: Deliverable commit for $bead_id landed at $(date -u -d "@${commit_epoch}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "<unknown>") — within ${COMMIT_WINDOW_SEC:-30}s of the trailing dispatch, and no outcome record was ever written"
+            echo "Pattern: Post-completion termination behind a crash-record capture race (work committed <30s before the silent dispatch; bf-2vtzg pattern)"
+            echo "Action: No investigation needed — verify the deliverable and close"
+            echo "Capture race: $capture_evidence"
+            return 0
+        fi
+        echo "INFRASTRUCTURE"
+        echo "Reason: $capture_evidence"
+        echo "Pattern: crash-record capture race (worker died before writing the crash record); classify from the trace"
+        if trace_ev="$(signal_trace_kill_evidence "$bead_id")"; then
+            echo "Evidence: $trace_ev"
+        fi
+        echo "Action: Treat the kill as real — classify from the trace slot and worker logs (.beads/logs/, docs/crashes bundles), not from the silent events layer; UNKNOWN here never means 'no crash occurred'"
         return 0
     fi
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -176,4 +177,81 @@ func TestContextCancellation(t *testing.T) {
 	}
 
 	t.Log("Context cancellation test passed: server shut down cleanly")
+}
+
+// monitorStopRecorder wraps a ResourceMonitor so the test can observe when
+// Run's sampling goroutine actually returns.
+type monitorStopRecorder struct {
+	*ResourceMonitor
+	stopped chan struct{}
+	once    sync.Once
+}
+
+func (m *monitorStopRecorder) Run(ctx context.Context, interval time.Duration) {
+	m.ResourceMonitor.Run(ctx, interval)
+	m.once.Do(func() { close(m.stopped) })
+}
+
+// TestServerStartsAndStopsResourceMonitor verifies the in-process early-warning
+// monitor is owned by the server lifecycle.
+//
+// Safeguards tested:
+//  1. Run starts the monitor (a threshold far below real usage fires a warning)
+//  2. Run stops the monitor on every exit path (here: context cancellation), so
+//     the sampling goroutine cannot outlive the server and leak
+func TestServerStartsAndStopsResourceMonitor(t *testing.T) {
+	capture := &resourceCaptureHandler{}
+	log := slog.New(capture)
+
+	// Thresholds of 1 make every sample cross both warning levels, so a
+	// single tick proves the monitor is sampling inside the running server.
+	monitor := &monitorStopRecorder{
+		ResourceMonitor: newResourceMonitorWithThresholds(ResourceThresholds{
+			HeapWarnBytes:     1,
+			HeapCriticalBytes: 1 << 30,
+			GoroutinesWarn:    1,
+			GoroutinesCrit:    100_000,
+		}, log),
+		stopped: make(chan struct{}),
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	cfg := &config.Config{Addr: "127.0.0.1:0"}
+	srv := New(cfg, handler, log)
+	// Install the *wrapper*, not the embedded monitor: the recorder's Run
+	// override is what closes `stopped`, so handing the server the embedded
+	// ResourceMonitor bypasses the observation this test exists to make.
+	srv.monitor = monitor
+	srv.monitorInterval = 5 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.Run(ctx) }()
+
+	deadline := time.After(5 * time.Second)
+	for capture.count(slog.LevelWarn, "process memory above warning threshold") == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("resource monitor never sampled inside the running server")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("server shutdown failed: %v", err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("server did not shut down within 20 seconds")
+	}
+
+	select {
+	case <-monitor.stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("resource monitor outlived the server (goroutine leak)")
+	}
 }

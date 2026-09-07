@@ -125,9 +125,11 @@ fi
 if [ "$DRY_RUN" = true ]; then
   echo "🔍 DRY RUN: Would run git GC"
   if [ "$AGGRESSIVE" = true ]; then
-    echo "   Command: git gc --aggressive --prune=now"
+    echo "   Command: ./scripts/safe-git-gc.sh --full"
+    echo "   (deep compression via bounded repack stages — bare 'git gc --aggressive' is banned,"
+    echo "    see docs/maintenance/repository-maintenance-guide.md)"
   else
-    echo "   Command: git gc"
+    echo "   Command: ./scripts/safe-git-gc.sh"
   fi
   exit 0
 fi
