@@ -630,6 +630,58 @@ Dispatched to verify a five-document bf-1s6c3 corpus. Every path checked first-h
   `./scripts/setup-git-gc-config.sh --verify` exit 0 (worst case ≈3072 MiB within ceiling) ·
   `./scripts/check-repo-health.sh` exit 0.
 
+### Re-verification 2026-09-07 (domchk-d24458e6 — the bf-2oq9d documentation layer)
+
+This bead is the open documentation layer of the bf-2oq9d alert chain (attempt 16's
+alert): downstream consumer of
+`docs/crashes/bf-1s6c3-attempt16-crash-artifacts-2026-09-06.md` (`e288a63`), blocked by
+its gatherer domchk-873f89f1 (closed), itself blocking bf-2oq9d. Its dispatch spec —
+"crash investigation report in `docs/crash-analysis/`, findings cross-referenced with
+existing crash docs, remediation steps documented, related procedures updated" — is
+already rendered by committed sibling work, each criterion checked in `HEAD` first-hand:
+
+- **Report in `docs/crash-analysis/`:** `bf-1s6c3-crash-analysis-2026-08-12.md` plus the
+  directory catalog `README.md` (`9890c8a`, domchk-671f228f, closed).
+- **Cross-referencing:** the catalog's links into the `docs/crashes/` classifications and
+  both crash indexes (`fcfa79d`, domchk-ed3ed12b, closed); the attempt-16 artifact doc
+  names this bead as its consumer and its §7 carries the classification hints for it.
+- **Remediation for future reference:** `docs/maintenance/repository-maintenance-guide.md`
+  and `docs/verification/bf-1s6c3-recommendations-verification-2026-09-07.md` (`635bb21`,
+  domchk-a18b2c06), plus the pack-memory-bound rollback path
+  (`499d44d`, domchk-9fe7fba1 — this bead's blocker, closed).
+- **Related procedures:** `docs/crash-response-guide.md` third pass from this report
+  (`ef842bf`, domchk-64e1461a — exit-124 branch, push-side Pattern-3 evidence block,
+  re-dispatch-amplifier corollary).
+
+Per the attempt-16 doc's §7 hints, all adopted: **INFRASTRUCTURE EVENT**, exit −1,
+attempt 16 of 76, mechanism = push-side pack-objects memcg-OOM on the bloated repo four
+days before the `pack.windowMemory` bounds existed; window = kill 22:17:51.025831684Z
+(extract line 296, seq 5076, 154632 ms), the dispatch's named 22:17:57.286Z being
+kill + 6.26 s; not a code defect, not a service failure, not max-turns exhaustion; task
+already satisfied when the attempt died (`42a7b07` landed 21:47:07Z) but the death was
+real and mid-push. bf-2oq9d's Notes (`7dd79eb`, "666 ahead", `63ba024`) treated as
+unreliable per hint 5.
+
+Live re-verification (this bead's own runs, 2026-09-07):
+
+- **Census recounted from both committed extracts** (945 + 513 lines): `agent.completed`
+  × 76 → exit −1 × 71, 124 × 4, 0 × 1; classified crash/timeout/success = 71/4/1; first
+  crash 21:36:44.519246181Z, final exit 0 at 2026-08-13T02:01:22.561923995Z.
+- **Ancestry:** `42a7b07` ("Merge reconciliation: Forgejo and GitHub remote histories",
+  2026-08-12T21:47:07Z) is **not** an ancestor of `main`; `46293c5` **is**.
+- **Repository:** `.git` 102 MB · 120 loose objects / 856 KiB · 3 packs · garbage 0 ·
+  `git fsck --full` exit 0 (dangling trees only) · `git ls-files .beads` → 0 ·
+  `.gitignore:66` `.beads/`, `:70` `*.jsonl`.
+- **Convergence:** `HEAD...origin/main` → 0 / 0 (`93da1c1`).
+- **Prevention:** `./scripts/setup-git-gc-config.sh --verify` exit 0 — effective
+  windowMemory=2g / deltaCacheSize=1g / threads=1 (local scope), worst case ≈3072 MiB
+  within the 12 GiB dispatch-scope ceiling.
+
+**Dispatch note:** no new summary document shipped — the four acceptance criteria are
+satisfied by the committed files above, and the workspace already holds ~460 crash docs;
+another near-duplicate would add noise, not record. This dated subsection is the bead's
+only change.
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
