@@ -1452,6 +1452,151 @@ domchk-0a00e94c (root cause + classification), which inherits the attempt-58 map
 Canonical §§5–6 already render the classification and root cause the downstream dispatch
 asks for, so its work is the same verify-live-and-append path the sibling chains took.
 
+### Re-verification 2026-09-07 (domchk-7dc70ccd — a re-dispatch of the gather step)
+
+Dispatched to compile the crash's basic facts into `docs/crash-bf-1s6c3-basic-info.md`.
+The facts themselves were already rendered by §§1–3 above and the bundle `README.md`
+(sibling gather dispatch domchk-2f8e3f15 closed on exactly that basis earlier the same
+day); the named file did not exist, so this bead shipped it as a consolidated basic-facts
+sheet citing them. It adds two version facts recorded nowhere else in the corpus:
+
+- **Claude Code CLI at crash time: 2.1.227** — read from the `version` field of the
+  crash-session transcripts; verified identical across attempts 1, 19, 39, 75 and 76.
+- **Needle worker binary at crash time: 0.2.19** — `~/.needle/bin/needle-stable.pre-0.3.1.bak`
+  (mtime 2026-08-11 10:02 EDT) reports `needle 0.2.19`, the last confirmed install before
+  the storm; the next dated evidence is 0.4.0 (mtime 2026-08-17 15:26 EDT, later renamed
+  `needle-stable.pre-0.4.2-20260819`). The 0.3.1 install date is unrecorded (no version
+  field in the dispatch events; user journal starts 2026-08-17), so the exact
+  crash-window daemon version is bounded 0.2.19 → 0.4.0.
+
+Re-verified live, all byte-exact against the extracts: census as in the 2026-09-07
+subsections above (`agent.completed` × 76 → exit −1 × 71, 124 × 4, 0 × 1;
+`outcome.handled` alerted/deferred/none = 71/4/1); first claim 21:31:27.663Z, first kill
+21:36:44.519Z, final exit 0 at 02:01:22.561Z; bundle `MANIFEST.sha256` 5/5 OK; both raw
+needle logs still match their README hashes (`3a487dc3139a2785…`, `f76959bb0542e2b5…`);
+repository 101 MB · pack 99.11 MiB · garbage 0 · `HEAD...origin/main` → 0/0 at `003af27`.
+
+### Root cause + classification 2026-09-07 (domchk-0a00e94c — the gather→analyze→classify chain's classification step, attempt 58's kill)
+
+This bead is the third link of the three-bead chain created 2026-09-02 03:30Z:
+domchk-904abc88 (collect — closed, subsection above) → domchk-8b615c48 (analyze /
+immediate cause — closed, subsection above) → **domchk-0a00e94c (this bead — root cause +
+classification)**, with domchk-6d8acd21 (document + reproducibility) blocked behind it. It
+inherits the attempt-58 mapping from the analysis step and answers its dispatch's four
+scope items — the causal chain, the framework classification, the repository-bloat
+question, and systemic-vs-one-time — against §§4–6, re-verified first-hand. Figures below
+are this bead's own recomputes, stated with their definitions.
+
+**The causal chain, symptom back to root cause** (each layer anchored in evidence):
+
+1. **Symptom** — 71 of 76 attempts died `exit −1` mid-attempt against one open bead:
+   recounted from the committed extracts (945 + 513 lines) as `agent.completed` × 76 →
+   exit −1 × 71, 124 × 4, 0 × 1, with `outcome.classified` crash/timeout/success =
+   71/4/1 and `outcome.handled` alerted × 71. Zero exit-code variation among the deaths
+   and no `129`/`137` signal-number encoding anywhere in 1,458 extract lines — §5.1's
+   sentinel reading re-confirmed first-hand.
+2. **Immediate cause** — kernel memcg-OOM SIGKILL inside `git push`'s pack-objects.
+   Attempt 58 re-confirmed as the **58th** exit −1 death in timestamp order, byte-exact
+   with the analysis subsection: `agent.completed` `2026-08-13T00:28:30.196295497Z`,
+   `duration_ms=285898` (extract L158, seq 6261) — 14.701 s after its final, unresolved
+   `git push origin main`, against the dispatch scope's 12 GiB `MemoryMax`
+   (`docs/maintenance/repository-maintenance-guide.md:158`). The mechanism is
+   kernel-proven for the same-repository push variant bf-198ne
+   (`oom-kill:constraint=CONSTRAINT_MEMCG`, memcg `usage` = `limit` = `12582912kB` —
+   the exact bound hit; `docs/crashes/bf-198ne-crash-report.md:56`).
+3. **Amplifying cause** — the ~10 s no-backoff release→re-claim loop with no
+   stop-condition for satisfied work. Re-confirmed at the boundary: attempt 59 was
+   re-dispatched 2.2 s after attempt 58's kill with the byte-identical fixed prompt and
+   died identically 295,626 ms later (`2026-08-13T00:33:36.817529664Z`, extract L177,
+   seq 6289). One kill became 71 deaths and 71 alerts because nothing gated re-dispatch
+   on repository state or on the deliverable already being present (§6, §8 layer 6).
+4. **Root cause (underlying)** — bead state committed to git: 17+ identical ~237 MB
+   `.beads/*.jsonl` snapshots bloated the object store to ≈18 GB, so every significant
+   git operation's pack-objects exceeded the scope's memory budget. The evidence chain
+   for this layer is the fleet census below plus the repaired-repo contrast: the same
+   operations run clean today on the 99 MiB repository.
+
+**Classification per the four-way framework: Infrastructure event — repository bloat
+(Pattern 3).** Rationale, re-verified: the guide's own mapping row
+(`docs/crash-response-guide.md:16`) reads `exit −1` + fixed-cadence re-dispatch deaths +
+`.git` > 5 GB → **Infrastructure: Repository bloat**, and every criterion is present —
+71 deaths over a 227 min kill window (first `2026-08-12T21:36:44.519Z` → last
+`2026-08-13T01:24:06.842Z`; first claim 21:31:27.663Z; median inter-death gap 173.7 s;
+median exit −1 duration 160,886 ms; range 62,523–431,048 ms); a ≈18 GB repository at
+crash time; the task itself was the routine git operation that triggered each kill;
+§5.2's Pattern-3 table is fully satisfied. Excluded alternates (§5.4, re-checked):
+**workflow failure** — no exit 1 / `error_max_turns`; `transform.completed` succeeded on
+all 76 attempts; **service failure** — no 5xx to the inference gateway anywhere in the
+extracts; the dispatch/transform pipeline succeeded every attempt; **code defect** — all
+19 of attempt 58's tool calls were git operations; the task never touched domain-check
+code, consistent with the standing no-defect finding.
+
+**Was repository bloat a contributing factor? It is the root cause, not merely a
+contributor — and the record separates the two cleanly.** Bloat is the only condition
+that distinguishes the crash period from the repo's healthy state; deaths track the git
+operation's memory profile rather than host load; the same repository condition killed
+sibling beads the same evening (below); and after the 2026-09-01 packing, this crash
+class has not recurred in live work. Host-level memory state at the kill instants
+remains unrecoverable (no journald before 2026-08-15; analysis subsection) — the bloat
+attribution does not depend on it, because the violated axis was repository size, not
+host memory. Genuine *contributing* factors, as distinct from the root cause: the
+re-dispatch amplifier (layer 3 above) and the deliverable-landed-early condition that
+made 72 of 76 dispatches run against already-satisfied work (§5.3's two-layer reading).
+
+**Systemic vs one-time: both, at different layers.**
+
+- **The trigger condition was systemic across the fleet that day** — the fleet-wide
+  census re-run first-hand from `~/.needle/logs` for 2026-08-12 (six slot logs):
+  **460 exit −1 completions across all slots, 455 of them in the domain-check slot**,
+  concentrated in five beads — bf-31mno 350, bf-4yjq 50, bf-1s6c3 49 (Aug-12 log; the
+  remaining 22 fall on the Aug-13 log, and 49 + 22 = 71 reconciles this bead's extract
+  census exactly), bf-2xygo 4, bf-4tciy 2. The same underlying cause then produced the
+  kernel-proven bf-4x12ec (`git gc` variant, Aug-14) and bf-198ne (`git push` variant,
+  Aug-16). A recurring pattern, not a one-off.
+- **The amplifier remains systemic and open** — the fleet-side re-dispatch loop with no
+  stop-condition, resource gating, or backoff (§8 layer 6, §9 action 2). Nothing in this
+  repository can fix it; every one of the 71 kills emitted its own alert because of it.
+- **The specific event is one-time and structurally prevented** — all in-repo layers
+  re-verified in force today (table below); the repository sits at 99.11 MiB with `fsck`
+  clean and 0/0 divergence, and the steady-state fleet signature since 2026-08-17 has
+  exit −1 at near-zero, confined to synthetic test/gc scopes.
+
+**Live re-verification (this bead's own runs, 2026-09-07):**
+
+| Check | Result |
+|---|---|
+| Bundle integrity | `sha256sum -c MANIFEST.sha256` → 5/5 OK |
+| Census recount (extracts, 945 + 513 lines) | `agent.completed` × 76 → exit −1 × 71 / 124 × 4 / 0 × 1; classified crash/timeout/success 71/4/1; handled alerted × 71 |
+| Exit-code variation | None; no 129/137 anywhere in 1,458 lines |
+| Death statistics | median exit −1 duration 160,886 ms; range 62,523–431,048 ms; kill window 21:36:44.519Z → 01:24:06.842Z (227 min); median inter-death gap 173.7 s; first claim 21:31:27.663Z; final attempt exit 0 at 02:01:22.561Z |
+| Attempt 58 / 59 kill records | Byte-exact: L158 seq 6261 `00:28:30.196295497Z` 285,898 ms; L177 seq 6289 `00:33:36.817529664Z` 295,626 ms — 58th/59th of 71 in timestamp order |
+| Fleet census 2026-08-12 (`~/.needle/logs`, 6 slots) | 460 exit −1 / 455 domain-check; bf-31mno 350, bf-4yjq 50, bf-1s6c3 49 + 22 (Aug-13 log) = 71, bf-2xygo 4 |
+| Ancestry | `42a7b07` is a commit but **not** an ancestor of `main`; `46293c5` **is** ("Merge Forgejo and GitHub histories", 2026-08-17); `7dd79eb`/`2832106` fail `cat-file` |
+| Repository now | 18 loose objects · pack 99.11 MiB · garbage 0 · `git fsck --full` exit 0 · `git ls-files .beads` → 0 · `.gitignore:66` `.beads/`, `:68` `*.db`, `:70` `*.jsonl` · `HEAD...origin/main` 0/0 (both `003af27`) |
+| Prevention layers | `setup-git-gc-config.sh --verify` exit 0 (effective windowMemory=2g / threads=1 / deltaCache=1g, worst case ≈3072 MiB); `setup-git-hooks.sh --check` exit 0 (hook byte-identical to tracked source) |
+| Citation spot-checks | `bf-198ne-crash-report.md:56` kernel records present; guide Pattern 3 at `:388`; maintenance guide 12 GiB `MemoryMax`; `scripts/test-gc-memory-bounds.sh` + `scripts/test-bf-1s6c3-crash-condition.sh` both present |
+
+**Acceptance criteria, satisfied by:** root cause identified and documented — §6 plus the
+four-layer chain above; crash classified with rationale — §5, re-confirmed above;
+contributing factors listed — the amplifier and the §5.3 false-positive component,
+separated from the root cause; evidence cited for classification — extracts L148–L177,
+the bf-198ne kernel records, the guide's Pattern 3, the maintenance-guide `MemoryMax`,
+and both replay tests, all present and re-read first-hand.
+
+**Bottom line:** root cause = committed bead-state bloat (≈18 GB object store); immediate
+cause = kernel memcg-OOM SIGKILL of push-side pack-objects inside the 12 GiB dispatch
+scope; classification = **Infrastructure event — repository bloat (Pattern 3)**, with
+workflow failure, service failure, and code defect all excluded on the data. The event
+was fleet-systemic on 2026-08-12 and is structurally prevented today; the remaining
+open item is the fleet-side re-dispatch amplifier, which no in-repo change can close.
+**Alert disposition: no further action for this event.**
+
+**Chain handoff:** closing this bead unblocks domchk-6d8acd21 (document + reproducibility),
+which inherits §§5–6, the attempt-58 mapping, and this subsection. Its dispatch asks for a
+new report under `docs/incidents/` — under the workspace dedup rule that deliverable is
+already rendered by this report plus the §10 chain, so its work is the same
+verify-live-and-append path, not a new document.
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
