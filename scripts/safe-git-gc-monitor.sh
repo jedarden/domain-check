@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Safe Git GC Monitor - Track progress and resource usage
-# Usage: scripts/safe-git-gc-monitor.sh [--watch]
+# Usage: scripts/safe-git-gc-monitor.sh [--watch] [--help]
+#
+#   (no args)   Print safe-git-gc status once and exit
+#   --watch     Refresh status every 2 seconds until Ctrl+C
+#   --help      Show this usage text
 
 set -euo pipefail
 
@@ -57,12 +61,13 @@ print_status() {
 
   echo ""
 
-  # Git processes
+  # Git processes — pgrep exits 1 when nothing matches, which set -euo pipefail
+  # would turn into an abort here; mask it so status/--watch survive an idle repo
   local git_procs
-  git_procs=$(pgrep -f "git (gc|repack)" | wc -l)
+  git_procs=$(pgrep -c -f "git (gc|repack)" || true)
   if [[ $git_procs -gt 0 ]]; then
     echo -e "${YELLOW}Git GC processes running: $git_procs${NC}"
-    ps aux | grep -E "git (gc|repack)" | grep -v grep | sed 's/^/  /'
+    ps aux | grep -E "git (gc|repack)" | grep -v grep | sed 's/^/  /' || true
   else
     echo "No git gc processes running"
   fi
@@ -81,7 +86,9 @@ print_status() {
 # Watch mode (update every 2 seconds)
 watch_mode() {
   while true; do
-    clear
+    # clear fails without a usable TERM (non-tty invocation); harmless there,
+    # so mask it rather than let set -e kill the watch loop
+    clear 2>/dev/null || true
     print_status
     echo ""
     echo "Press Ctrl+C to exit..."
@@ -89,12 +96,21 @@ watch_mode() {
   done
 }
 
+usage() {
+  echo "Usage: scripts/safe-git-gc-monitor.sh [--watch]"
+  echo ""
+  echo "  (no args)   Print safe-git-gc status once and exit"
+  echo "  --watch     Refresh status every 2 seconds until Ctrl+C"
+  echo "  --help      Show this usage text"
+}
+
 # Parse arguments
 WATCH=false
 
-if [[ "${1:-}" == "--watch" ]]; then
-  WATCH=true
-fi
+case "${1:-}" in
+  --watch)   WATCH=true ;;
+  --help|-h) usage; exit 0 ;;
+esac
 
 if $WATCH; then
   watch_mode
