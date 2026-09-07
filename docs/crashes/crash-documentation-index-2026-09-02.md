@@ -55,7 +55,7 @@
 |------|------------|--------|------------|
 | **2026-08-16** | SIGHUP Cascade | 201+ crashes in 5 hours | Memory pressure 94.71% → OOM → cascade |
 | **2026-08-16** | CPU Saturation | 826 crashes (worst day) | Load 4.46x → system unresponsiveness |
-| **2026-08-12** | Repository Bloat | 9 crashes in 2.5 hours | 18GB repo → OOM on git operations |
+| **2026-08-12** | Repository Bloat (memcg OOM) | bf-1s6c3: 76 dispatches / 71 × exit −1 kills over ~4.5 h; 50 more in bf-4yjq and 4 in bf-2xygo the same evening (raw-log census — supersedes the earlier "9 crashes" figure) | 18 GB repo (17.16 GB loose objects) → memcg OOM during git operations |
 | **2026-08-13** | Post-Completion False Positives | 40% of alerts | Cleanup termination after task completion |
 
 ---
@@ -152,10 +152,14 @@ committed by their own authors and are not part of the step-4 batch. Documents d
 #### Repository Bloat Crashes
 
 **bf-1s6c3 Repository Bloat (2026-08-12)**
+- `docs/crashes/bf-1s6c3-comprehensive-investigation-2026-09-06.md` - **Single consolidated record** (2026-09-06; executive summary, 76-dispatch/71-kill timeline, Pattern-3 classification + epistemic caveat, root cause with the dead-SHA/deliverable-SHA table, remediation re-verified live 2026-09-06, lessons learned; bead domchk-779dfdf3, commit ebf8665)
+- `docs/crash-analysis/bf-1s6c3-crash-analysis-2026-08-12.md` - **Full crash analysis** (2026-09-06; the pattern write-up: exit-code classification, investigation summary, root-cause determination, resolution/prevention, and a cross-reference table to bf-4yjq / bf-2xygo / bf-31mno; bead domchk-671f228f, commit 9890c8a) — cataloged with the rest of that directory in [`docs/crash-analysis/README.md`](../crash-analysis/README.md)
 - `docs/crashes/bf-1s6c3-remediation-2026-09-06.md` - **Remediation execution record** (2026-09-06; classification table re-verified live, work-loss check via `46293c5` + zero divergence `e299c48` across Forgejo/GitHub, disposition: closed / no retry; supersedes the Sep-1 conditional-retry guidance; bead domchk-9822e378)
 - `docs/crashes/bf-1s6c3-crash-classification-2026-09-06.md` - Classification layer (INFRASTRUCTURE / repository-bloat Pattern 3, ~95% confidence; exit-code mapping + FP rules 1-3; bead domchk-56b5ba67, commit 9b92cd9)
 - `docs/crashes/bf-1s6c3-crash-storm-timeline-2026-09-06.md` - Raw-log timeline (76 dispatches / 71 exit -1 kills over 265 min, attempt 4's merge `42a7b07` + 59.6 s death gap; corrects the "9 crashes" figure and dead SHAs; bead domchk-1fb4ad35, commit c562ca3)
 - `docs/crashes/bf-1s6c3/` - Evidence: byte-exact raw needle events (Aug-12/13), 76 crash-window session transcripts (tar), per-attempt index, sha256 manifest (extraction bead domchk-fcac734a)
+- `docs/crashes/bf-1s6c3-investigation-data-bundle-2026-09-06.md` - Alert-timestamp provenance (the named `22:04:12.524613796` ts is alert-bead bookkeeping 6.40 s **after** the real `exit_code=-1` kill at `22:04:06.124743603Z`, log line 12928), byte-exact kill window, and the Aug-12 log-source availability matrix (data package for the analysis/classification phase; bead domchk-a2f6aabd)
+- `docs/crashes/bf-1s6c3-artifact-extraction-verification-2026-09-06.md` - Independent re-verification of the `bf-1s6c3/` bundle: sha256 manifest 5/5 OK, 945 + 513 needle events, 0 unparseable (bead domchk-60c12286)
 - `docs/crashes/bf-1s6c3-crash-evidence-report.md` - Evidence collection
 - `docs/crashes/bf-1s6c3-investigation.md` - Complete investigation
 - `docs/crashes/bf-1s6c3-oom-investigation.md` - OOM analysis
