@@ -725,3 +725,147 @@ surviving attempt transcripts under
 live `journalctl`/`git` checks). Figures quoted from other documents are
 cited to those documents rather than restated as first-hand. Child bead 1's
 "64 attempts" is corrected to 57 in §3.
+
+## 2026-09-07 system resource analysis (domchk-508e54c0)
+
+Appended per the corpus dedup-append convention (no new bf-1ea4g doc; nothing
+above is rewritten). This section renders the "Analyze system resources at
+crash time" dispatch's five acceptance criteria — **memory pressure, OOM-killer
+logs, repository health, load/CPU, and a healthy/warning/critical resource
+classification** — for the same named instant analyzed above. The mechanism and
+the alert-level classification are not re-litigated here: the §2026-09-07
+root-cause re-determination (domchk-c2b8c832) owns the mechanism, child bead 1
+(domchk-596f8499) owns the alert-level verdict, and the bundle
+(`docs/crashes/bf-1ea4g/`, commit 2ce9cd9) owns the artifacts. Where figures
+overlap they were re-derived first-hand and agree byte-exact.
+
+**Target-bead state:** bf-1ea4g is CLOSED (2026-08-13T09:10:16.731Z;
+deliverable `main_branch_state_bf-1ea4g.json` is on origin/main, blob
+`e77648c7`). This is an analysis of its crash record, not a repair task.
+
+### R1. Memory pressure — was the system near OOM?
+
+**Host-side: unanswerable for Aug-13** — no memory telemetry exists for that
+date. The first memory/disk sampler (lab-health-collector) starts
+2026-08-15 23:53 EDT, and needle emitted no memory or disk event type on
+Aug-13: this session enumerated the Aug-13 worker log's full event vocabulary
+(28 event types) and `fleet.cpu_saturated` is the only system-state event in
+it. No sysstat/sar logs exist on this box ([LIVE], `/var/log/sa*` absent).
+
+**Dispatch-scope side: yes, for unbounded git operations.** The exhaustion
+boundary that mattered was not host RAM but the per-dispatch systemd scope's
+`MemoryMax=12 GiB`: the kernel kills the largest task inside the *charged*
+memcg, so host free memory is irrelevant to that kill path (RCA §5.1, T1/T2).
+Every surviving kernel kill record is `CONSTRAINT_MEMCG` (503/503 lines in the
+journal today [LIVE]), and the three largest `git` victims sit at
+12,555,188 kB ≈ 12.0 GiB — at the limit, not below it (RCA §7). For the
+attempt-30 instant specifically the process died 13.8 s inside `git push`
+(§2 above); whether memcg OOM was that instant's specific killer stays
+MEDIUM-confidence — unknowable, per the re-determination's confidence tiers.
+
+### R2. OOM-killer logs checked (dmesg, /var/log/messages)
+
+| Source | Result 2026-09-07 [LIVE] |
+|---|---|
+| `/var/log/messages` | does not exist — NixOS logs to journald only |
+| `dmesg` | restricted: "read kernel buffer failed: Operation not permitted" (`kernel.dmesg_restrict`); and the volatile ring could not reach Aug-13 anyway — reboots Aug-14 16:39 and 21:41, current boot Aug-15 09:48 EDT (`last -x`) |
+| journald (kernel) | **single boot, first entry 2026-08-15 19:56:33 EDT** — no kernel record of Aug-13 can exist. Earliest surviving OOM record: **Aug-16 00:27:35 EDT, `task=git`, `CONSTRAINT_MEMCG`, dispatch scope** |
+| coredump | no capture for Aug-13; `coredumpctl`'s earliest entries are Aug-17 (corefiles missing), first *present* corefile Aug-25 |
+| sysstat/sar | never installed (`/var/log/sa*`, `/var/log/sysstat` absent) |
+
+Census of every `oom-kill:` line the journal does hold (503 kills, all
+`CONSTRAINT_MEMCG`, by local-time day): **Aug-16 414, Sep-02 15, Sep-06 33,
+Sep-07 41 — zero for Aug-13/14/15.** Victims: `git` 303, `node (vitest)` 157,
+`bash` 42, `python3` 1. The Aug-13 zero is a **coverage gap, not evidence of
+absence**; the four days that do survive are all the same memcg mechanism in
+dispatch scopes, on this same repo's git operations among others.
+
+### R3. Repository health (size, loose objects) — crash era and now
+
+**Crash era:** no Aug-13 measurement survives (the 2026-08-16 squash rewrote
+the era's history — §6 above). It is bracketed: **Aug-12** measured 18 GB
+`.git` / 17.16 GB loose objects (bf-1s6c3/bf-4yjq); **Aug-13** had `.beads/`
+state still tracked (§2's commit line) and the unpushed backlog measured at
+422 commits; **Aug-16** measured the backlog at 720 commits / 5.6 GB retired
+bead-forge mass (bf-198ne, kernel-proven push-side kill). For git operations
+the repo was in the critical band all three days.
+
+**Now ([LIVE] 2026-09-07, this clone):** `.git` 104 MB; 215 loose objects /
+2.24 MiB; 11,360 objects in 1 pack (99.11 MiB); 0 garbage; `git fsck --full`
+exit 0 (dangling objects only); `./scripts/check-repo-health.sh` exit 0;
+`.beads/` tracked files 0 (`.gitignore:66`);
+`./scripts/setup-git-gc-config.sh --verify` exit 0 — effective bound resolves
+system→global→local, worst case ≈3072 MiB per pack run. The bloat failure mode
+is structurally closed.
+
+### R4. Load average and CPU usage
+
+Re-derived first-hand from the Aug-13 worker log this session — byte-exact
+with the bundle's `system-state-2026-08-13T082344Z.md`:
+
+| Quantity | Value |
+|---|---|
+| Samples, whole day (`fleet.cpu_saturated`) | 602 (00:00:29Z – 23:59:02Z) |
+| Samples in the storm window 07:00–10:00Z | **71 — every one above the 0.8 saturation threshold** (core_count 9) |
+| Window load min / max | 7.23 @ 09:29:28.787Z / 19.87 @ 08:37:03.142Z (2.2× cores) |
+| Load at attempt-30 dispatch (08:22:12.657Z) | **10.80** |
+| Load 12 s post-kill (08:23:56.683Z) | **9.86**; neighbors 9.84 / 9.89 |
+| Whole-day max | 41.85 @ 19:28:51.326Z (evening, outside this storm) |
+
+Precision note: `fleet.cpu_saturated` fires only *above* the threshold, at
+irregular ~1.5–6 min intervals (window gaps to 621 s) — the record proves
+"every observation in the window was saturated", not a continuous trace.
+Core-count footnote: the era telemetry records `core_count: 9`; the box today
+reports 12 logical cores (`nproc`). Which was true that morning (offline core
+vs. sampler accounting) is unrecoverable; the saturation conclusion holds
+under either denominator (19.87/12 = 1.66×). Current load [LIVE]:
+5.51 / 6.35 / 6.64 — below the threshold under either count.
+
+### R5. Fleet-wide scope of the kill storm (this worker's log, Aug-13)
+
+`agent.completed exit_code −1`: **344 kills across 13 beads**, vs **18**
+exit-0 completions, on this one worker's log alone. Top victims: bf-65lsdu
+127, **bf-1ea4g 56**, bf-4k2ws 55, bf-2ildm 38, bf-1s6c3 22, bf-ncxbt 11,
+bf-2vtzg 9, bf-mje3pd 7 (plus 5 beads with fewer). The 344/18 day split
+matches the bf-4k2ws §12.3 day-wide distribution byte-exact; the per-bead
+attribution is new here. This is the "10+ crashes in 10 minutes =
+infrastructure event" signature from the crash-response guide, at fleet scale.
+
+### R6. Resource classification: healthy / warning / critical
+
+| Resource | At crash time (2026-08-13 08:23Z) | 2026-09-07 [LIVE] |
+|---|---|---|
+| Host memory | **UNRECORDED** (no collector); host RAM was not the kill boundary | **HEALTHY** — 44.7 GiB available of 62 GiB, swap 0 B used |
+| Dispatch-scope memory | **CRITICAL** for unbounded git ops — 12 GiB ceiling; kernel-proven kill path on the adjacent recorded days | **HEALTHY** — bare gc *and* push bounded, ≈3072 MiB worst case (verified) |
+| CPU / load | **CRITICAL** — 71/71 saturated samples across 07:00–10:00Z, ≥7.23 on 9 cores, storm peak 19.87 | **HEALTHY** — 5.51/6.35/6.64 on 12 cores |
+| Repository | **CRITICAL for git operations** — bloat era (18 GB Aug-12 → 5.6 GB mass Aug-16), `.beads/` still tracked Aug-13 | **HEALTHY** — 104 MB, 215 loose / 2.24 MiB, 1 pack, fsck clean, 0 garbage |
+| Disk | **UNRECORDED**; no exhaustion signature in any attempt record | **WARNING** — 28 GB free of 444 GB (94 % used); repo table: warning < 30 GB, critical < 20 GB |
+
+Overall crash-time resource state: **CRITICAL (infrastructure)** — the
+repo-bloat × dispatch-scope interaction was the kill path, with fleet-wide CPU
+saturation as amplifier. Current-day state is healthy except disk, which sits
+inside the repo's documented warning band (watched by the daily 02:00
+repo-health timer; not an incident).
+
+### R7. Verdict — infrastructure event vs. other cause
+
+**INFRASTRUCTURE EVENT — the repository-bloat-era kill regime**, consistent
+with the re-determination above and with the same-day bf-4k2ws classification.
+Ruled out: code defect (no panic, no application error anywhere in the attempt
+record — the two "panic" strings in the transcript are fuzz-test comments in
+the dispatch prompt); workflow failure (no `max_turns` evidence); service
+failure (no 5xx class; the operation died locally 13.8 s in); SIGHUP (the
+sentinel carries no signal number; 54/56 deaths are operation-correlated).
+Child bead 1's alert-level FALSE_POSITIVE remains a statement about the
+*alert* (the bead self-recovered and closed the same morning), not about the
+kill — the kill was real, mid-task, and mid-`git push`.
+
+**Attribution:** every figure in R1–R6 was derived first-hand 2026-09-07 by
+domchk-508e54c0 from the Aug-13 needle worker log
+(`~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl`), the
+bundle under `docs/crashes/bf-1ea4g/`, and live `journalctl`/`dmesg`/`git`/
+`free`/`df`/`uptime` checks in this clone. Load figures, the 344/18 day split,
+and the journald start date are independent re-derivations that agree
+byte-exact with the bundle (commit 2ce9cd9), the bf-4k2ws §12.3 census, and
+the re-determination above; figures from other documents are cited, not
+restated.
