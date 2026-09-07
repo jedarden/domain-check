@@ -82,6 +82,25 @@ echo "  Loose objects: $loose_objects"
 echo "  Pack size: ${pack_size_mb}MiB"
 echo ""
 
+# Unpushed backlog (commit-ahead) — bf-1ea4g preventive monitor (M-1).
+# bf-1ea4g (2026-08-13) died 56 times in `git push` over a silently-grown
+# 422-commit unpushed backlog (docs/crash-prevention-gaps-bf-1ea4g.md §4 M-1).
+# The check itself is scripts/check-unpushed-backlog.sh (bead domchk-f239e178);
+# this call is the wiring that puts it on a schedule. Correction to the gap
+# analysis's premise: the daily 02:00 repo-health timer runs THIS script
+# (--dry-run), not check-repo-health.sh — which nothing schedules, and which
+# preflight truncates to its first 20 lines — so without this wiring the
+# precondition stayed unmeasured daily. Report-only: the helper's exit codes
+# are swallowed (its CRITICAL verdict is information, not a gc failure) and
+# this script's 0/1/2 exit contract is unchanged.
+BACKLOG_CHECK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-unpushed-backlog.sh"
+if [ -x "$BACKLOG_CHECK" ]; then
+  bash "$BACKLOG_CHECK" || true
+else
+  echo "📜 Unpushed Commit Backlog: skipped — scripts/check-unpushed-backlog.sh not present"
+fi
+echo ""
+
 # Check if GC is needed
 if [ "$FORCE" = true ]; then
   echo "🔧 FORCE MODE: Running GC regardless of size"
