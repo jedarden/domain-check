@@ -1142,6 +1142,54 @@ Live re-verification (this bead's own runs, 2026-09-07):
 and committed (domchk-fcac734a's bundle), the target bead is closed, and the storm is fully
 analyzed. This dated subsection is the bead's only change.
 
+### Crash-reproduction harness 2026-09-07 (domchk-2125075e — the create-the-reproduction-test step)
+
+This bead is the "Create crash reproduction test script" child created 2026-09-02 03:03Z at
+the head of a two-bead chain: **this bead** → `domchk-1835a393` ("Run crash reproduction
+test and verify fix", still open). Its auto-split dispatch's "failed 3 times" premise was
+the release cycle, not three failed work attempts: the bead's only history is a dedicated
+dispatch whose log ends 2026-09-07 01:19 local (05:19Z) — the exact minute of the harness
+file's mtime — followed by two claim→release cycles (05:32Z, 05:45Z) that left no trace.
+That is a dead worker's finished-but-uncommitted deliverable, so this attempt verified it
+instead of splitting it.
+
+**Deliverable:** `scripts/test-bf-1s6c3-crash-condition.sh` (399 lines), the bf-1s6c3
+counterpart of the bf-4yjq harness (`test-bf-4yjq-crash-condition.sh`, commit `ca3f64f` /
+domchk-b90505ad). It rebuilds the crash precondition the way bf-1s6c3 actually formed it —
+N commits of ONE near-identical `.beads/issues.jsonl` path, not unrelated blobs — at
+~1/17th scale, then asserts the whole causal chain: **A1** the bloat forms (1122 MiB loose
+across 128 objects, 0 packs), **A2** bare `git push` — 71/76 of the original deaths — dies
+by signal under `MemoryMax=512M` with kernel `oom_memcg` attribution and the loose set
+intact, **A3** the same for bare `git gc --aggressive --prune=now` (the
+bf-173o7e/bf-4x12ec variant of the mechanism), **B1/B2** the deployed
+`pack.windowMemory`/`pack.deltaCacheSize`/`pack.threads` bounds let the *same* operations
+finish with exit 0 inside the same 512M, **C** the live `.gitignore` refuses every payload
+shape (`.beads/**`, `*.jsonl`, `*.db`), **D** the installed pre-commit hook blocks both an
+11 MB file and a force-added `.beads/` snapshot.
+
+**Live verification (2026-09-07, this attempt):** the complete run passed **7/7**; an
+earlier invocation truncated by the caller's `head` had already passed A1–C and D's first
+half with identical bloat figures (1122 MiB / 128 objects), so the scale numbers reproduce
+across runs. Safety envelope: every git operation runs in a per-call uniquely-named
+`systemd-run --user --scope` at `MemoryMax=512M` / `MemorySwapMax=0` under a wall-clock
+timeout, all scratch state lives in one `mktemp` dir under /tmp removed on exit, the live
+repository is only read, and preflight refuses (exit 2, before any git work) when disk,
+memory, the 4 GiB scale cap, or the `systemd-run`/`python3` requirements are unmet.
+Operational gotcha: `--help` is not parsed — any argument starts a full run.
+
+**Not the same deliverable as `domchk-f921ef45`** (in_progress, "Create test case
+reproducing bf-1s6c3 crash scenario", assignee lab-roam-2, created nine minutes later in
+the same 2026-09-02 wave): that chain's acceptance criteria demand building a literal
+18 GB / 17 GB-loose repository, which this harness deliberately refuses as unsafe — the
+reduced-scale scaling relation is the design, not a fallback. Do not conflate the two
+beads when deduplicating; only this bead's chain names a safe reproduction.
+
+**Disposition:** all four acceptance criteria are met — script created, safety checks in
+place, usage documented in the header, committed to `scripts/` — so the bead is closed
+complete rather than split. The still-open `domchk-1835a393` runs the harness; its
+expected outcome is already recorded here and in the §12 entries above: the crash
+re-creates without the bounds and does not run with them.
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
