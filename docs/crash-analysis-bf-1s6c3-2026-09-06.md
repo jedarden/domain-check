@@ -1769,3 +1769,71 @@ persistent), R3 not triggered (3.12/10 min) — the infrastructure classificatio
 exit-code mapping plus the Pattern-3 signature. Alert disposition: **no further action** —
 subject closed, deliverable represented on `main` by `46293c5`, repo repaired and holding.
 Deliverable: `docs/crash-bf-1s6c3-basic-info.md` §8 (the chain's own basic-facts sheet).
+
+### Investigation report + reproducibility assessment 2026-09-07 (domchk-6d8acd21 — the gather→analyze→classify chain's documentation step)
+
+This is the final work link of the gather → analyze → classify chain — `domchk-904abc88`
+(collection) → `domchk-8b615c48` (immediate cause) → `domchk-0a00e94c` (root cause +
+classification) → **this bead** — and it blocks the open umbrella `domchk-b79733ba`
+("Investigate crash logs and root cause for bf-1s6c3"), whose named instant
+2026-08-13T00:28:36.425389752+00:00 is attempt 58's kill + 6.229 s heartbeat
+(domchk-904abc88 subsection above), not a distinct crash. The dispatch asks for a
+comprehensive structured report saved to `docs/incidents/` plus an explicit reproducibility
+assessment.
+
+**Where the structured report lives — no second report created.** Every element the dispatch
+lists is already rendered by this document, the committed and index-linked final report for
+the subject: executive summary §1, subject-bead context §2, timeline §3, evidence and
+citations §4 with the verification appendix §12, classification and rationale §5, root-cause
+analysis §6, impact §7, mitigation recommendations §8–§9, references §10, corrections to the
+superseded 2026-09-01 corpus §11. The chain's own first-hand subsections are the
+domchk-904abc88 (collection), domchk-8b615c48 (immediate cause) and domchk-0a00e94c (root
+cause + classification) entries above. Placement was deliberately against the dispatch's
+literal `docs/incidents/`: that directory exists (one file,
+`bf-kk87a-agent-crash-summary.md`) but holds no index, no `INCIDENTS.md` exists anywhere in
+the repo (checked 2026-09-07), and the workspace's crash canon is `docs/crashes/` bundles +
+`docs/crash-analysis-*.md` reports navigated by `docs/crash-documentation-index.md` — which
+already links this report from both its indexes ("Individual Crash Documentation", commit
+`fcfa79d`) as the bf-1s6c3 final report. A second full report would create exactly the
+duplicate-record sprawl §11 exists to correct; this subsection is the bead's committed
+documentation deliverable instead.
+
+**Reproducibility assessment — the dispatch's open deliverable, consolidated here:**
+
+| Question | Assessment | Evidence |
+|---|---|---|
+| Is this a recurring pattern? | **Yes by mechanism-class before the repair; zero recurrences in this repository since it.** The same underlying cause (committed bead-state bloat → unbounded pack-objects vs. the dispatch scope) produced bf-31mno (350 kills), bf-4yjq (50) and bf-1s6c3 (49 in the 6-slot fleet census; 71 in this bead's extracts) the same evening, plus bf-2xygo (4) and bf-4tciy (2), and the later single-cause variants bf-4x12ec / bf-173o7e (bare `git gc --aggressive`, Aug 14) and bf-198ne (push-side, Aug 16). Since the 2026-09-01 pack-down the repository has held at ~100 MB (re-verified below) and the mechanism has not fired here once. | §5.2, §6, §12 root-cause subsection (6178a01 fleet census); this bead's Sep 4–7 scan below |
+| What conditions trigger it? | **Three, jointly sufficient empirically:** (1) an object store far beyond the dispatch scope's budget — ≈18 GB `.git` / ≈17 GB loose vs `MemoryMax=12GiB`; (2) an unbounded pack-objects path — bare `git push` or `git gc --aggressive` with no `pack.windowMemory` bound (absent on Aug 12; applied 2026-09-02); (3) the amplifier — needle's no-backoff ~10 s re-dispatch with no stop-condition for satisfied work, which converted one kill into 71 and one cause into 71 alerts. The harness re-creates the death at 512M in 2–3 s (A2 push, A3 aggressive gc) with kernel `Memory cgroup out of memory` + anon-rss attribution. | §3, §6, §12 harness subsection (domchk-2125075e) and its live run (domchk-1835a393) |
+| Can it be prevented? | **Yes — proven in both directions by the committed harness.** Formation is prevented at the payload path (C: `.gitignore` refuses `.beads/**`, `*.jsonl`, `*.db`; D: the installed pre-commit hook blocks an 11 MB file and a force-added `.beads/` snapshot). If bloat exists anyway, the deployed pack bounds let the same operations finish (B1 aggressive gc exit 0 in 68 s; B2 push exit 0 in 13 s inside a scope 24× smaller than the original 12 GiB), and detection is cheap (`du -sh .git`, `check-repo-health.sh`, six daily/weekly timers). Residual open risk: the amplifier (§8 item 6 / §9 item 2) is NEEDLE-fleet-side, outside this repository. | §8, §12 run-the-test subsection; guards re-verified live below |
+
+**First-hand re-verification (this bead's own recomputes, 2026-09-07):**
+
+- **Bundle:** `sha256sum -c MANIFEST.sha256` → 5/5 OK (`docs/crashes/bf-1s6c3/`)
+- **Census recounted** from the committed extracts (945 + 513 lines, 1,458 events parsed):
+  `agent.completed` × 76 → exit −1 × 71 / 124 × 4 / 0 × 1; `outcome.classified`
+  crash/timeout/success = 71/4/1; `outcome.handled` alerted/deferred/none = 71/4/1; 76 claims
+  = 76 dispatches; first claim 21:31:27.663Z; kill window 21:36:44.519Z → 01:24:06.842Z;
+  death durations median 160,886 ms (62,523–431,048); median inter-death gap 173.7 s
+- **Ancestry / convergence:** `42a7b07` **not** an ancestor of `origin/main`; `46293c5` **is**;
+  `HEAD...origin/main` = 0/0
+- **Repository today:** 88 loose objects / 824 KiB; 1 pack, 99.11 MiB; garbage 0;
+  `git fsck --full` exit 0; `git ls-files .beads` → 0
+- **Guard layers live:** `setup-git-gc-config.sh --verify` exit 0; `setup-git-hooks.sh
+  --check` exit 0; `.gitignore` `.beads/` :66 / `*.db` :68 / `*.jsonl` :70; all six
+  `domain-check-*` user timers present
+- **Harness:** `scripts/test-bf-1s6c3-crash-condition.sh` present (19,224 B, `bash -n`
+  clean); cited rather than re-run — its disruptive A2/A3 kills are the run-step's
+  deliverable and were executed today 08:13:52Z → 08:16:10Z, 7/7 (domchk-1835a393 subsection
+  above)
+- **Recurrence since the repair (this bead's scan):** all
+  `~/.needle/logs/*2026-09-0[4-7]*.jsonl` → 17 `agent.completed exit_code=-1` fleet-wide,
+  **all** in other workspaces (drawrace/miroir/sigil slots); **0 in the domain-check slot**;
+  no storm shape (no bead repeats at storm cadence) — consistent with the September census
+  that residual exit −1 events are synthetic test/gc scopes elsewhere
+
+**Verdict:** the crash is **reproducible under its trigger conditions** — empirically
+re-created at ~1/17th scale with kernel attribution, and historically repeated across five
+beads the same evening plus two later single-cause variants — and **prevented in the repaired
+repository** (payload path closed, pack bounds deployed, detection automated; all re-verified
+live today). The documentation deliverable is this subsection within the already-committed,
+already-index-linked final report; closing this bead unblocks the umbrella `domchk-b79733ba`.
