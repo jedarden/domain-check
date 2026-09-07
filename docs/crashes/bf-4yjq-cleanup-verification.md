@@ -111,3 +111,44 @@ actually tracks. The script now reports "No large files found" and exits 0.
 
 **Verification completed by:** Claude Code Agent (domchk-564d03eb)
 **Status:** ✅ VERIFIED — cleanup holding, crash investigation closed
+
+---
+
+## Re-verification 2026-09-07 — domchk-51b61065
+
+**Date:** 2026-09-07 · **Bead:** domchk-51b61065 · **HEAD:** `e1e5bf0`
+
+Re-run one day later to confirm the state has not regressed, as the final
+condition of the bf-4yjq alert chain. All figures below were captured
+first-hand this dispatch. **Result: no regression — the bf-4yjq precondition
+(18GB repo / 17GB loose objects) remains ruled out.**
+
+| Check | 2026-09-06 | 2026-09-07 | Task threshold | Result |
+|-------|-----------|-----------|----------------|--------|
+| Total `.git` size | 93M | **106M** | < 1GB | ✅ PASS |
+| Loose objects size | 920 KiB | **2.44 MiB** | < 500MB | ✅ PASS |
+| Loose object count | 114 | **364** | < 1000 | ✅ PASS |
+| In-pack objects | 10,712 | 11,700 | — | ✅ normal |
+| Pack size | 90.43 MiB | 99.78 MiB | — | ✅ normal |
+| Pack files | 1 | 2 | — | ✅ acceptable |
+| Garbage | 0 | **0** | — | ✅ CLEAN |
+| `check-repo-health.sh` | exit 0 | **exit 0** | — | ✅ PASS |
+| Unpushed backlog | 0 | **0** | — | ✅ CLEAR |
+
+`check-repo-health.sh` detail this run: effective pack-memory bound verified
+(system → global → local; windowMemory=2g, deltaCache=1g, threads=1 → worst
+case ≈3072MiB, within the 6GiB ceiling for a 12GiB dispatch scope); no
+unmanaged aggressive gc/repack running; the only large-history note is the
+pre-existing 5 × 14.28MB `dist/` release binaries (packed, not loose).
+
+Two deltas from 2026-09-06, both expected churn and neither a regression:
+
+- **Loose count 114 → 364, pack files 1 → 2.** A day's normal commit churn.
+  Still two orders of magnitude below the crash-era 17GB, and the daily
+  03:00 incremental gc timer packs it. Well under every threshold.
+- **`.git` 93M → 106M.** Pack growth from the day's committed investigation
+  docs, not loose-object regrowth — loose objects total 2.44 MiB.
+
+No remediation bead was needed: the task's own criterion for filing one
+(thresholds exceeded) was not met.
+
