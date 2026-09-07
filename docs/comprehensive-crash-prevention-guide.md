@@ -465,6 +465,44 @@ The comprehensive crash prevention system is **fully operational** and has succe
 
 ---
 
+## bf-1ea4g final learnings (2026-09-07, domchk-e2c1e79e)
+
+Added at the close of the bf-1ea4g investigation; full detail and the live verification
+battery live in
+[`docs/crash-resolution-bf-1ea4g-final.md`](crash-resolution-bf-1ea4g-final.md).
+
+**What this crash added to the layers above** (all live-verified 2026-09-07 16:29–16:45 UTC):
+
+- **Git transport is memory-bounded, not just gc.** bf-1ea4g was killed *mid-push* —
+  pack-objects materializing a 422-commit unpushed backlog inside the 12 GiB dispatch
+  scope (54 of 57 attempts die inside `git push`). The `pack.windowMemory=2g` /
+  `deltaCacheSize=1g` / `pack.threads=1` chain below bounds **push's** pack-objects
+  too, and `scripts/test-gc-memory-bounds.sh` replays the exact death operation:
+  bounded push over a 192 MiB unpacked backlog under `MemoryMax=768M` → exit 0, peak
+  RSS ≈232 MB. A "prevention works" claim for this crash that cannot point at that
+  replay is asserting the gc case only.
+- **The crash's signature precondition is now measured.** Nothing in the workspace
+  counted commit-ahead until the M-1 unpushed-backlog monitor landed in
+  `check-repo-health.sh` (8d326cc, 2026-09-07): warn ≥50 / CRITICAL ≥200 commits
+  behind upstream, reported by the daily 02:00 timer. On Aug-13 the 422-commit
+  backlog accumulated silently across ~30 killed attempts.
+- **Two-layer lesson, restated as a rule:** the *kill* was INFRASTRUCTURE (real,
+  mid-task, memory-mechanism) while the *alerts* were FALSE_POSITIVE (the bead
+  self-recovered the same morning). Any measure — and any report — must say which
+  layer it addresses; conflating them produced three mutually contradictory
+  same-day write-ups in the 2026-09-02 corpus.
+- **Still open after this crash:** the retry loop that multiplied 1 kill into 56
+  (H-1, NEEDLE-side — nothing checks whether prior attempts died identically on the
+  same operation before re-claiming), and the alert pipeline's absence from the
+  production alert-creation path (D-1..D-10 — the suites above pass, but the
+  load-bearing false-positive prevention remains procedural: verify the target
+  bead's state before investigating).
+
+**Naming note for dispatches:** task templates referring to
+`docs/crash-prevention-guide.md` mean **this file** — no such path exists.
+
+---
+
 ## Appendix: Script Inventory
 
 ### Crash Prevention Scripts
