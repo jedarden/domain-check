@@ -1263,6 +1263,74 @@ match only, Rule 3 not triggered; excluded alternates per §5.4. Subject bf-1s6c
 
 **Dispatch note:** no new summary document shipped — the storm is fully analyzed and the
 workspace already holds ~460 crash docs. This dated subsection is the bead's only change.
+
+### Re-verification 2026-09-07 (domchk-4e8821ca — the gather→classify→fix chain's verification-and-documentation step, closing alert bf-1wz2w)
+
+The chain's final link. Its first three steps are §12 above — domchk-02f84337 (the attempt-48
+artifact bundle, `93da1c1`), domchk-00e228b9 (classification), domchk-e9234a0d (fix step) — and
+bf-1wz2w's other blocker domchk-e36b5da6 ("Document crash resolution and close alert") is closed.
+This bead is therefore the **last open blocker on alert bf-1wz2w**, and the dispatch assigns it
+both the verification layer and the alert's closure. The dispatch's named deliverable file
+(`docs/crash-fix-verification-report-bf-1s6c3-YYYY-MM-DD.md`) already exists as
+`docs/verification/crash-fix-verification-report-bf-1s6c3-2026-09-01.md` — superseded-annotated
+by domchk-a18b2c06 with "keep for provenance; do not cite it forward" — so this subsection, not a
+new report, is the fresh verification record. Per the workspace dedup rule this bead shipped no
+new document.
+
+**Live re-verification (all re-run first-hand 2026-09-07):**
+
+- **Repository (the crash substrate):** `.git` 103 MB · 185 loose objects / 1.50 MiB ·
+  3 packs / 99.13 MiB · in-pack 11,182 · garbage 0 · `git fsck --full` exit 0 (dangling trees
+  only) · `HEAD...origin/main` → 0 / 0 · `git ls-files .beads` → 0 · `git log --all -- .beads/`
+  → 0 commits across every ref.
+- **The kill-path bound** (the layer covering attempt 48's push-side death):
+  `./scripts/setup-git-gc-config.sh --verify` exit 0 — effective `windowMemory=2g` /
+  `threads=1` / `deltaCacheSize=1g`, worst case ≈3072 MiB within the 12 GiB dispatch-scope
+  ceiling. Attempt 48's push ran four days before this layer existed.
+- **The commit gate:** `./scripts/setup-git-hooks.sh --check` exit 0 — installed hook
+  byte-identical to tracked source.
+- **The crash command itself now succeeds:** `./scripts/test-gc-memory-bounds.sh` **12/12** —
+  the integration test re-runs the exact Aug-14 crash command, bare
+  `git gc --aggressive --prune=now`, under `MemoryMax=768M` (1/16th of the dispatch scope):
+  exit 0, pack-objects peak RSS **320,380 KB**. The original run exceeded 12 GiB and was
+  SIGKILLed 129 times.
+- **The 2026-09-01 20-test suite re-run** (`scripts/test-crash-fix-bf-1s6c3.sh`): **19/20** —
+  repository size 102 MB (was 18 GB), gitignore blocks, pre-commit hook, monitoring-script
+  presence, and the memory-intensive `rev-list`/`verify-pack` operations all pass. The single
+  failure is the suite's `go test ./... -short` step, and it is **not this chain's**: the red
+  test is `TestServerStartsAndStopsResourceMonitor` ("resource monitor outlived the server"),
+  in `internal/server/` — where this shared worktree carries a co-tenant's uncommitted
+  resource-monitor work (`server.go` modified, `resource_monitor.go` + its test untracked).
+  `git archive HEAD` extracted to /tmp and the same package run there: **ok, 4.330 s, exit 0**
+  — HEAD is green; the failure is in-flight co-tenant work, not committed state.
+- **Monitoring:** `check-repo-health.sh` exit 0; `resource-monitor.sh --once` all OK
+  (41 G memory available, 48 G disk free, load 5.76, pressure 0%, no unsafe gc);
+  `crash-pattern-detection.sh` — no crashes in the last 24 h, STABLE; all seven
+  `domain-check-*` systemd user timers present and firing.
+
+**New: one monitoring script false-positives on the healthy state.**
+`scripts/repo-health-monitor.sh` exits 1 warning "Pack file fragmentation detected: 3 files" —
+its `PACK_FILES_WARN=2` threshold fires on any third pack file **regardless of size**. Three
+packs totalling 99.13 MiB on a 103 MB repository is normal bounded churn (this report's §12
+runs and `check-repo-health.sh`, which exits 0 on the same state, all treat it as such), and
+the script is wired to no timer — the installed daily repo-health timer runs
+`auto-gc-trigger.sh --dry-run` — so the misfire can only mislead a manual run. Pack **count**
+is a non-signal; pack **size** (`size-pack`) plus loose-object volume remain the operative
+bloat metrics. Recorded here rather than changed by a verification bead: re-tuning the
+threshold belongs to an implementation bead.
+
+**Documentation shipped by this bead:** a dated correction banner on
+`docs/bead-verification/bf-1wz2w.md` — its 2026-08-26 body attributes the crash to a "600 s
+agent timeout", which the 108,759 ms signal death refutes (the claim also survives in
+bf-1wz2w's own Notes, corrected at closure) — and a dated 2026-09-07 verification note in
+`docs/crash-mitigation-strategies.md`'s bf-1s6c3 Implementation Status section. **No new
+prevention strategy identified:** every vector this pass probed is already covered by §8 and
+the mitigation doc's live-verified stack.
+
+**Alert disposition:** bf-1wz2w closed by this bead — duplicate alert for a resolved crash
+(subject bf-1s6c3 closed; its named instant is attempt 48's kill + 5.6026 s per the
+classification subsection above), its stale `verification-failed` label removed after this
+pass. No further action for this event.
 ---
 
 **Analysis Status:** ✅ COMPLETE

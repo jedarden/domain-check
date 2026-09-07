@@ -855,10 +855,32 @@ scope against an ~18 GB object store was. The operative pre-flight for Pattern 3
 repository-size table (the 02:00 `domain-check-repo-health.timer` runs it daily), which is why
 the repo-size row leads the stack above.
 
+### Verification 2026-09-07 (domchk-4e8821ca — alert bf-1wz2w's verify-and-document step)
+
+Every layer above re-verified live and first-hand on 2026-09-07 (figures recorded in the §12
+appendix of [`docs/crash-analysis-bf-1s6c3-2026-09-06.md`](crash-analysis-bf-1s6c3-2026-09-06.md)):
+repository 103 MB / 185 loose objects / 1.50 MiB, `git fsck --full` clean, 0 tracked `.beads/`
+files, 0/0 remote divergence, `setup-git-gc-config.sh --verify` and `setup-git-hooks.sh
+--check` both exit 0, all seven `domain-check-*` timers firing — and the crash command itself
+now succeeds: bare `git gc --aggressive --prune=now` completes exit 0 under a 768 MiB cgroup
+with pack-objects peak RSS 320,380 KB (`scripts/test-gc-memory-bounds.sh` 12/12; the original
+Aug-14 run exceeded 12 GiB and was killed 129 times). **No new prevention strategy
+identified** — every vector this pass probed is already covered by the stack above.
+
+One monitoring-calibration note: `scripts/repo-health-monitor.sh` warns "Pack file
+fragmentation" and exits 1 whenever a repository holds more than two pack files
+(`PACK_FILES_WARN=2`) **regardless of their size** — it flagged the current 3 packs /
+99.13 MiB on a 103 MB repository, which is normal bounded churn: `check-repo-health.sh`
+exits 0 on the same state, and the script is wired to no timer (the installed daily
+repo-health timer runs `auto-gc-trigger.sh --dry-run`), so the misfire can only mislead a
+manual run. Pack **count** is a non-signal; pack **size** (`size-pack`) plus loose-object
+volume remain the operative bloat metrics. Recorded by the verification bead rather than
+changed in the script — re-tuning the threshold belongs to an implementation bead.
+
 ---
 
-**Document Version:** 2.2  
+**Document Version:** 2.3  
 **Created:** 2026-09-01  
-**Updated:** 2026-09-07 (Rollback subsection verified live — uninstall round-trip + 27-assertion test suite; v2.2 added the Rollback subsection and `--uninstall` itself, v2.1 added the bf-1s6c3 Implementation Status section)  
+**Updated:** 2026-09-07 (v2.3 appended the domchk-4e8821ca live re-verification + the repo-health-monitor pack-count calibration note; v2.2 verified the Rollback subsection live — uninstall round-trip + 27-assertion test suite — and added `--uninstall` itself; v2.1 added the bf-1s6c3 Implementation Status section)  
 **Author:** Claude Code Agent  
 **Review Status:** Priorities 1–4 implemented; Priority 3 fully closed as of 2026-09-06
