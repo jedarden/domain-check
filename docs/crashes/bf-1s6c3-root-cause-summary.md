@@ -1,5 +1,11 @@
 # Root Cause Analysis Summary: Bead bf-1s6c3
 
+> **⚠️ SUPERSEDED 2026-09-06** — the "Crash Date 2026-08-13T00:38:41Z" here is one attempt
+> of a **76-dispatch / 71-kill storm**, and "SIGKILL (signal 9)" misreads needle's exit −1
+> signal-death sentinel (no 137/129 in the log). Use
+> [bf-1s6c3-comprehensive-investigation-2026-09-06.md](bf-1s6c3-comprehensive-investigation-2026-09-06.md),
+> §5.1 supersession table. Retained below for history only.
+
 **Report Date:** 2026-09-01
 **Bead ID:** bf-1s6c3
 **Crash Date:** 2026-08-13T00:38:41Z
