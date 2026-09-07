@@ -519,6 +519,56 @@ exit 1 means no bound is in force or threads are unpinned.
 - ⚠️ Document workflow issue
 - ✅ NO code changes needed if task succeeded
 
+### Pattern 6: Unbounded Push Over an Unpushed-Commit Backlog (bf-1ea4g, 2026-08-13)
+
+The push-side sibling of Pattern 3. 57 dispatch attempts in 1 h 50 min — 56 ×
+`exit -1`, then 1 success. 54 of the 57 surviving transcripts die mid-`git push`:
+pack-objects materialized a **422-commit unpushed backlog** (retired bead-forge
+mass, `.beads/` still tracked) inside the 12 GiB dispatch scope. Because needle
+re-claimed every ~2 min and each attempt committed before pushing, **every retry's
+push was bigger than the last** — the loop grew its own kill condition. Attempt 57
+succeeded by *skipping the push* (snapshot to `/tmp`), not by remediation. Kill =
+INFRASTRUCTURE; the one-alert-per-kill beads = FALSE_POSITIVE (the target closed
+the same morning). Canonical record:
+`docs/investigations/bf-1ea4g-root-cause-determination-2026-09-02.md`;
+gap analysis: `docs/crash-prevention-gaps-bf-1ea4g.md`.
+
+Unlike Pattern 3, the precondition is **commit-ahead count**, not loose-object
+mass — a repo can be small, packed, and healthy and still carry a lethal unpushed
+series. Check it before any push from this workspace:
+
+```bash
+git rev-list --count "@{upstream}..HEAD"    # fallback: origin/main..HEAD
+```
+
+**Preventive layers in place (live-verified 2026-09-07):**
+
+| Layer | Measure | Verify | Result |
+|---|---|---|---|
+| Precondition (S1) | `.beads/` gitignored repo-wide; 0 tracked bead state; 10 MB + 50 MB pre-commit gate | `git ls-files .beads \| wc -l`; `./scripts/setup-git-hooks.sh --check` | 0 · exit 0 |
+| Operation (S2) | `pack.windowMemory=2g` / `deltaCacheSize=1g` / `threads=1`, repo **and** global — bounds pack-objects under gc *and* push | `./scripts/setup-git-gc-config.sh --verify` | exit 0, worst case ≈3072MiB |
+| Death-op replay | `test-gc-memory-bounds.sh` re-runs this crash's exact operation — a bounded push over a 192 MiB unpacked backlog — under `MemoryMax=768M` | `./scripts/test-gc-memory-bounds.sh` | 16/16; push peak RSS 232,328 KB, remote received the backlog |
+| Backlog telemetry (M-1) | `check-unpushed-backlog.sh` — WARN ≥50 / CRITICAL ≥200 commits ahead, wired into the daily 02:00 `check-repo-health.sh` (report-only; the 03:00 bounded gc owns remediation) | `./scripts/check-unpushed-backlog.sh` | CLEAR at 0 ahead; suites 24/24 + 11/11 |
+| Per-bead repeat detection | `crash-pattern-detection.sh` (10-min timer) flags ≥3 crashes/24 h per bead — a bf-1ea4g storm pages within ~10–15 min | `./scripts/crash-pattern-detection.sh` | fires; print-only (D-9) |
+| Fleet surge gate | `system-event-mode.sh` (3 abnormal terminations/5 min) wired into `preflight-health-check.sh` — exit 75 = defer new dispatches, fails open | `./scripts/preflight-health-check.sh` | 4/4 checks passed |
+
+*M-1 deployment note:* `check-unpushed-backlog.sh` + its `check-repo-health.sh`
+wiring are implemented and verified as above, landing with their carrier bead
+domchk-f239e178 (in flight at verification time).
+
+**What would still decide the outcome of a repeat (residuals, both outside this repo):**
+- **H-1 — retry-loop stop-condition (NEEDLE-side, the multiplier).** Nothing checks
+  before re-claiming whether the last N attempts died identically on the same
+  operation, or whether the work is already satisfied. This is what turned 1 kill
+  into 56. Detection without an actor is no detection — do not "implement" this as a
+  log line.
+- **M-2 — dispatch-scope memory telemetry.** The kill boundary was the 12 GiB memcg;
+  monitoring is host-wide. A push at 11 GiB for 13.8 s is invisible until it is a
+  kill record. Per-scope `memory.peak` capture is the ask.
+- The dispatch template's review-input path `docs/crash-prevention-guide.md` is
+  stale; the live document is `docs/comprehensive-crash-prevention-guide.md`
+  (gap analysis M-4 corrects its three overclaimed metric lines).
+
 ---
 
 ## False Positive Detection Heuristics
@@ -1017,7 +1067,11 @@ Other Exit Code?
   `docs/crash-inventory-bf-1ea4g-summary.md`; raw artifacts live in
   `docs/crashes/bf-1ea4g/`. Cite these, **not** the 2026-09-02-era SIGHUP /
   healthy-repo mechanism (superseded by that doc's dated banner and its §2026-09-07
-  re-determination)
+  re-determination). Prevention/detection gap analysis:
+  `docs/crash-prevention-gaps-bf-1ea4g.md` — each causal stage mapped to what
+  missed it, what covers it today (live-verified), and the open residuals
+  (H-1 retry stop-condition, M-2 scope telemetry, M-3 transcript retention,
+  M-4 prevention-status overclaims)
 - **Mitigation Strategies:** `docs/crash-mitigation-strategies.md`
 
 - **Specific Crashes:** 
@@ -1040,7 +1094,10 @@ Other Exit Code?
 ---
 
 **Guide Status:** ✅ Complete  
-**Last Updated:** 2026-09-07 (fourth pass — bf-1ea4g canonical-record block added to
+**Last Updated:** 2026-09-07 (fifth pass — Pattern 6 added: bf-1ea4g's unbounded
+push over a 422-commit unpushed backlog, its preventive layers with the
+2026-09-07 live-verification battery, the open H-1/M-2 residuals, and the M-1
+backlog-telemetry deployment note, domchk-87ef5683); fourth pass — bf-1ea4g canonical-record block added to
 Related Documentation, domchk-0a6edc46); third pass, from the bf-1s6c3 canonical report
 `docs/crash-analysis-bf-1s6c3-2026-09-06.md`: exit 124 added to the classification table,
 INFRASTRUCTURE row and "What Causes Crashes" moved off the superseded SIGHUP framing,

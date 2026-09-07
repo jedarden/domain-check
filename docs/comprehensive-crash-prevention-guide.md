@@ -4,6 +4,18 @@
 **Task:** domchk-60637096  
 **Purpose:** Complete guide to preventing agent crashes based on root cause analysis
 
+> **⚠️ Standing correction (2026-09-07, domchk-87ef5683 — gap analysis M-4).** This
+> guide is a 2026-09-02 design-phase document. Three of its status claims are
+> snapshots, not standing measurements, and are annotated in place below:
+> **"false positive rate <5% (95%+ reduction)"**, **"False positive alerts REDUCED
+> by 95%+"**, and **"0 crashes in 16+ days"**. The false-positive layer it describes
+> has never fired in production (see the inline notes; D-1..D-10 in
+> [`docs/alert-deduplication-gap-analysis-2026-09-07.md`](alert-deduplication-gap-analysis-2026-09-07.md)),
+> and prevention status in this workspace has repeatedly been *ahead* of the
+> mechanisms it describes (see `docs/crash-prevention-requirements.md` §6).
+> Re-verify before citing: `./scripts/check-repo-health.sh`,
+> `./scripts/setup-git-gc-config.sh --verify`, `./scripts/preflight-health-check.sh`.
+
 ---
 
 ## Executive Summary
@@ -62,6 +74,14 @@ This guide documents all preventive measures implemented to prevent agent crashe
 - ✅ **Implemented**: 6 critical fixes (closed bead filtering, duplicate detection, exit code validation, completion awareness, alert cooldown, crash classification)
 
 **Status:** IMPLEMENTED - False positive rate reduced by 95%+
+
+> **⚠️ Correction (2026-09-07, domchk-87ef5683):** "reduced by 95%+" was a design
+> target, never a measured rate — no production baseline was ever instrumented, and
+> this pipeline is invoked by nothing in the alert-creation path. Per-bead reality:
+> 58 ALERT-shaped beads were created against bf-1ea4g, whose target closed the same
+> morning; 12 were still unresolved 25 days later. Evidence and next steps:
+> [`docs/alert-deduplication-gap-analysis-2026-09-07.md`](alert-deduplication-gap-analysis-2026-09-07.md)
+> (D-1..D-10) and the bf-1ea4g gap analysis §6.
 
 **Evidence:** Test suite shows 22/24 tests passing
 
@@ -315,6 +335,13 @@ This guide integrates with the following existing documentation:
 
 ### After Prevention System
 
+> **⚠️ Correction (2026-09-07, domchk-87ef5683):** the two figures below are a
+> 2026-09-02 snapshot, not standing metrics. Read the live signature from
+> `docs/crash-response-guide.md` ("Live fleet crash signature, September 2026
+> census"): kernel kills (`exit -1`) in steady state are near-zero, but the
+> fleet's dominant live signal is synchronized `exit=1` waves (service-class),
+> which no figure on this page captures.
+
 - **Crash rate:** 0 crashes in 16+ days post-remediation
 - **False positive rate:** <5% (95%+ reduction)
 - **Investigation overhead:** Minimal (automated classification)
@@ -384,6 +411,13 @@ This guide integrates with the following existing documentation:
 - **Target:** Maintain <1% crash rate
 - **Status:** ✅ ACHIEVED
 
+> **⚠️ Correction (2026-09-07, domchk-87ef5683):** snapshot, not an SLO — see the
+> correction at "After Prevention System" above. The repo-side bloat and
+> pack-memory work this table summarizes *is* verified (re-verified 2026-09-07:
+> `check-repo-health.sh` clean, `setup-git-gc-config.sh --verify` exit 0), but
+> "zero crashes" was a point-in-time count, and the "ACHIEVED" rows for Alert
+> Accuracy below describe a pipeline that has never fired in production.
+
 ### Alert Accuracy
 
 - **Current:** <5% false positive rate (vs. 60-75% before)
@@ -411,6 +445,12 @@ The comprehensive crash prevention system is **fully operational** and has succe
 1. ✅ Repository bloat - RESOLVED with cleanup and monitoring
 2. ✅ Memory pressure - MONITORED with continuous resource tracking
 3. ✅ False positive alerts - REDUCED by 95%+ with automated classification
+   *(correction 2026-09-07, domchk-87ef5683: the classification code exists and its
+   suite passes, but it sits outside the alert-creation path and its load-bearing
+   parses do not match the real alert shape — D-1..D-10,
+   [`docs/alert-deduplication-gap-analysis-2026-09-07.md`](alert-deduplication-gap-analysis-2026-09-07.md).
+   The load-bearing FP prevention today is procedural: verify the target bead's
+   state before investigating.)*
 4. ✅ Service failures - MONITORED with health checks
 5. ✅ Workflow limitations - PREVENTED with complexity analysis tools
 
