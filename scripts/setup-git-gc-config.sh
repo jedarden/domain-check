@@ -23,6 +23,15 @@
 #   ./setup-git-gc-config.sh --global     # apply bounds to ~/.gitconfig (all repos for this user)
 #   ./setup-git-gc-config.sh --verify     # check the effective bound (system -> global -> local); exit 1 if unsafe
 #   ./setup-git-gc-config.sh --verify --global
+#   ./setup-git-gc-config.sh --uninstall          # remove the bounds from this repo
+#   ./setup-git-gc-config.sh --uninstall --global # remove the bounds from ~/.gitconfig
+#
+# --uninstall is the rollback step for this layer of the bf-1s6c3 mitigation
+# stack (rollback plan for the whole stack:
+# docs/maintenance/repository-maintenance-guide.md). It removes only the three
+# pack.* keys this script owns and then re-runs --verify, exiting 1 when the
+# rollback removed the LAST effective bound — bare gc/push are unbounded in
+# that state, which is the exit-code -1 mechanism this script exists to close.
 #
 # Environment overrides:
 #   PACK_WINDOW_MEMORY     (default 2g)
@@ -42,20 +51,27 @@ MAX_TOTAL_BYTES=$((6 * 1024 * 1024 * 1024))
 
 MODE=local
 VERIFY=0
+UNINSTALL=0
 for arg in "$@"; do
   case "$arg" in
     --global) MODE=global ;;
     --verify) VERIFY=1 ;;
+    --uninstall) UNINSTALL=1 ;;
     --help|-h)
       awk 'NR>1 { if ($0 !~ /^#/) exit; sub(/^# ?/, ""); print }' "$0"
       exit 0
       ;;
     *)
-      echo "Unknown option: $arg (supported: --global, --verify)" >&2
+      echo "Unknown option: $arg (supported: --global, --verify, --uninstall)" >&2
       exit 2
       ;;
   esac
 done
+
+if (( VERIFY && UNINSTALL )); then
+  echo "--verify is check-only and cannot be combined with --uninstall" >&2
+  exit 2
+fi
 
 scope_flags=(--local)
 label="repo-local"
@@ -134,6 +150,46 @@ if [[ "$VERIFY" == "1" ]]; then
     exit 1
   fi
   echo "✅ Verified — ${chain}; scope:${origins}; worst-case pack memory ≈ $((total / 1024 / 1024))MiB (windowMemory=$wm, threads=$th, deltaCache=$dc) — within the ${MAX_TOTAL_BYTES} ceiling for a 12GiB dispatch scope."
+  exit 0
+fi
+
+if [[ "$UNINSTALL" == "1" ]]; then
+  echo "Removing pack-memory bounds (${label})..."
+  for key in pack.windowMemory pack.deltaCacheSize pack.threads; do
+    if [[ -n "$(git config "${scope_flags[@]}" --get "$key" 2>/dev/null || true)" ]]; then
+      # --unset-all, not --unset: a multi-valued key would make --unset error
+      # out and leave the bound half-removed.
+      git config "${scope_flags[@]}" --unset-all "$key"
+      echo "🗑  removed ${key} (${label})"
+    else
+      echo "·  ${key} not set in ${label} (nothing to remove)"
+    fi
+  done
+  echo ""
+  echo "Advisory keys (gc.auto, gc.autoPackLimit, gc.pruneExpire) are left in place —"
+  echo "this script only fills them when absent, so they may hold hand-tuned values."
+  echo ""
+  verify_args=(--verify)
+  if [[ "$MODE" == "global" ]]; then
+    verify_args+=(--global)
+  fi
+  if "$0" "${verify_args[@]}"; then
+    echo ""
+    echo "✅ Rollback complete (${label}); the effective pack-memory bound still holds — bare git stays bounded."
+  else
+    echo ""
+    echo "❌ Rollback removed the LAST effective pack-memory bound. Bare 'git gc --aggressive' and" >&2
+    echo "   'git push' are unbounded in this state and can exceed the 12GiB dispatch scope" >&2
+    echo "   (memcg OOM SIGKILL, exit code -1 — the bf-173o7e / bf-4x12ec mechanism)." >&2
+    echo "   Re-apply with:" >&2
+    if [[ "$MODE" == "global" ]]; then
+      echo "     ./setup-git-gc-config.sh --global" >&2
+    else
+      echo "     ./setup-git-gc-config.sh            (this repo)" >&2
+      echo "     ./setup-git-gc-config.sh --global   (every repo for this user)" >&2
+    fi
+    exit 1
+  fi
   exit 0
 fi
 

@@ -174,11 +174,22 @@ verifiable:
 ./scripts/setup-git-gc-config.sh              # bound this repo (local scope)
 ./scripts/setup-git-gc-config.sh --global     # bound all repos for this user (~/.gitconfig)
 ./scripts/setup-git-gc-config.sh --verify     # exit 1 if the effective bound is missing/unsafe
+./scripts/setup-git-gc-config.sh --uninstall [--global]  # rollback; exit 1 if it removed the LAST bound
 ```
 
 Applied `--global` on this box on 2026-09-02, so every repo for the `coding` user is
 protected — including the other repos whose dispatch scopes produced the bf-4x12ec-family
 kills. Re-run `--verify` if a repo reports fresh exit-code -1 crashes during git operations.
+
+`--uninstall` is the rollback for this layer ([Rollback Plan](#rollback-plan-bf-1s6c3-mitigation-stack)
+below). It removes only the three `pack.*` keys it owns — the advisory `gc.*` keys it may
+have filled are left alone, since they can hold hand-tuned values — then re-runs `--verify`
+and exits 1 when the rollback removed the **last** effective bound, because bare
+gc/push are then unbounded again. Tested by `scripts/test-setup-git-gc-config.sh`
+(27 assertions, sandboxed `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, seconds to run).
+Live round-trip verified 2026-09-07: `--uninstall` on this repo exited 0 with the
+box-wide global bound still supplying all three keys (zero unprotected window), and the
+re-apply restored the repo-local keys (`--verify` exit 0 at both ends).
 
 `--verify` checks the **effective** bound — the system → global → local chain a bare gc
 actually sees — and reports which scope supplies each key, so a repo protected only by the
@@ -270,7 +281,7 @@ independent of that rework.
 **After any fresh clone** (enforcement is per-clone and does not travel with
 git; without these the clone is unguarded — see
 [CI/CD Pipeline Coverage](#cicd-pipeline-coverage-verified-2026-09-06) above):
-- [ ] Restore the >10MB pre-commit hook from `scripts/pre-commit-repo-size-hook` (source copy has drifted from the last installed version — review before copying)
+- [ ] `./scripts/setup-git-hooks.sh` — installs the repo-size pre-commit hook from the tracked source (`--check` → exit 0 confirms it is present, executable, and byte-identical)
 - [ ] `./scripts/setup-git-gc-config.sh --global --verify` → exit 0 (the box-wide pack-memory bound must cover bare gc/push here too)
 - [ ] `./scripts/setup-repo-maintenance.sh` if this clone should carry its own timers
 
@@ -278,6 +289,41 @@ Prevention baseline and the incident these controls came from:
 [bf-4yjq crash context report](../crash-context-report-bf-4yjq-comprehensive.md)
 — its "Prevention Status Follow-up (2026-09-06)" section maps each of that
 report's recommendations to the control that now covers it.
+
+---
+
+## Rollback Plan (bf-1s6c3 mitigation stack)
+
+Each layer of the repository-bloat mitigation stack has its own removal path. Roll back
+**only the layer causing the problem**, one at a time, and re-verify what is left — the
+layers are redundant by design, so a single rollback normally leaves the others holding.
+
+| Layer | Rollback entry point | What it removes | Re-verify afterwards |
+|---|---|---|---|
+| Pack-memory bound (bare gc/push) | `./scripts/setup-git-gc-config.sh --uninstall` (add `--global` for `~/.gitconfig`) | Only the three `pack.*` keys it set; advisory `gc.*` keys stay | `./scripts/setup-git-gc-config.sh --verify` — exit 0 means another scope still supplies the bound; **exit 1 means bare git is now unbounded** (re-apply, or accept only if you are deliberately removing the guard) |
+| Pre-commit repo-size hook | `./scripts/setup-git-hooks.sh --uninstall` | `.git/hooks/pre-commit` in this clone | `./scripts/setup-git-hooks.sh --check` → exit 1 confirms it is gone; the tracked source under `scripts/pre-commit-repo-size-hook` is untouched, so reinstall is one command |
+| Scheduled repo-health + gc timers | `./scripts/setup-repo-maintenance.sh --remove` | The `domain-check-{repo-health,auto-gc,git-gc,git-gc-full}` user units | `systemctl --user list-timers 'domain-check-*' --all` — only the monitoring timers should remain |
+| Monitoring timers (resource/service/crash-pattern) | `./scripts/monitoring-setup.sh --remove` | The remaining `domain-check-*` user units and their log files | Same `list-timers` check — the list should now be empty |
+| `.beads/` gitignore rules | Edit `.gitignore` (remove the `.beads/`, `*.db`, `*.jsonl` lines) | The re-entry block only; no file is deleted | `git ls-files .beads` must stay **0** — nothing is re-tracked until someone stages it |
+
+**Order when unwinding everything:** timers → hook → pack-memory bound → gitignore. Stop
+at the layer you needed and restart from the bottom of that table if the problem returns.
+
+**Hazards:**
+
+- Rolling back the **gitignore** rules is what re-opens the bf-1s6c3 vector itself: bead
+  state becomes trackable again. While the pre-commit hook is installed, a staged `.beads/`
+  path is still blocked (any path there is by definition a forced add), so the gitignore
+  rollback alone does not re-enable tracked bead state — but do not roll both back at once.
+- Rolling back the **pack-memory bound** removes the only guard on *bare* `git gc
+  --aggressive` and on `git push` pack-objects. The sanctioned path (`safe-git-gc.sh`)
+  keeps its own bounds, so a bare-gc emergency is still covered by that script — use it
+  instead of leaving the bound off.
+- A rollback is only "needed" when a layer misfires (e.g. the hook blocks a legitimate
+  vendored asset, or `pack.threads=1` slows a one-off huge pack). Prefer a scoped
+  workaround first: commit the large asset via a deliberate exception rather than
+  uninstalling the hook, and tune `PACK_WINDOW_MEMORY`/`PACK_THREADS` at install time
+  rather than removing the bound.
 
 ---
 
@@ -289,7 +335,7 @@ report's recommendations to the control that now covers it.
 | `check-repo-health.sh` | Repository size and object check | Weekly health monitoring |
 | `safe-git-gc.sh` | Memory-limited garbage collection with pre-flight resource checks, hard ceiling and checkpoint/resume (see its section above) | When cleanup needed; `--check-only` to validate first |
 | `safe-git-gc-monitor.sh` | Monitor gc progress | During gc operations |
-| `setup-git-gc-config.sh` | Persistent pack-memory bound + verify | After cloning; `--verify` when exit -1 appears |
+| `setup-git-gc-config.sh` | Persistent pack-memory bound + verify + uninstall | After cloning; `--verify` when exit -1 appears; `--uninstall` per the Rollback Plan above |
 
 ---
 

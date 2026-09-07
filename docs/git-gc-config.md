@@ -56,6 +56,19 @@ git config --show-origin --get-regexp '^(gc|pack|repack)'   # effective values +
 ./scripts/setup-git-gc-config.sh --verify                   # exit 1 = OOM bound missing
 ```
 
+## Rollback
+
+```bash
+./scripts/setup-git-gc-config.sh --uninstall [--global]     # remove the pack.* bound this script set
+```
+
+Removes only `pack.windowMemory` / `pack.deltaCacheSize` / `pack.threads` (advisory `gc.*`
+keys stay), then re-verifies: exit 0 means another scope still supplies the effective
+bound, exit 1 means bare gc/push are unbounded again. Covered by
+`scripts/test-setup-git-gc-config.sh` (27 assertions, sandboxed git config).
+Full layer-by-layer plan:
+[Rollback Plan](maintenance/repository-maintenance-guide.md#rollback-plan-bf-1s6c3-mitigation-stack).
+
 ## Manual gc
 
 Use the safe path, not `git gc --aggressive`:

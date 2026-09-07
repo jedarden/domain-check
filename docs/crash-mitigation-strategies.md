@@ -804,6 +804,20 @@ forward from earlier documents.
 | Scheduled enforcement (item 5) | systemd user timers (not cron — this box is NixOS) | all 6 `domain-check-*` timers present and firing (service 2 min, resource 5 min, crash-pattern 10 min, repo-health daily 02:00, gc daily 03:00, full gc Sun 04:00) |
 | `./scripts/check-repo-health.sh` | Repo's own gate | exit 0 |
 
+### Rollback
+
+Every layer above has a documented removal path, assembled in the
+[Rollback Plan](maintenance/repository-maintenance-guide.md) section of the maintenance
+guide: `scripts/setup-git-gc-config.sh --uninstall [--global]` for the pack-memory bound
+(added 2026-09-06 — it was the one layer with no removal tooling; it exits 1 when a
+rollback removes the *last* effective bound), `scripts/setup-git-hooks.sh --uninstall` for
+the pre-commit hook, `setup-repo-maintenance.sh --remove` / `monitoring-setup.sh --remove`
+for the timers, and a `.gitignore` edit for the re-entry block. Layer-by-layer hazards
+(rolling back the gitignore is what re-opens this crash's vector) are listed there.
+The uninstall mode is covered by `scripts/test-setup-git-gc-config.sh` (27 assertions,
+sandboxed git config) and was round-tripped live on this repo 2026-09-07 — local
+uninstall exited 0 with the box-wide global bound still supplying all three keys.
+
 ### What the item-3 closure changed (this commit)
 
 The pre-commit hook existed since the bf-4yjq cleanup, but only as a hand-installed per-clone
@@ -843,8 +857,8 @@ the repo-size row leads the stack above.
 
 ---
 
-**Document Version:** 2.1  
+**Document Version:** 2.2  
 **Created:** 2026-09-01  
-**Updated:** 2026-09-06 (Added Implementation Status section for the bf-1s6c3 crash type — repository-bloat mitigation stack live-verified, G-1 pre-commit installer shipped)  
+**Updated:** 2026-09-07 (Rollback subsection verified live — uninstall round-trip + 27-assertion test suite; v2.2 added the Rollback subsection and `--uninstall` itself, v2.1 added the bf-1s6c3 Implementation Status section)  
 **Author:** Claude Code Agent  
 **Review Status:** Priorities 1–4 implemented; Priority 3 fully closed as of 2026-09-06
