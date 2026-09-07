@@ -373,10 +373,112 @@ anywhere after attempt 15).
 
 ---
 
+## 9. NEEDLE system deficiencies — consolidated RCA (bead `domchk-a7bc56b5`, 2026-09-07)
+
+Dispatched to "document the investigation findings for the NEEDLE system
+issue": crash detection deficiencies, completion detection failure, timestamp
+confusion mechanism, lack of deduplication. Appended here per §6. No
+contradiction with §1–§8: this session re-derived §2's census byte-exact from
+the untouched Aug-13 log (62 completions = 55 × −1 + 5 × 124 + 2 × 0; kills
+123.6–528.9 s, median 252.9 s; zero `max_turns` mentions in the day's 395
+completions) and §8.2's alert ledger in the live bead store (exactly 55
+ALERT-titled beads: 17 closed / 36 open / 2 in_progress). The delta is the
+system-level statement of the four deficiencies, each tied to its live
+re-verification.
+
+### 9.1 Crash detection is post-hoc only, and records too little to name its cause
+
+- **No in-run signal exists.** The sole crash indicator in the Aug-13 log is
+  `agent.completed {exit_code: −1}` — detection fires only at process exit.
+  The dispatch scope's 12 GiB ceiling was crossed with no warning event; the
+  window's only resource telemetry (`fleet.cpu_saturated`, 59 samples) measures
+  the host axis, not the per-dispatch scope budget. Detection could therefore
+  neither anticipate a kill nor stop the retry layer from re-dispatching the
+  identical task into identical conditions 55 times.
+- **What detection records cannot name its cause.** Single-slot traces retain
+  nothing older than 2026-08-16 and journald's single boot begins
+  2026-08-15 19:56:33 EDT, so all 55 kills carry only the unrecorded-signal
+  sentinel −1 with no kernel line — the reason this bead's mechanism stays
+  chain-inferred (§5) rather than kernel-proven.
+- **Fix-state (verified live):** the standing mitigations are repo-side, not
+  needle-side — the bloat repair itself (`.git` 103 MB vs ≈18 GB, `.beads/`
+  fully gitignored) removes the allocation pressure that exhausted the scope,
+  and `pack.windowMemory=2g` / `pack.threads=1` (worst case ≈3 GiB,
+  `./scripts/setup-git-gc-config.sh --verify`) bound the gc/push pack paths;
+  `check-repo-health.sh` plus the daily timers detect size regressions before
+  they become kills. Needle itself still has no in-run scope-pressure alarm.
+
+### 9.2 Completion detection failure: a verified success got `action: none`
+
+The full `outcome.handled` census for the bead (re-derived this session):
+**crash → alerted ×55, timeout → deferred ×5, success → none ×2.** The two
+successes record, in sequence:
+
+```text
+04:48:09.546Z  agent.completed exit 0 (378.98 s)
++17 ms         verification.passed {gates_run: 1}
++5.74 s        bead.orphaned  ‖  outcome.handled {"action": "none", "outcome": "success"}
+07:17:41.039Z  agent.completed exit 0 (193.38 s)
++19 ms         verification.passed {gates_run: 1}
++6.33 s        bead.orphaned  ‖  outcome.handled {"action": "none", "outcome": "success"}
+```
+
+`outcome: "success"` was **known and recorded**, yet the handler's chosen
+action was **`none`** — no terminal transition, the bead re-queued, and the
+retry layer re-dispatched. The failure path took a stronger action than the
+success path (`alerted` per kill vs `none` per verified success); only the
+timeout path (`deferred`) behaved sanely, and none of the three could end a
+loop whose work was already done. Consequence, quantified in §3.4: 25 of the
+55 kills (45 %) landed after the first verified success, re-doing satisfied
+work, and every later alert fired for a target whose task was already done.
+This is a needle workflow defect — the bead's own task completed 8/8 both
+times.
+
+### 9.3 Timestamp confusion is structural: the pipeline never stamps the death
+
+§8.4 tabulates the five confusion layers; the mechanism generating them is
+that the crash pipeline's recorded instant is not the death. Per kill the
+recorded sequence is `agent.completed` (the only true crash instant) →
+`HANDLING_RELEASE_DONE` heartbeat **+5.10–9.80 s** (median 6.10 s — re-derived
+this session across all 60 crash completions by sequence-ordered pairing) →
+alert-bead row **≤6 ms** after the heartbeat. Any consumer quoting the alert
+bead's `created_at` as "crash time" is wrong by construction, by +5.1–9.8 s
+at minimum — and by a whole event class when a heartbeat is read as a
+distinct crash (§8.4). The UTC-vs-EDT offset and the Aug-15 journald boundary
+compound this mechanically, not accidentally.
+
+### 9.4 Lack of deduplication, and its current countermeasures
+
+Pre-0.4.2 `handle_crash` alerted per kill with no fingerprint, no cooldown,
+no target-state check — re-verified on both ledger sides this session (55
+`action=alerted` events 02:03:43.020Z → 07:04:03.300Z in the log; exactly 55
+`ALERT: Agent crash on bead bf-4k2ws` beads in the store, all created inside
+the storm window). The countermeasures exist and were verified live in
+`scripts/crash-alert-manager.sh`: 300 s cooldown (`ALERT_COOLDOWN_SECONDS`),
+processed-alert tracking (`PROCESSED_ALERTS_FILE`), dedup via
+`scripts/alert-deduplication.sh`, closed-target filtering, and exit-code
+validation separating the −1 sentinel from the 124 cap class. The 36
+still-open historical alert beads remain for their owners — outside this
+bead's scope.
+
+### 9.5 Domain-check code exoneration (re-verified)
+
+§3.5's result stands: read-only git/remote analysis, no Go code path in the
+storm, all four deliverable docs present on `origin/main` (re-verified via
+`git cat-file -e origin/main:<path>` this session), **zero** commits in the
+storm window on `main`/`origin/main`, and the corpus-wide result of zero
+domain-check defects across 157+ investigations. The NEEDLE deficiencies
+above are infrastructure and workflow defects of the agent platform, not of
+the checked application.
+
+---
+
 *Determination by `domchk-7f838f36`, 2026-09-07; §8 appended by
-`domchk-4311aaa8`, 2026-09-07. Every count in §2 was
-re-derived this session from
+`domchk-4311aaa8`, 2026-09-07; §9 appended by `domchk-a7bc56b5`, 2026-09-07.
+Every count in §2 was re-derived this session from
 `~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl` and the
 live repository state; no figure is cited from prior reports without
 independent reproduction. §8's counts were likewise re-derived from the same
-primary log, the live bead store, and `origin/main`.*
+primary log, the live bead store, and `origin/main`. §9's counts were
+re-derived from the same primary log, the live bead store, `origin/main`, and
+live `scripts/crash-alert-manager.sh`.*
