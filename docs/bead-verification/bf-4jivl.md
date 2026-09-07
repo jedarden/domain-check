@@ -60,3 +60,25 @@ The original task was completed successfully. This alert is a duplicate that can
 
 ### Recommended Action
 Close bead bf-4jivl with reason: "Duplicate alert for resolved crash - original task bf-1s6c3 completed successfully"
+
+---
+
+## Correction appended 2026-09-07 (closure bead domchk-a48db4e5)
+
+The **conclusion above stands** — bf-4jivl is a duplicate alert for a resolved crash and can be
+closed — but several of its load-bearing citations are wrong and are corrected here, re-verified
+live on 2026-09-07:
+
+| Claim above | Live verification 2026-09-07 |
+|---|---|
+| Merge commit `7dd79eb` | **Dead SHA** — `git cat-file -t 7dd79eb` fails. The real merge is `42a7b07`, orphaned onto `pre-squash-history-20260816` by the 2026-08-16 squash and not an ancestor of `main`; the on-`main` reconciliation is `46293c5` (2026-08-17) |
+| Remotes "synchronized at commit `63ba024`" | **Dead SHA** — `git cat-file -t 63ba024` fails |
+| "677 commits ahead of `origin/main`" | **0 / 0** ahead/behind (`git rev-list --left-right --count origin/main...HEAD`) |
+| Crash = single post-completion event "after the merge was completed" | The 2026-08-12 event was a **76-dispatch / 71-kill storm** — kernel memcg-OOM SIGKILL of `git push`'s pack-objects on an ≈18 GB repository — not one crash, and not a code defect. The original task did **not** complete through the merge; bf-1s6c3 was closed 2026-08-16 after the repository was repaired |
+
+The subject bead bf-1s6c3 is **CLOSED** (confirmed 2026-09-07), the repository is repaired and
+holding — `.git` 102 MB, 138 loose objects / 1.01 MiB, 0 garbage, effective gc bounds verify
+clean, 0/0 divergence — and the prevention layers are in force. The authoritative record for the
+crash, including a section-by-section corrections table for this 2026-08-26/09-01 doc corpus, is
+**`docs/crash-analysis-bf-1s6c3-2026-09-06.md`** (§11). This report is retained for history; do
+not cite its `7dd79eb` / `63ba024` / "677 commits ahead" figures.
