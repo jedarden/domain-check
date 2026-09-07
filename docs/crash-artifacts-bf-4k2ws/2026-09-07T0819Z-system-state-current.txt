@@ -1,0 +1,20 @@
+# Live system resource state — captured
+2026-09-07T08:19:17Z
+
+## uptime
+ 04:19:17  up 22 days 18:30,  0 users,  load average: 3.51, 5.20, 5.79
+
+## free -h
+               total        used        free      shared  buff/cache   available
+Mem:            62Gi        16Gi        21Gi        17Mi        25Gi        46Gi
+Swap:           24Gi          0B        24Gi
+
+## df -h /
+Filesystem                                              Size  Used Avail Use% Mounted on
+/dev/disk/by-uuid/36a45801-c163-4166-8e67-18da62a5fe2f  444G  374G   48G  89% /
+
+## memory pressure
+MemTotal:       65531832 kB
+MemAvailable:   48317176 kB
+SwapTotal:      25787388 kB
+SwapFree:       25787388 kB
