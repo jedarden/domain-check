@@ -265,6 +265,7 @@ that sprawl is what this section exists to stop.
 | `docs/crash-artifacts-bf-4k2ws/` bundle (2026-09-07) | **Current** — primary-evidence extract; its "FALSE_POSITIVE" item 3 wording predates the 09-07 reclassification and is superseded by the crash report's correction |
 | `docs/crash-investigations/bf-4k2ws/root-cause-analysis-final-bf-4k2ws.md` and the rest of the 2026-09-02 corpus (SIGHUP cascade / "did not crash") | **Superseded** on premise and mechanism; their task-completion finding (8/8 criteria, closed 08-16) stands |
 | `docs/investigations/bf-4k2ws-crash-verification-2026-09-02.md` | Superseded by this document's §2/§3 (its figures were re-verified and extended) |
+| `docs/archive/crash-investigations/crash-documentation-domchk-e3e443bf-2026-09-02.md` (documentation bead `domchk-e3e443bf`'s own 2026-09-02 deliverable, commit `66592dc`; archived by `a883044`) | **Superseded** on premise — "FALSE POSITIVE - No actual crash occurred", SIGHUP (exit −1 misread as signal 1), "Root Cause: NEEDLE crash detection deficiencies"; its findings-and-resolution summary is restated under the current determination in §14; its task-completion finding (closed 2026-08-16, deliverables intact) stands. The same superseded story is also in that bead's Notes (corrected by dated note append 2026-09-07) |
 
 ## 8. Incident chronology summary (bead `domchk-4311aaa8`, 2026-09-07)
 
@@ -918,6 +919,174 @@ the 176-marker count in 13.1 is this bead's own `ls | wc -l`.*
 
 ---
 
+## 14. Investigation summary — final, consolidated (bead `domchk-b3966b66`, 2026-09-07)
+
+Dispatched to "document investigation summary and close alert" against parent
+alert bead `bf-5wxej` — whose 02:50:20Z creation is one of the storm's 55 alert
+instants (§15.1), and whose closure this bead, its blocking closure bead,
+performs in §15.2. This section answers the four summary questions that
+dispatch names, from §1–§13 under §6's append rule, and fulfils §7's promise
+to restate `domchk-e3e443bf`'s findings-and-resolution summary under the
+current determination.
+
+### 14.1 Crash details (the dispatch template's block, corrected)
+
+Field-by-field corrections are tabulated in §15.1. In brief: the exit code is
+the unrecorded-signal sentinel −1 (§8.4), not SIGKILL; the 2026-08-13T02:50:20Z
+timestamp stamps alert bead `bf-5wxej`'s creation — heartbeat + ≤6 ms, itself
+death + 5.1–9.8 s (§8.4) — one of the storm's 55 alert instants, not a distinct
+event; agent `claude-code-glm-4.7`, session `8446529e`, is correct and ran the
+whole 62-attempt loop (§1).
+
+### 14.2 Classification
+
+**INFRASTRUCTURE — the repository-bloat-era kill regime** (§3.6; HIGH
+confidence, §5). Not a workflow failure, service failure, or code defect —
+each a HIGH-confidence exclusion (§4); domain-check code had no role (§3.5).
+
+### 14.3 Root cause (one sentence)
+
+Dispatches running git-remote-heavy work against the then-≈18 GB object store
+inside needle's 12 GiB dispatch scope were killed mid-run when the scope budget
+was exhausted (mechanism chain-inferred via the kernel-proven gc/push siblings
+`bf-4x12ec`/`bf-198ne`, MEDIUM-HIGH, §5), and the retry layer re-queued the
+identical task 55 times with nothing bounding the loop. **Amplifier:**
+verify-then-close debt — two verified successes orphaned, making 25 of the 55
+kills post-completion (§1, §2). **Separate defect:** the alert layer filed one
+alert bead per kill — 55 beads, 17 closed / 36 open / 2 in progress at the
+2026-09-07 re-counts (§8.2, §11.2) — motivating the `crash-alert-manager.sh`
+fixes.
+
+### 14.4 Resolution, and the archived 2026-09-02 deliverable restated
+
+`bf-4k2ws` **completed successfully**: twice inside the loop (04:48:09.546Z,
+07:17:41.039Z, both `verification.passed`, then orphaned), closed
+2026-08-16T15:35:42Z with 8/8 criteria, deliverables on `origin/main`, no
+storm-window commits on main or origin/main (§1, §3.5).
+
+| `domchk-e3e443bf` (2026-09-02, commit `66592dc`, archived `a883044`) | Status under this determination |
+|---|---|
+| Task completed 2026-08-16T15:35:42Z, deliverables intact, repo healthy after cleanup | **Stands** (§1, §2) |
+| Domain-check code exonerated; no action required for the application | **Stands** (§3.5) |
+| NEEDLE deficiencies: no completion detection, timestamp confusion, no dedup | **Stands — consolidated as §9**, with §9.4's caveat that the countermeasures have never fired in production |
+| "FALSE POSITIVE — no actual crash occurred"; "Total Crash Events: 0" | **Superseded** — 55 real kills (§2) |
+| "Exit −1 = SIGHUP (signal 1)" | **Superseded** — unrecorded-signal sentinel (§8.4); zero exit-129s (§4) |
+| FALSE_POSITIVE primary / TOOL ISSUE / INFRASTRUCTURE "tertiary … not active at alert time" | **Superseded** — INFRASTRUCTURE is the primary classification; the bloat was active and causal at every kill |
+| ~40 % / ~30 % / ~60 % / ~10 % pattern percentages | **Superseded** — not evidence-derived (the §11.3 banner over the sibling corpus doc) |
+
+### 14.5 Mitigation strategies applied
+
+Already implemented and committed at summary time; §13 selected each by crash
+type and bound it to its artifact, §10.4 holds the 12-step battery, and §9.4
+scopes the alert layer's effectiveness caveat:
+
+- **Infrastructure (primary class):** `.beads/` fully gitignored (0 tracked
+  files) + 10 MB pre-commit gate (G-1) + persistent `pack.windowMemory=2g` /
+  `pack.deltaCacheSize=1g` / `pack.threads=1` in repo **and** global scope,
+  bounding bare-gc and push pack-objects to ≈3 GiB worst case (`--verify`
+  exit 0); daily repo-health/auto-gc and weekly bounded full-gc timers
+  (§10.1 R1–R4).
+- **Workflow (the amplifier):** `verify-work-completion.sh` close-time marker
+  (176 live at §13's count); the terminal-state fix is external at G-9.
+- **Alert layer (the multiplication):** closed-bead filter, dedup + ledger,
+  300 s cooldown, exit-code validation (`test-crash-alert-fixes.sh` 12/12);
+  the production-effectiveness gap D-1..D-10 is owned by `domchk-b5448b6a`.
+- **Service / code:** N/A (G-11/G-4 external; §3.5 exoneration).
+
+### 14.6 Lessons learned for future prevention
+
+Consolidated lessons are §12 (investigation patterns) and §13.5 (deltas);
+what this closure adds:
+
+1. **A dispatch template is a stale-premise vector.** The template's own
+   crash-details block carried three superseded premises (§15.1); a summary
+   rendered to template would have re-published them. Verify template fields
+   against the current determination before rendering.
+2. **Close an alert against the record, not the template's reason string** —
+   the template's reason cites `docs/crash-investigations/bf-4k2ws/`, which
+   held the superseded corpus until §15.2.1 bannered it file-by-file.
+3. **Parallel appends to one canonical document collide silently.** This
+   summary's first append was lost to a same-file collision that left §15
+   describing a §14 no longer present in the tree; re-read the file
+   immediately before appending and reconcile section numbers after.
+
+*§14 appended by `domchk-b3966b66`, 2026-09-07: a consolidation, quoting
+§1–§13's figures under §6's rule against re-derivation sprawl. First-hand
+this session: the banner-premise greps over the ten §15.2.1 files (each
+banner's named premise grep-confirmed in its own file), the 55-ALERT-bead
+re-count at closure (17 closed / 36 open / 2 in progress, byte-exact vs
+§8.2/§11.2), and the at-closure repo snapshot — `.git` 105 MB, 234 loose
+objects / 2.40 MiB (sixth same-day snapshot in the §2 creep series), one
+pack 99.11 MiB — with local `main` 0/0 against `origin/main` at append
+time.*
+
+---
+
+## 15. Alert closure and dispatch-template corrections — bead `domchk-b3966b66`, 2026-09-07
+
+Dispatched to "document investigation summary and close alert" against parent
+alert bead `bf-5wxej`, with a summary template whose crash-details block
+carries three of the stale premises this determination corrects. The summary
+content itself is §14, written by this bead on its 2026-09-07 re-dispatch:
+the first attempt's in-worktree append was lost uncommitted to a same-file
+collision (the §15 text below survived it describing a §14 that no longer
+existed in the tree), and `domchk-e3e443bf`'s 2026-09-02 deliverable — the
+findings-and-resolution summary §7 restates — is frozen in `docs/archive/`
+with its correction recorded at bead level. **This section adds only what
+§14 does not cover**: the template's own corrections, and this bead's two
+actions.
+
+### 15.1 The dispatch template's crash-details block, corrected
+
+| Template field | As dispatched | Correction per this determination |
+|---|---|---|
+| Bead ID | `bf-4k2ws` | Correct — the victim/task bead, closed 2026-08-16T15:35:42Z with 8/8 criteria (§1) |
+| Exit code | −1 "(SIGKILL)" | −1 is the **unrecorded-signal sentinel** (§8.4), not a readable signal; the SIGKILL-class memcg-OOM mechanism is **chain-inferred** for this bead (§5: MEDIUM-HIGH) because no Aug-13 kernel record can exist |
+| Agent | `claude-code-glm-4.7` | Correct — worker session `8446529e` ran the whole 62-attempt loop (§1) |
+| Timestamp | 2026-08-13T02:50:20Z | That instant is alert bead `bf-5wxej`'s **creation** — bead-creation = HANDLING_RELEASE_DONE heartbeat + ≤6 ms, heartbeat = death + 5.1–9.8 s (§8.4), so it stamps a kill at ≈02:50:11–15Z — one of the storm's 55 alert instants, **not** a distinct 56th event; the death instants run 02:03:33.620Z → 07:03:53.920Z |
+
+### 15.2 What this bead changed — artifacts organized in place, and the closure record
+
+1. **`docs/crash-investigations/bf-4k2ws/` — the dispatch's named directory —
+   updated in place, no new file.** Dated SUPERSEDED banners (the §11.3
+   pattern) added to the ten still-unbannered 2026-08/09-era files in the
+   bundle, each naming that file's own stale premises:
+   `comprehensive-crash-report-bf-4k2ws.md`,
+   `crash-diagnostics-summary-domchk-af961320.md`,
+   `crash-evidence-summary-2026-09-02.md`,
+   `crash-evidence-summary-bf-4k2ws.md`, `crash-investigation-report.md`,
+   `crash-summary-2026-08-26.md`, `final-investigation-report-2026-09-02.md`,
+   `fixes.md` (its banner records that the six fixes stand while the causal
+   premise does not), `investigation-summary-domchk-9377ad1d.md`,
+   `needle-workspace-log-analysis-bf-4k2ws.md`. With
+   `root-cause-analysis-final-bf-4k2ws.md` and
+   `root-cause-analysis-signal-minus1.md` (bannered by `domchk-e02032f2`),
+   every file in the bundle now routes to this determination, which is §7's
+   "rest of the 2026-09-02 corpus" row enforced file-by-file.
+
+2. **Parent alert bead `bf-5wxej` — final status.** Its Notes carried the
+   superseded 2026-08-16-era story ("resource exhaustion … during read-only
+   git analysis … 726 local commits … no actual divergence … standard git
+   push resolves the situation"). A dated correction was appended (never a
+   silent replace): the divergence half stands — 0/0, re-verified through
+   this chain (§8.3) — but the crash is real, the mechanism is §3.6's, and
+   "no further action required" was written three days before the repository
+   bloat that caused the storm was even diagnosed. Stale co-resident labels
+   removed at closure, per the `domchk-bc734e55` precedent (commit `2c78c69`):
+   `split-child` (re-split trigger on a completed umbrella) and
+   `verification-failed` (the 2026-08-26 "duplicate alert for a non-existent
+   crash" verification, commit `03048d9`, is superseded by §11's byte-exact
+   verification). Closed with a reason citing this document rather than the
+   dispatch template's reason string — the template cites
+   `docs/crash-investigations/bf-4k2ws/` as where the findings live, and that
+   directory holds the superseded corpus.
+
+*§15 appended by `domchk-b3966b66`, 2026-09-07. It re-derived no figures —
+the 15.1 table quotes §1, §5 and §8.4's derivations, and the summary content
+itself is §14's; its only first-hand work is the 15.2.1 banner pass (each
+bannered file was read for its own claims so its banner names them) and the
+15.2.2 `bf-5wxej` note/label/closure actions.*
+
 *Determination by `domchk-7f838f36`, 2026-09-07; §8 appended by
 `domchk-4311aaa8`, 2026-09-07; §9 appended by `domchk-a7bc56b5`, 2026-09-07.
 Every count in §2 was re-derived this session from
@@ -936,4 +1105,7 @@ itemized in its section footer, while figures quoted from §8–§9 (attempt
 chronology, orphan deltas, heartbeat deltas) are those beads' first-hand
 derivations, not re-derived there. §13 appended by `domchk-8a20810b`; its
 battery lines and methodology are itemized in its §13.4 footer and were all
-executed live at HEAD `e72af3c`.*
+executed live at HEAD `e72af3c`. §14 and §15 appended by `domchk-b3966b66` —
+§14 a consolidation quoting §1–§13 under §6's rule and restating the
+§7-listed `domchk-e3e443bf` deliverable, §15 re-deriving no figures; their
+first-hand lines and closure actions are itemized in their section footers.*

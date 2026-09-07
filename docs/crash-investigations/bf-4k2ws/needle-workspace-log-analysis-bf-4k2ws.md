@@ -1,5 +1,7 @@
 # Needle Workspace Log Analysis: Bead bf-4k2ws
 
+> **SUPERSEDED (2026-09-07):** the “FALSE POSITIVE” verdict and the 2026-08-16 SIGHUP-cascade attribution below are wrong — the Aug-13 workspace log shows a **62-attempt loop (55 × exit −1, 5 × 600 s-cap timeout, 2 × success)** on bf-4k2ws, 02:01–07:18Z; the log analysis that reaches “did not crash” reads the wrong day's events. Current determination: **INFRASTRUCTURE (repository-bloat-era kill regime)** — [`docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`](../../investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md). The task-completion finding (8/8 criteria met, closed 2026-08-16T15:35:42Z) stands.
+
 **Analysis Date:** 2026-09-02  
 **Analyzed By:** domchk-e0be1721  
 **Original Reported Crash:** 2026-08-13T04:28:37 (later corrected to 2026-08-13T05:40:55)  

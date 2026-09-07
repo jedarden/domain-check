@@ -1,5 +1,7 @@
 # Crash Diagnostics Summary: Bead bf-4k2ws
 
+> **SUPERSEDED (2026-09-07):** the SIGHUP-cascade attribution and the “9 crashes” count below are superseded — the deaths it examines are the alert beads' own Aug-16 kills, while bf-4k2ws itself took **55 real exit −1 kills on 2026-08-13 (02:01–07:18Z)**; exit −1 is the unrecorded-signal sentinel, not SIGHUP. Current determination: **INFRASTRUCTURE (repository-bloat-era kill regime)** — [`docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`](../../investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md). The task-completion finding (8/8 criteria met, closed 2026-08-16T15:35:42Z) stands.
+
 **Investigation Task:** domchk-af961320 (Gather Crash Diagnostics)
 **Original Bead ID:** bf-4k2ws
 **Investigation Date:** 2026-09-02

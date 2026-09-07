@@ -1,5 +1,7 @@
 # Crash Prevention Fixes - bf-4k2ws Pattern
 
+> **SUPERSEDED (2026-09-07):** the six alert-layer fixes documented below are real and still pass their self-test (scripts/test-crash-alert-fixes.sh, 12/12 this session), but the causal premise is superseded: the target had **not** already completed when most kills fired (25 of 55 post-completion, 30 mid-task), the mechanism is the repository-bloat-era kill regime rather than SIGHUP or host OOM, and the fixes' effectiveness in production is separately open (determination §9.4, D-1..D-10). Current determination: **INFRASTRUCTURE (repository-bloat-era kill regime)** — [`docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`](../../investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md). The task-completion finding (8/8 criteria met, closed 2026-08-16T15:35:42Z) stands.
+
 **Investigation:** bf-4k2ws crash pattern (exit code -1, SIGKILL/SIGHUP)  
 **Classification:** FALSE_POSITIVE - Infrastructure event  
 **Fix Date:** 2026-09-02  
