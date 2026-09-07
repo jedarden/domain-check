@@ -45,7 +45,7 @@ NOT the "post-completion false positive" the 2026-09-01 docs classified it as.
 | Code defects found | ✅ None | Task was a git history reconciliation; domain-check code never touched |
 | Work loss | ✅ None | Deliverable on `main` via `46293c5`; remotes converged (verified 2026-09-06) |
 | Repository repaired | ✅ Holding | 18 GB → ~100 MB on 2026-09-01; re-verified 2026-09-06 (§12) |
-| Prevention layers | ✅ 5 of 6 in force | One in-repo gap (§8 item 3); one NEEDLE-side lever (§8 item 6) |
+| Prevention layers | ✅ 6 of 6 in force | In-repo gap (§8 item 3) **closed 2026-09-07** — installer committed as `dfa60a9`; the NEEDLE-side lever (§8 item 6) lives outside this repository |
 
 ---
 
@@ -295,7 +295,7 @@ Ordered as in the classification's remediation path; every in-repo layer re-veri
 |---|---|---|
 | 1 | Pack down the bloated object store — `scripts/safe-git-gc.sh`, **never** bare `git gc --aggressive` | ✅ Done 2026-09-01; verified holding: ~100 MB, `fsck` clean, 0 garbage |
 | 2 | Bead state cannot re-enter git — `.gitignore` covers `.beads/`, `*.db`, `*.jsonl`; 0 tracked files | ✅ In force |
-| 3 | Pre-commit backstop blocking staged files > 10 MB | ⚠️ **Gap** — installed at `.git/hooks/pre-commit` but per-clone and drifted from the tracked `scripts/pre-commit-repo-size-hook`; no installer committed (§9, action 1) |
+| 3 | Pre-commit backstop blocking staged files > 10 MB | ✅ **Closed 2026-09-07** (`dfa60a9`, domchk-d9117f42) — was the gap recorded below; now a tracked installer (`scripts/setup-git-hooks.sh` install/`--check`/`--uninstall`), a rewritten hook source (NUL-delimited paths, 10 MB per-file + 50 MB per-commit caps, hard block on anything staged under `.beads/`), `.githooks/pre-commit`, and a 22-assertion self-test (`scripts/test-setup-git-hooks.sh`). Re-verified live 2026-09-07: `--check` reports the installed hook byte-identical to tracked source; self-test 22/22 |
 | 4 | Bound the pack-objects path for bare gc **and** push — `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` (threads pinned: the window limit is per-thread) | ✅ Applied repo-local + global; `./scripts/setup-git-gc-config.sh --verify` resolves the effective bound and passes |
 | 5 | Scheduled repo-health checks + bounded gc — six systemd **user timers** (NixOS: no crontab) | ✅ Installed and firing (re-verified 2026-09-06); edit units → `systemctl --user daemon-reload` |
 | 6 | Re-dispatch stop-condition for satisfied work — the amplifier | ❌ NEEDLE-fleet-side, outside this repository. Recorded as the systemic finding: it is what converted one kill into 71 |
@@ -315,7 +315,7 @@ du -sh .git/objects              # >10GB = HIGH RISK → preemptive cleanup
 
 | # | Action | Owner | Status |
 |---|---|---|---|
-| 1 | Commit a **pre-commit hook installer** (`scripts/setup-git-hooks.sh` exists untracked; the installed hook has drifted from `scripts/pre-commit-repo-size-hook`) so fresh clones are protected — the one open in-repo gap | domain-check repo maintainers | Open — deserves a bead |
+| 1 | Commit a **pre-commit hook installer** (`scripts/setup-git-hooks.sh` exists untracked; the installed hook has drifted from `scripts/pre-commit-repo-size-hook`) so fresh clones are protected — the one open in-repo gap | domain-check repo maintainers | ✅ **Closed 2026-09-07** — committed as `dfa60a9` (bead domchk-d9117f42); see §8 item 3 |
 | 2 | **Re-dispatch stop-condition** for satisfied work (deliverable present, bead still open) plus dispatch-time resource gating and backoff | NEEDLE fleet (outside this repo) | Open — systemic finding |
 | 3 | Verify-then-close the split children **bf-31p3g / bf-7d8l5 / bf-6b0fl** against current history — the remotes are already reconciled, so a retry would manufacture duplicate work | Next workflow-debt pass | Open |
 | 4 | Close parent alert **bf-5cd2d** via its dedicated closure bead (analysis children do not close their parent alert) | Alert-closure bead owner | Open |
@@ -389,6 +389,33 @@ Ran directly, not copied from the chain:
   `git ls-files .beads` → 0; `.gitignore:66` `.beads/`
 - **Convergence:** `git rev-list --left-right --count HEAD...origin/main` → 0 / 0;
   GitHub mirror `ls-remote refs/heads/main` → `c8dc3cf` = local HEAD
+
+### Re-verification 2026-09-07 (domchk-dedc99c7 — the chain's final-documentation bead)
+
+Every load-bearing claim above re-run first-hand, all byte-exact against the committed
+extracts and live `git`:
+
+- **Census recounted:** `agent.completed` × 76 → exit −1 × 71, 124 × 4, 0 × 1;
+  `outcome.classified` crash/timeout/success = 71/4/1; `outcome.handled` alerted × 71
+  (deferred × 4, none × 1); first claim 21:31:27.663Z; first crash 21:36:44.519Z; final
+  attempt exit 0 at 02:01:22.561Z (extracts total 945 + 513 lines)
+- **Ancestry:** `42a7b07` = commit, 2026-08-12T21:47:07Z, "Merge reconciliation: Forgejo and
+  GitHub remote histories" — **not** an ancestor of `main`; `46293c5` **is**
+- **Repository:** `.git` 102 MB · 62 loose objects / 408 KiB · 3 packs · garbage 0 ·
+  `git ls-files .beads` → 0 · `.gitignore:66` `.beads/`, `:70` `*.jsonl`
+- **Convergence:** `HEAD...origin/main` → 0 / 0; GitHub mirror `main` = local HEAD
+  (`e288a6371657`)
+- **Prevention layer 4:** `./scripts/setup-git-gc-config.sh --verify` exit 0 — effective
+  windowMemory=2g / threads=1 / deltaCache=1g, worst case ≈3072 MiB within ceiling
+- **Prevention layer 3 (correction above):** `scripts/setup-git-hooks.sh` + rewritten
+  `scripts/pre-commit-repo-size-hook` + `.githooks/pre-commit` all tracked on `origin/main`
+  (`dfa60a9`); `--check` → hook byte-identical to source; `scripts/test-setup-git-hooks.sh`
+  → 22/22. §8 item 3 and §9 action 1 updated accordingly
+
+**Dispatch note:** this bead (domchk-dedc99c7, "Task 4: Final Documentation" of the
+bf-1s6c3 auto-split chain) found its deliverable already rendered by `af9b461` +
+`fcfa79d` (domchk-ed3ed12b, closed) and therefore shipped no new summary document —
+the only change here is the dated correction above.
 
 ---
 
