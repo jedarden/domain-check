@@ -300,6 +300,15 @@ push would materialize the whole series in one pack-objects run, the bf-1ea4g sh
   `auto-gc-trigger.sh --dry-run`, which calls the helper directly (by path) and surfaces
   its output in `.beads/logs/git-gc-check.log`; the helper's exit codes are swallowed so
   the daily script's 0/1/2 contract is unchanged.
+  *(Landed 2026-09-07, domchk-cb9eb4de: this wiring call plus
+  `scripts/test-unpushed-backlog-wiring.sh` (11 assertions) existed only as uncommitted
+  worktree edits until then — the wiring's author bead domchk-87ef5683 closed before
+  landing it, so this bullet documented a daily carrier no ref contained. Landing it is
+  what makes the sentence above true in history, not just in this worktree: the
+  2026-09-07 empty-tree accident (2e8ce7a/2ec91ec) is the standing proof that
+  worktree-only prevention is one bad push from gone. The `auto-gc-trigger.sh` DRY_RUN
+  command text also differs between worktree and HEAD — that residual hunk is another
+  bead's, not this wiring.)*
 
 ```bash
 ./scripts/check-unpushed-backlog.sh                    # this repo, right now
