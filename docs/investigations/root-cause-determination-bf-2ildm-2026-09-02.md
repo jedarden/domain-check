@@ -6,6 +6,18 @@
 **Classification:** ✅ FALSE_POSITIVE - Alert Generation System Bug  
 **Confidence Level:** HIGH
 
+> **Superseded 2026-09-07 (domchk-a863a1f9).** This report's bottom-line claim —
+> "Bead bf-2ildm did NOT crash" — is false at the kill level: the 2026-09-07
+> per-attempt index (`docs/crashes/bf-2ildm/attempt-index.tsv`) records **38 real
+> exit −1 kills** of bf-2ildm on 2026-08-13 (13:37:24Z → 15:53:28Z), the
+> repository-bloat regime. The error was evidence selection: the single-slot trace
+> archive this report relied on held only the successful 2026-08-16 retry
+> (exit 0), which had overwritten the crash-era attempts — the alert's exit −1 was
+> real, not placeholder data. The alert-level FALSE_POSITIVE verdict, this
+> report's task-completion finding, and its five alert-layer fixes all stand.
+> Current determination: `bf-2ildm-root-cause-determination-domchk-a863a1f9-2026-09-07.md`
+> (same directory), §4.
+
 ---
 
 ## Executive Summary
