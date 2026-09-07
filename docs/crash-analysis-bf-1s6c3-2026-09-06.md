@@ -2151,3 +2151,51 @@ resource analysis.
 
 **Disposition:** no new document — this dated subsection is the bead's only change, and the
 2026-08-13 path is deliberately **not** created. Closing unblocks alert bf-kk87a.
+
+### Alert closure 2026-09-07 (bf-kk87a — the alert bead for attempt 52's kill, instant 00:10:08.271120366+00:00)
+
+bf-kk87a is the alert the §-above dedup close unblocked: "ALERT: Agent crash on bead bf-1s6c3",
+created 2026-08-13T00:10:08.277Z — 2 h 39 m into the storm's kill window (21:31Z→02:01Z, 76
+dispatches / 71 memcg-OOM kills, §1) and ~2 h after sibling alert bf-3laof (§ above). The
+dispatch instant is the kill's `HANDLING_RELEASE_DONE` heartbeat, not the death: the extract
+bracket (`docs/crashes/bf-1s6c3/needle-events-2026-08-13-bf-1s6c3.jsonl`, session 8446529e,
+seq 6088–6101) shows **attempt 52 of 76** — `agent.dispatched` 00:05:23.236Z →
+`agent.completed` **00:10:01.762624915Z, exit −1, duration 278,219 ms** →
+`outcome.classified` "crash" → `bead.released` 00:10:10.828Z, with the heartbeat at
+00:10:08.271 landing 6.5 s after the kill. Attempt 52 is mid-task (4.6 min in), not one of the
+four 600-s cap hits. The attempt ordinal is anchored to the canon's two known mappings,
+recomputed first-hand from the same extracts: attempt 23 = 22:34:30.379Z (bf-jtldl, § above)
+and attempt 58 = 00:28:30.196Z (§ above) both reproduce exactly, so attempt 52 is not a
+numbering artifact.
+
+**What the bead already carries, and what it gets wrong.** Both closure blockers are closed —
+domchk-badb4916 ("Close crash investigation and update documentation", closed 2026-09-02,
+verified `docs/incidents/bf-kk87a-agent-crash-summary.md`) and domchk-762caf4b (§ above,
+closed 2026-09-07, commit df91315) — which is why this alert's earlier closes bounced and this
+one should stick. Two prior-attempt documents contradict each other, and the bead's Notes
+inherited the wrong half: `docs/bead-verification/bf-kk87a.md` (commit c7a50e0) claims
+"**Agent timeout (600s)** exceeded … no OOM condition, pure timeout issue", and the bead
+Notes repeat it ("terminated for exceeding timeout, not a system resource failure"). That is
+superseded twice over: attempt 52's exit −1 is a memcg-OOM SIGKILL under the 12-GiB dispatch
+scope (§6 — the mechanism), while the 600-s dispatch cap is the **exit-124** class (4 of 76
+attempts), which attempt 52 — killed at 278 s — is not; and the later
+`docs/incidents/bf-kk87a-agent-crash-summary.md` (commit 5519bbf) already carries the
+corrected classification (INFRASTRUCTURE, OOM SIGKILL, repo-bloat era). The 2026-08-26
+verification doc's "duplicate alert for resolved crash" disposition, however, was right: the
+parent task closed 2026-08-16 and stays closed.
+
+**First-hand re-checks (this bead's own run, 2026-09-07):** both committed extracts re-parsed
+— 1,458 events / 76 `agent.completed` / exit census −1 × 71 · 124 × 4 · 0 × 1, matching the
+recount at §12's head. Live repository: `.git` 103 MB · 135 loose objects / 1.47 MiB · 1 pack
+99.11 MiB · garbage 0 · `git fsck --connectivity-only` exit 0 (dangling-only).
+`origin/main..HEAD` = 0 and `HEAD..origin/main` = 0, both at 805e796b.
+`scripts/test-crash-fix-bf-1s6c3.sh` re-run live: exit 0, all 20 assertions pass (the
+.gitignore + pre-commit + safe-gc + monitoring layers that make the storm's cause unable to
+recur). No open blocker remains on the alert.
+
+**Disposition:** alert closed **resolved** — the crash it names is attempt 52 of the
+already-canonicalized storm: classified INFRASTRUCTURE (repo-bloat era), root-caused through
+§§1–11, fixed, and re-verified live today; no new document, this dated subsection is its only
+change. Stale labels `verification-failed` and the co-resident `split-child` were removed;
+`alert` / `crash` / `signal--1` / `umbrella` kept as accurate descriptors of what the alert
+reported and what it became.
