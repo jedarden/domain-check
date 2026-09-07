@@ -487,6 +487,367 @@ validation checks. Re-runnable end to end:
 Step 4 (`domchk-884dd8ae`) should re-run rather than cite these counts — `main`
 has moved on every single chain run so far (1,593 → 1,859 → 1,864 → 1,872).
 
+## Complete Statistics Report — 2026-09-07 (domchk-884dd8ae)
+
+**Step 4 and final step of the `bf-y24az` divergence chain: every metric from
+steps 1–3 assembled into one structured document — no narrative analysis (the
+final analysis document consumes this section and `report.json`).** Per step 1's
+standing instruction the whole pipeline was **re-run fresh at this dispatch**
+(`.beads/state/domchk-884dd8ae/`, extractor + divergence metrics + unique/authors
++ this compilation), not cited from steps 1–3 — and `main` moved again:
+1,872 → **1,873** (the +1 is step 3's own doc commit `764998a`). All three live
+refs sit at **`764998a`** and are 0/0 against each other with byte-identical
+hash sets; the pre-fetch lag on `github-mirror/main` (1 behind, `ba231732`) was
+caught up by this run's fetch — mirror sync lag is not divergence, as step 3
+also recorded.
+
+### Commit counts
+
+| Ref | Role | Tip | Commits |
+|---|---|---|---|
+| `main` | target branch (local) | `764998a32fc7` | **1,873** |
+| `origin/main` | Forgejo (source of truth) | `764998a32fc7` | **1,873** |
+| `github-mirror/main` | GitHub mirror | `764998a32fc7` | **1,873** |
+| `pre-squash-history-20260816` | frozen history branch | `7e4edf6cfbf4` | **722** |
+
+Each count is confirmed by three independent statements in the same snapshot —
+step 1's extraction, step 2's totals, and step 3's per-ref counts all agree
+(`consistency:commit-counts-agree`).
+
+### Divergence point and time metrics
+
+Only one pair is genuinely diverged (both sides ahead); for the mirror pairs
+the common ancestor *is* the shared tip, so no split exists to date.
+
+| Pair | Merge-base | Diverged | Ahead / behind |
+|---|---|---|---|
+| `main` \| `origin/main` | `764998a32fc7` (the shared tip) | no | 0 / 0 |
+| `main` \| `github-mirror/main` | `764998a32fc7` (the shared tip) | no | 0 / 0 |
+| `main` \| `pre-squash-history-20260816` | `8373e5d96610` | **yes** | 1,871 / 720 |
+
+| Real-split metric | Value |
+|---|---|
+| Divergence point | `8373e5d96610` "migrate: rehydrate the bead workspace from bead-forge to bead-rs" |
+| Its commit date | **2026-08-15T13:56:53+00:00** |
+| Time since divergence | **23d 3h 40m 50s** at 2026-09-07T17:37:43+00:00 = **23.1534 days** = **555.6808 hours** |
+| Pre-squash branch's own lifetime after the split | 1d 8h 21m 56s (merge-base → tip `7e4edf6cfbf4`, 2026-08-16T22:18:49+00:00) |
+| Time the pre-squash branch has been frozen | 21d 19h 18m 54s (age of its tip) |
+
+The two sides share exactly **two** commit hashes: the squashed root
+`00117cb8` ("fix: remove unused time import…", 2026-08-09, a parentless commit
+representing everything before it) and the rehydrate migration
+`8373e5d96610` itself, whose sole parent is that root.
+Every other commit on either side is unique to that side.
+
+### Unique commits per pair
+
+| Pair | Unique to first | Unique to second | Hash sets |
+|---|---|---|---|
+| `main` \| `origin/main` | **0** | **0** | byte-identical |
+| `main` \| `github-mirror/main` | **0** | **0** | byte-identical |
+| `main` \| `pre-squash-history-20260816` | **1,871** | **720** | diverged |
+
+Divergence ratio on the real split: **2.60×** (main-only vs
+pre-squash-only). There are no unique commits on either side of the
+Forgejo/GitHub pair — the mirror is faithful, and the repo is not diverged
+from either remote.
+
+### Author distribution per branch
+
+Aggregated by author email; every branch's per-author counts sum exactly to its
+commit total.
+
+| Branch | Distinct authors | Commits | Contributors |
+|---|---|---|---|
+| `main` | 2 | 1,873 | `jedarden <github@jedarden.com>` **1,872** (99.95%), `jedarden <gitea@local.domain>` **1** (0.05%) |
+| `origin/main` | 2 | 1,873 | identical to `main` (byte-identical) |
+| `github-mirror/main` | 2 | 1,873 | identical to `main` (byte-identical) |
+| `pre-squash-history-20260816` | 1 | 722 | `jedarden <github@jedarden.com>` **722** (100.0%) |
+
+The two `jedarden` identities differ only in email; `gitea@local.domain`'s
+single commit (`a32662b32bbf`, 2026-08-24) is a pre-standardization author
+string, not a second human.
+
+### Author distribution of the unique sets
+
+| Set | Commits | Breakdown | Date range |
+|---|---|---|---|
+| `main`-only (post-split) | 1,871 | `jedarden <github@jedarden.com>` 1,870 (99.95%); `jedarden <gitea@local.domain>` 1 (0.05%) | 2026-08-16T18:20:34-04:00 → 2026-09-07T13:27:35-04:00 |
+| `pre-squash`-only | 720 | `jedarden <github@jedarden.com>` 720 (100.0%) | 2026-08-10T11:42:27-04:00 → 2026-08-16T18:17:58-04:00 |
+
+The date ranges confirm step 2's timeline (strictly post-split vs strictly
+pre-freeze), and authorship does not differentiate the sides — the split is
+purely temporal squash-vs-frozen-history, not a multi-author fork.
+
+### Structured output (complete, machine-readable)
+
+```json
+{
+  "bead": "domchk-884dd8ae",
+  "chain": "bf-y24az 'Calculate divergence statistics' — step 4 of 4",
+  "compiled_at": "2026-09-07T17:41:00+00:00",
+  "snapshot": {
+    "computed_at": "2026-09-07T17:37:43+00:00",
+    "refs": {
+      "main": {
+        "tip": "764998a32fc73f4c7661be454aadc94bf3452a98",
+        "commit_count": 1873
+      },
+      "origin/main": {
+        "tip": "764998a32fc73f4c7661be454aadc94bf3452a98",
+        "commit_count": 1873
+      },
+      "github-mirror/main": {
+        "tip": "764998a32fc73f4c7661be454aadc94bf3452a98",
+        "commit_count": 1873
+      },
+      "pre-squash-history-20260816": {
+        "tip": "7e4edf6cfbf49782f9697ead0b4a865606c8ce03",
+        "commit_count": 722
+      }
+    },
+    "remotes_fresh": {
+      "origin": true,
+      "github-mirror": true
+    }
+  },
+  "commit_counts": {
+    "per_ref": {
+      "main": 1873,
+      "origin/main": 1873,
+      "github-mirror/main": 1873,
+      "pre-squash-history-20260816": 722
+    },
+    "total_live_refs": 1873,
+    "total_frozen_ref": 722,
+    "agree_across_steps": true
+  },
+  "divergence": {
+    "real_split": {
+      "pair": "main | pre-squash-history-20260816",
+      "merge_base": "8373e5d966109b3cea4fac90cb12d029b2031492",
+      "subject": "migrate: rehydrate the bead workspace from bead-forge to bead-rs",
+      "commit_date": "2026-08-15T13:56:53+00:00",
+      "time_since_divergence": {
+        "seconds": 2000450,
+        "human": "23d 3h 40m 50s",
+        "days": 23.1534,
+        "hours": 555.6808,
+        "at": "2026-09-07T17:37:43+00:00"
+      },
+      "frozen_tip": {
+        "hash": "7e4edf6cfbf49782f9697ead0b4a865606c8ce03",
+        "subject": "chore: update needle predispatch SHA after crash resolution for bf-3ghq4",
+        "committer_date": "2026-08-16T22:18:49+00:00",
+        "age_at_compute_human": "21d 19h 18m 54s",
+        "divergence_point_to_comparison_tip": "1d 8h 21m 56s"
+      },
+      "shared_commits": [
+        "00117cb879ecba7b1a819d80f1e4980ccb5d2881",
+        "8373e5d966109b3cea4fac90cb12d029b2031492"
+      ]
+    },
+    "pairs": [
+      {
+        "pair": "main | origin/main",
+        "merge_base": "764998a32fc73f4c7661be454aadc94bf3452a98",
+        "diverged": false,
+        "ahead_a_only": 0,
+        "behind_b_only": 0,
+        "since_divergence_human": "0h 10m 8s"
+      },
+      {
+        "pair": "main | github-mirror/main",
+        "merge_base": "764998a32fc73f4c7661be454aadc94bf3452a98",
+        "diverged": false,
+        "ahead_a_only": 0,
+        "behind_b_only": 0,
+        "since_divergence_human": "0h 10m 8s"
+      },
+      {
+        "pair": "main | pre-squash-history-20260816",
+        "merge_base": "8373e5d966109b3cea4fac90cb12d029b2031492",
+        "diverged": true,
+        "ahead_a_only": 1871,
+        "behind_b_only": 720,
+        "since_divergence_human": "23d 3h 40m 50s"
+      }
+    ]
+  },
+  "unique_commits": {
+    "main|origin/main": {
+      "a_only": 0,
+      "b_only": 0,
+      "identical_hash_sets": true
+    },
+    "main|github-mirror/main": {
+      "a_only": 0,
+      "b_only": 0,
+      "identical_hash_sets": true
+    },
+    "main|pre-squash-history-20260816": {
+      "a_only": 1871,
+      "b_only": 720,
+      "identical_hash_sets": false
+    }
+  },
+  "author_distribution": {
+    "main": {
+      "distinct_authors": 2,
+      "total_commits": 1873,
+      "authors": [
+        {
+          "name": "jedarden",
+          "email": "github@jedarden.com",
+          "commits": 1872,
+          "share_pct": 99.95,
+          "first": "2026-08-09T13:00:56-04:00",
+          "last": "2026-09-07T13:27:35-04:00"
+        },
+        {
+          "name": "jedarden",
+          "email": "gitea@local.domain",
+          "commits": 1,
+          "share_pct": 0.05,
+          "first": "2026-08-24T12:40:24Z",
+          "last": "2026-08-24T12:40:24Z"
+        }
+      ]
+    },
+    "github-mirror/main": {
+      "distinct_authors": 2,
+      "total_commits": 1873,
+      "authors": [
+        {
+          "name": "jedarden",
+          "email": "github@jedarden.com",
+          "commits": 1872,
+          "share_pct": 99.95,
+          "first": "2026-08-09T13:00:56-04:00",
+          "last": "2026-09-07T13:27:35-04:00"
+        },
+        {
+          "name": "jedarden",
+          "email": "gitea@local.domain",
+          "commits": 1,
+          "share_pct": 0.05,
+          "first": "2026-08-24T12:40:24Z",
+          "last": "2026-08-24T12:40:24Z"
+        }
+      ]
+    },
+    "origin/main": {
+      "distinct_authors": 2,
+      "total_commits": 1873,
+      "authors": [
+        {
+          "name": "jedarden",
+          "email": "github@jedarden.com",
+          "commits": 1872,
+          "share_pct": 99.95,
+          "first": "2026-08-09T13:00:56-04:00",
+          "last": "2026-09-07T13:27:35-04:00"
+        },
+        {
+          "name": "jedarden",
+          "email": "gitea@local.domain",
+          "commits": 1,
+          "share_pct": 0.05,
+          "first": "2026-08-24T12:40:24Z",
+          "last": "2026-08-24T12:40:24Z"
+        }
+      ]
+    },
+    "pre-squash-history-20260816": {
+      "distinct_authors": 1,
+      "total_commits": 722,
+      "authors": [
+        {
+          "name": "jedarden",
+          "email": "github@jedarden.com",
+          "commits": 722,
+          "share_pct": 100.0,
+          "first": "2026-08-09T13:00:56-04:00",
+          "last": "2026-08-16T18:17:58-04:00"
+        }
+      ]
+    }
+  },
+  "unique_set_authors": {
+    "main-only": {
+      "commits": 1871,
+      "authors": [
+        {
+          "email": "github@jedarden.com",
+          "commits": 1870,
+          "first": "2026-08-16T18:20:34-04:00",
+          "last": "2026-09-07T13:27:35-04:00"
+        },
+        {
+          "email": "gitea@local.domain",
+          "commits": 1,
+          "first": "2026-08-24T12:40:24Z",
+          "last": "2026-08-24T12:40:24Z"
+        }
+      ]
+    },
+    "pre-squash-history-20260816-only": {
+      "commits": 720,
+      "authors": [
+        {
+          "email": "github@jedarden.com",
+          "commits": 720,
+          "first": "2026-08-10T11:42:27-04:00",
+          "last": "2026-08-16T18:17:58-04:00"
+        }
+      ]
+    }
+  },
+  "validation": {
+    "upstream_checks": "17/17",
+    "compilation_checks": "16/16",
+    "completeness": {
+      "commit_counts": true,
+      "divergence_timestamp": true,
+      "unique_commit_counts": true,
+      "author_distribution": true,
+      "top_contributors": true,
+      "time_since_divergence": true
+    },
+    "complete": true
+  },
+  "artifacts": {
+    "validation.json": ".beads/state/domchk-884dd8ae/validation.json",
+    "metrics.json": ".beads/state/domchk-884dd8ae/metrics.json",
+    "stats.json": ".beads/state/domchk-884dd8ae/stats.json",
+    "report.json": ".beads/state/domchk-884dd8ae/report.json"
+  }
+}
+```
+
+### Completeness validation
+
+**17/17 upstream checks**
+(step 1's 9 extraction + step 3's 8 statistics) and **16/16**
+compilation checks pass, every one re-verified here rather than trusted:
+commit counts agreeing across the three steps, unique counts matching step 2's
+ahead/behind, shared-history size identical from both sides of each pair,
+per-author sums equal to branch totals, unique-set authorship within the branch
+distribution, the merge-base present in both extracts, and mirror-pair
+equivalence. All acceptance-criteria metrics are present:
+`commit_counts`, `divergence_timestamp`, `unique_commit_counts`, `author_distribution`, `top_contributors`, `time_since_divergence`.
+
+Raw records — `validation.json`, `metrics.json`, `stats.json`,
+`report.json` — live in gitignored `.beads/state/domchk-884dd8ae/` with the
+four scripts (`extract_commits.py`, `compute_divergence_metrics.py`,
+`compute_unique_commits_authors.py`, `compile_report.py`, plus this renderer),
+re-runnable end to end. **The final analysis document should consume
+`report.json` or the tables above**, not `bf-y24az`'s 2026-09-02 notes — every
+figure there is superseded (1,593 → 1,873 on `main`; divergence 2026-08-15,
+not 2026-09-02; ratio 2.60×, not 2.21×).
+
+---
+
 ---
 
 *Everything below this section is the 2026-09-02 analysis. Its specific
