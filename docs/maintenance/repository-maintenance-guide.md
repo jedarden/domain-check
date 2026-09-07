@@ -261,6 +261,64 @@ independent of that rework.
 
 ---
 
+## Unpushed-Commit Backlog Monitor (gap M-1, 2026-09-07)
+
+bf-1ea4g (2026-08-13) died 56 times in `git push` against a **422-commit unpushed backlog**
+that had accumulated silently across ~30 killed attempts — and nothing in this workspace
+measured commit-ahead. The only ahead/behind count that existed was
+`verify-work-completion.sh`, evaluated once per bead at close time. If such a backlog ever
+regrows (a dead worker's unpushed series, a self-amplifying retry loop), no daily check, no
+preflight, and no monitor would mention it. `scripts/check-unpushed-backlog.sh` is that
+check — the one new detection rule
+[docs/crash-prevention-gaps-bf-1ea4g.md](../crash-prevention-gaps-bf-1ea4g.md) (§4 M-1)
+registers for this crash.
+
+**Mechanism:** `git rev-list --count @{upstream}..HEAD` (falls back to `origin/main` when
+no branch upstream is configured; fails open with CLEAR when neither is measurable — a
+fresh clone must not page). Thresholds per the spec: **WARN at ≥ 50, CRITICAL at ≥ 200**
+(`BACKLOG_WARN_THRESHOLD` / `BACKLOG_CRITICAL_THRESHOLD` override both).
+
+**Report-only, by design.** Per the G-2 correction
+([crash-prevention-requirements.md](../crash-prevention-requirements.md)) remediation is
+owned by the unconditional bounded nightly gc (03:00 timer); attaching remediation here
+would re-invent conditional gating that is blind to bloat accumulating inside a pack. The
+check therefore never creates an alert bead, never blocks, never gc's — it names the
+precondition and appends a dated line to `.beads/logs/repo-health.log` at WARN/CRITICAL so
+triage can tell when a backlog started growing. That log-only design is deliberate: the
+alert layer's cardinality failure (one alert bead per kill, pre-0.4.2) is the failure mode
+a precondition monitor must not repeat.
+
+**Exit codes:** `0` clear, warn, or not-measurable (fails open) · `1` CRITICAL (≥ 200 — a
+push would materialize the whole series in one pack-objects run, the bf-1ea4g shape) ·
+`2` usage error (path missing or not a git repository).
+
+**Where it runs:**
+- **§9 of `check-repo-health.sh`** — manual and preflight-invoked runs (note:
+  `preflight-health-check.sh` truncates health output to its first 20 lines in VERBOSE
+  mode, so §9 shows in manual runs and log review, not in preflight output).
+- **Daily 02:00 `domain-check-repo-health.timer`** — despite the unit's name it runs
+  `auto-gc-trigger.sh --dry-run`, which calls the helper directly (by path) and surfaces
+  its output in `.beads/logs/git-gc-check.log`; the helper's exit codes are swallowed so
+  the daily script's 0/1/2 contract is unchanged.
+
+```bash
+./scripts/check-unpushed-backlog.sh                    # this repo, right now
+./scripts/test-check-unpushed-backlog.sh               # 29 assertions, seconds
+```
+
+**Tested against the crash's own historical shape:** the suite replays a 422-commit
+unpushed backlog — bf-1ea4g's actual count at the fatal push — and asserts CRITICAL exit 1,
+plus both threshold boundaries (49 → CLEAR, 50 → WARN, 200 → CRITICAL), ordinary
+work-in-progress (1, 5 commits) staying CLEAR, the fails-open paths, and threshold
+overrides.
+
+**Known reading caveat:** the count is repo-wide, not per-worker — a co-tenant's unpushed
+commit on the shared `main` raises everyone's reading. That is correct (the precondition
+the monitor guards is repo-wide; bf-1ea4g's 422 included the whole fleet's accumulation),
+but attribution needs `git log origin/main..HEAD` before anyone "fixes" it.
+
+---
+
 ## Fix-Chain Verification Record (bf-4k2ws chain, 2026-09-07)
 
 The bf-4k2ws fix chain — fix type `domchk-2222ea44` → implement `domchk-20f2666d` →
@@ -411,7 +469,8 @@ at the layer you needed and restart from the bottom of that table if the problem
 | Script | Purpose | Usage |
 |--------|---------|-------|
 | `preflight-health-check.sh` | Validate system before tasks | Before every agent task |
-| `check-repo-health.sh` | Repository size and object check | Weekly health monitoring |
+| `check-repo-health.sh` | Repository size and object check | Manual health monitoring (nothing schedules it — the daily 02:00 unit runs `auto-gc-trigger.sh --dry-run`) |
+| `check-unpushed-backlog.sh` | Commit-ahead monitor, report-only (see its section above) | Manual, via `check-repo-health.sh` §9, and the daily 02:00 `auto-gc-trigger.sh --dry-run` |
 | `safe-git-gc.sh` | Memory-limited garbage collection with pre-flight resource checks, hard ceiling and checkpoint/resume (see its section above) | When cleanup needed; `--check-only` to validate first |
 | `safe-git-gc-monitor.sh` | Monitor gc progress | During gc operations |
 | `setup-git-gc-config.sh` | Persistent pack-memory bound + verify + uninstall | After cloning; `--verify` when exit -1 appears; `--uninstall` per the Rollback Plan above |

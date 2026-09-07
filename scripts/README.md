@@ -220,6 +220,37 @@ Exit codes: `0` ready for repack, `1` checks failed, `2` invalid arguments.
 **Documentation:**
 - Verified baseline: `docs/maintenance/pre-repack-verification-2026-09-02.md`
 
+### Unpushed Commit Backlog Monitor (`check-unpushed-backlog.sh`)
+
+Report-only commit-ahead check — the gap-analysis M-1 detection rule for the
+bf-1ea4g crash shape (56 kills in `git push` over a silently-grown 422-commit
+unpushed backlog that nothing measured).
+
+**Usage:**
+```bash
+./scripts/check-unpushed-backlog.sh [repo-path]   # default: current directory
+```
+
+**Thresholds** (spec: `docs/crash-prevention-gaps-bf-1ea4g.md` §4 M-1):
+- `BACKLOG_WARN_THRESHOLD` (default 50) — `⚠️  WARN` line, exit 0
+- `BACKLOG_CRITICAL_THRESHOLD` (default 200) — `🚨 CRITICAL` line, exit 1
+  (a push would materialize the whole backlog in one pack-objects run)
+
+Comparison point is the branch's upstream, falling back to `origin/main`;
+unmeasurable cases (fresh clone, no upstream) fail open with CLEAR.
+
+**Exit codes:** `0` clear / warn / not measurable · `1` CRITICAL · `2` usage error.
+
+**Report-only by design** — never creates alert beads, never gc's, never blocks;
+remediation belongs to the unconditional bounded nightly gc (G-2 correction).
+Wired into `check-repo-health.sh` (§9) and the daily 02:00
+`auto-gc-trigger.sh --dry-run` run (which surfaces its output in
+`.beads/logs/git-gc-check.log`).
+
+**Tests:** `./scripts/test-check-unpushed-backlog.sh` — replays the historical
+422-commit backlog (→ CRITICAL) plus threshold boundaries, WIP false-positive
+cases, and the fails-open paths. Details:
+[Repository Maintenance Guide](../docs/maintenance/repository-maintenance-guide.md).
 ## Crash Prevention
 
 ### Crash Pattern Detection (`crash-pattern-detection.sh`)
