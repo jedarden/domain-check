@@ -8,18 +8,29 @@
 #
 # Modes:
 #   check <bead-id>   Per-alert gate. The mode callers should use.
+#   record <bead-id> [--target ID] [--classification TYPE] [--crash-ts ISO]
+#                     Append one crash-history entry (.beads/logs/
+#                     crash-history.jsonl) for a generated alert: bead_id,
+#                     crash_bead_id, crash_timestamp, classification,
+#                     recorded_at. `check` leg 4 reads it back.
 #   report            Fleet-wide report over .beads/events.jsonl (the default
 #                     when no arguments are given; retained for
 #                     crash-alert-manager.sh's legacy no-argument wiring).
 #
 # Exit contract for `check`:
-#   0  DUPLICATE   suppress — the crash target is already resolved, or an open
-#                  alert already covers it
+#   0  DUPLICATE   suppress — the crash target is already resolved, an open
+#                  alert already covers it, or an alert for the same crash
+#                  target was recorded within the 7-day history window
 #   1  UNIQUE      legitimate alert — proceed
 #   2  USAGE       bad arguments
 #   3  INDETERMINATE  cannot determine (bead store unreadable, bead unknown) —
 #                  fail OPEN: callers proceed, crash alerting never depends on
 #                  this gate being runnable
+#
+# Exit contract for `record`:
+#   0  entry written (or this alert bead was already recorded — idempotent)
+#   2  USAGE       bad arguments
+#   3  entry could not be written
 #
 # Design notes (gap analysis §3):
 #   * Every verdict is keyed on the CRASH TARGET bead, never on the alert-bead
@@ -44,6 +55,7 @@ BEAD_DIR="$PROJECT_ROOT/.beads"
 LOG_DIR="$BEAD_DIR/logs"
 ALERT_LOG="$LOG_DIR/alert-deduplication.log"
 EVENTS_FILE="$BEAD_DIR/events.jsonl"
+HISTORY_FILE="$LOG_DIR/crash-history.jsonl"
 WORK_COMPLETION_DIR="$BEAD_DIR/state/work-completion"
 RESOLUTION_TRACKER="$SCRIPT_DIR/crash-resolution-tracker.sh"
 
@@ -54,6 +66,9 @@ EXIT_UNKNOWN=3      # cannot determine — fail open
 
 BEAD_SCAN_LIMIT="${BEAD_SCAN_LIMIT:-999999}"
 REPORT_WINDOW_HOURS="${REPORT_WINDOW_HOURS:-24}"
+# How long a recorded alert keeps suppressing fresh alerts for the same crash
+# target. 7 days per the crash-response guide's deduplication window.
+DEDUP_WINDOW_DAYS="${DEDUP_WINDOW_DAYS:-7}"
 
 mkdir -p "$LOG_DIR"
 
@@ -68,6 +83,7 @@ log_dedup() {
 show_usage() {
     cat <<EOF
 Usage: $0 check <bead-id>
+       $0 record <bead-id> [--target ID] [--classification TYPE] [--crash-ts ISO]
        $0 report [--window-hours N]
 
 check <bead-id>
@@ -75,11 +91,27 @@ check <bead-id>
     target is taken from the bead title (e.g. "ALERT: Agent crash on bead
     bf-XXXX"); the verdict is keyed on that target, not on this bead.
 
+    Suppression reasons, in order: the target is resolved (live closure or a
+    VERIFIED work-completion marker); an open alert already covers it; or an
+    alert for the same crash target was recorded in the crash history
+    ($HISTORY_FILE) within the last $DEDUP_WINDOW_DAYS days — in which case the
+    earlier alert is named so callers can reference it.
+
     Exit codes:
-      0  DUPLICATE     suppress (target resolved, or an open alert covers it)
+      0  DUPLICATE     suppress (resolved / covered / recorded within window)
       1  UNIQUE        legitimate alert — proceed
       2  USAGE         bad arguments
       3  INDETERMINATE cannot determine — fail open (proceed)
+
+record <bead-id>
+    Append one crash-history entry for a GENERATED alert <bead-id>:
+    bead_id, crash_bead_id, crash_timestamp, classification, recorded_at.
+    --target supplies the crash bead when the caller already knows it;
+    otherwise it is derived from the title. Re-recording the same alert bead
+    is a no-op (idempotent). check leg 4 reads these entries back for the
+    $DEDUP_WINDOW_DAYS-day duplicate window.
+
+    Exit codes: 0 written (or already recorded), 2 usage, 3 could not write.
 
 report
     Fleet-wide report of repeat crash activity from .beads/events.jsonl (the
@@ -91,6 +123,7 @@ report
 Environment:
     BEAD_SCAN_LIMIT      bead list --limit (default: $BEAD_SCAN_LIMIT)
     REPORT_WINDOW_HOURS  report window when --window-hours is not given
+    DEDUP_WINDOW_DAYS    check leg 4 window in days (default: $DEDUP_WINDOW_DAYS)
 EOF
 }
 
@@ -178,6 +211,63 @@ print("OPEN_ALERTS " + (",".join(sorted(open_alerts)) if open_alerts else "-"))
 PY
 )
 
+# Crash-history window scan (check leg 4). argv: history file, crash target,
+# the alert bead being judged, window in days. A prior alert recorded for the
+# SAME crash target inside the window suppresses this one — the shape behind
+# "bf-2vtzg has 5 duplicate alerts": each retry re-alerted a crash another
+# alert already covered, and no ledger remembered it.
+HISTORY_PY=$(cat <<'PY'
+import datetime
+import json
+import sys
+
+path, target, self_id, window_days = sys.argv[1], sys.argv[2], sys.argv[3], float(sys.argv[4])
+cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=window_days)
+
+
+def parse_ts(value):
+    if not value:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+beads = []
+first_when = ""
+try:
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue  # a corrupt line never suppresses anything
+            if rec.get("crash_bead_id") != target:
+                continue
+            bead = rec.get("bead_id")
+            if not bead or bead == self_id:
+                continue  # never treat an alert as a duplicate of itself
+            ts = parse_ts(rec.get("recorded_at")) or parse_ts(rec.get("crash_timestamp"))
+            if ts is None or ts < cutoff:
+                continue
+            when = rec.get("recorded_at") or rec.get("crash_timestamp") or "unknown"
+            if bead not in beads:
+                beads.append(bead)
+            if not first_when:
+                first_when = str(when)
+except FileNotFoundError:
+    sys.exit(0)  # no history yet — nothing to suppress on
+
+if beads:
+    print("HISTORY_MATCH " + ",".join(sorted(beads)))
+    print("HISTORY_WHEN " + first_when)
+PY
+)
+
 dedup_check() {
     local bead_id="$1"
     VERDICT=$EXIT_UNKNOWN
@@ -240,9 +330,110 @@ dedup_check() {
         return 0
     fi
 
+    # 4. Crash-history window: an alert for this same crash target recorded
+    #    within the last DEDUP_WINDOW_DAYS (default 7) means the crash was
+    #    already alerted on — skip and reference that alert. Covers the
+    #    investigated-and-closed alert shape leg 3 cannot see (the covering
+    #    alert is no longer open, but the crash was still handled recently).
+    #    An unreadable or corrupt history file never suppresses: fail open.
+    if [[ -f "$HISTORY_FILE" ]]; then
+        local hist hist_hits hist_when
+        if hist=$(python3 -c "$HISTORY_PY" "$HISTORY_FILE" "$target" "$bead_id" "$DEDUP_WINDOW_DAYS" 2>&1); then
+            hist_hits=$(awk '$1 == "HISTORY_MATCH" {print $2}' <<<"$hist")
+            if [[ -n "$hist_hits" ]]; then
+                hist_when=$(awk '$1 == "HISTORY_WHEN" {print $2}' <<<"$hist")
+                echo "DUPLICATE: alert ${hist_hits//,/ } already covers crash target $target (recorded ${hist_when:-recently}, within the ${DEDUP_WINDOW_DAYS}-day window)"
+                log_dedup "INFO" "check $bead_id: SUPPRESS (history: alert $hist_hits covers $target, within ${DEDUP_WINDOW_DAYS}d window)"
+                VERDICT=$EXIT_DUPLICATE
+                return 0
+            fi
+        else
+            log_dedup "WARN" "check $bead_id: history scan failed - skipping window leg: $hist"
+        fi
+    fi
+
     echo "PROCEED: no resolution and no open alert for target $target (status: $target_status)"
-    log_dedup "INFO" "check $bead_id: PROCEED (target $target status $target_status, no open alerts)"
+    log_dedup "INFO" "check $bead_id: PROCEED (target $target status $target_status, no open alerts, no recent history)"
     VERDICT=$EXIT_UNIQUE
+    return 0
+}
+
+# Append one crash-history entry for a GENERATED alert. Idempotent per alert
+# bead: a re-run must not stack a second entry (the manager re-processes
+# beads). VERDICT: 0 written/already present, 2 usage, 3 could not write.
+record_history() {
+    local bead_id="$1"
+    shift
+    VERDICT=$EXIT_UNKNOWN
+
+    local target="" classification="UNKNOWN" crash_ts=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --target)         [[ $# -ge 2 ]] || { echo "ERROR: --target needs a value"; VERDICT=$EXIT_USAGE; return 0; }
+                              target="$2"; shift 2 ;;
+            --classification) [[ $# -ge 2 ]] || { echo "ERROR: --classification needs a value"; VERDICT=$EXIT_USAGE; return 0; }
+                              classification="$2"; shift 2 ;;
+            --crash-ts)       [[ $# -ge 2 ]] || { echo "ERROR: --crash-ts needs a value"; VERDICT=$EXIT_USAGE; return 0; }
+                              crash_ts="$2"; shift 2 ;;
+            *) echo "ERROR: unknown record option: $1"; VERDICT=$EXIT_USAGE; return 0 ;;
+        esac
+    done
+
+    mkdir -p "$LOG_DIR"
+
+    if [[ -f "$HISTORY_FILE" ]] && grep -q "\"bead_id\": *\"$bead_id\"" "$HISTORY_FILE" 2>/dev/null; then
+        echo "ALREADY_RECORDED: $bead_id is already in $HISTORY_FILE"
+        log_dedup "INFO" "record $bead_id: already recorded - no new entry"
+        VERDICT=0
+        return 0
+    fi
+
+    # The caller supplies the crash target when it knows it; otherwise derive
+    # it from the title with the same extractor `check` uses (D-4). An
+    # underivable target still records — with a null crash_bead_id — so the
+    # alert's existence is never lost; it just cannot match a future check.
+    if [[ -z "$target" ]]; then
+        target=$(derive_target "$bead_id")
+    fi
+
+    local now entry
+    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    if ! entry=$(jq -c -n \
+            --arg bead "$bead_id" \
+            --arg target "${target:-}" \
+            --arg class "$classification" \
+            --arg crash_ts "${crash_ts:-$now}" \
+            --arg now "$now" \
+            '{bead_id: $bead,
+              crash_bead_id: (if $target == "" then null else $target end),
+              crash_timestamp: $crash_ts,
+              classification: $class,
+              recorded_at: $now}'); then
+        echo "ERROR: could not build the crash-history entry (jq unavailable?)"
+        log_dedup "WARN" "record $bead_id: entry build failed - nothing written"
+        return 0
+    fi
+
+    if ! printf '%s\n' "$entry" >>"$HISTORY_FILE"; then
+        echo "ERROR: could not write $HISTORY_FILE"
+        log_dedup "WARN" "record $bead_id: write failed"
+        return 0
+    fi
+
+    echo "RECORDED: $bead_id -> $HISTORY_FILE (target: ${target:-unknown}, classification: $classification)"
+    log_dedup "INFO" "record $bead_id: target ${target:-unknown} classification $classification"
+    VERDICT=0
+    return 0
+}
+
+# Crash target for record, from the same scan `check` uses. Empty on any
+# failure — record still writes the entry, just without a matchable target.
+derive_target() {
+    local bead_id="$1" scan
+    scan=$(bead list --json --limit "$BEAD_SCAN_LIMIT" 2>/dev/null || true)
+    [[ -z "$scan" ]] && return 0
+    printf '%s\n' "$scan" | python3 -c "$SCAN_PY" "$bead_id" 2>/dev/null \
+        | awk '$1 == "TARGET" {print $2}'
     return 0
 }
 
@@ -344,6 +535,19 @@ main() {
             [[ $# -ge 2 ]] || { echo "ERROR: check requires a bead ID"; show_usage; exit $EXIT_USAGE; }
             [[ "$2" =~ ^(bf|domchk)-[a-z0-9]+$ ]] || { echo "ERROR: not a bead ID: $2"; exit $EXIT_USAGE; }
             dedup_check "$2"
+            exit "$VERDICT"
+            ;;
+        record)
+            [[ $# -ge 2 ]] || { echo "ERROR: record requires a bead ID"; show_usage; exit $EXIT_USAGE; }
+            [[ "$2" =~ ^(bf|domchk)-[a-z0-9]+$ ]] || { echo "ERROR: not a bead ID: $2"; exit $EXIT_USAGE; }
+            # "${@:2}" is the bead id plus any --target/--classification/--crash-ts
+            # options; record_history takes the bead id as its first argument. (A
+            # `shift 2` here drops the bead id, so --target arrived as it and the
+            # first value errored as an unknown option: every record exited 2 and
+            # nothing ever reached the ledger — caught by
+            # test-alert-dedup-history.sh cases 1-4/13, fixed 2026-09-07
+            # domchk-fb636819.)
+            record_history "${@:2}"
             exit "$VERDICT"
             ;;
         report)

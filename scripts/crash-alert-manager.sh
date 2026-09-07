@@ -293,20 +293,11 @@ if [[ "$CLASSIFICATION" == "FALSE_POSITIVE" ]]; then
     exit 0
 fi
 
-# Handle service failures - check if deduplicated
-if [[ "$CLASSIFICATION" == "SERVICE_FAILURE" ]]; then
-    log_alert "INFO" "Service failure detected - checking for duplicates..."
-
-    # Run deduplication check
-    DEDUPE_OUTPUT=$($DEDUPE_SCRIPT 2>&1)
-    DEDUPE_REASON=$(echo "$DEDUPE_OUTPUT" | grep -i "duplicate\|same.*pattern" || true)
-
-    if [[ -n "$DEDUPE_REASON" ]] && [[ "$FORCE_ALERT" != true ]]; then
-        log_alert "INFO" "Duplicate service failure detected - no alert generated"
-        echo "Reason: $DEDUPE_REASON"
-        exit 0
-    fi
-fi
+# (Duplicate detection moved below, after the classify-only early-return: it
+# is now the alert-deduplication.sh `check` gate for EVERY classification,
+# instead of a SERVICE_FAILURE-only grep of a fleet-wide report's prose — the
+# string-matching inversion recorded as gap D-6 in
+# docs/alert-deduplication-gap-analysis-2026-09-07.md.)
 
 # Check alert cooldown for same classification
 if [[ "$FORCE_ALERT" != true ]] && [[ -f "$ALERT_STATE_FILE" ]]; then
@@ -328,6 +319,30 @@ fi
 if [[ "$CLASSIFY_ONLY" == true ]]; then
     log_alert "INFO" "Classification complete (classify-only mode, no alert generated)"
     exit 0
+fi
+
+# DUPLICATE DETECTION — the per-alert dedup gate, for every classification.
+# Keyed on the CRASH TARGET (from the alert title), not on this bead. Exit 0 =
+# duplicate: the target is already resolved, an open alert already covers it,
+# or an alert for the same crash target is in the 7-day crash-history window
+# (.beads/logs/crash-history.jsonl) — the output names that alert so the
+# investigation can reference it instead of fanning out. Exit 1 = unique.
+# 2/3 (usage / indeterminate) fail open: crash alerting never depends on this
+# gate being runnable.
+if [[ "$FORCE_ALERT" != true ]]; then
+    log_alert "INFO" "Running duplicate detection for bead: $BEAD_ID"
+    set +e
+    DEDUPE_OUTPUT=$("$DEDUPE_SCRIPT" check "$BEAD_ID" 2>&1)
+    DEDUPE_RC=$?
+    set -e
+    if [[ $DEDUPE_RC -eq 0 ]]; then
+        log_alert "INFO" "Duplicate detected for $BEAD_ID - no alert generated"
+        echo "Reason: $DEDUPE_OUTPUT"
+        exit 0
+    elif [[ $DEDUPE_RC -ne 1 ]]; then
+        log_alert "WARN" "Duplicate gate returned $DEDUPE_RC for $BEAD_ID - failing open"
+        log_alert "WARN" "$DEDUPE_OUTPUT"
+    fi
 fi
 
 # Generate alert
@@ -358,12 +373,45 @@ if [[ ! -f "$ALERT_STATE_FILE" ]]; then
 fi
 
 # Add alert entry and keep only last 50 alerts
-jq --argjson new "$ALERT_ENTRY" '.recent |= (. + [$new] | tail(50))' "$ALERT_STATE_FILE" > "$ALERT_STATE_FILE.tmp"
+# (.[-50:] and not tail(50): jq has no tail/1 builtin — the previous form was a
+# compile error under `set -e`, so the state update killed the script and no
+# alert ever reached its exit 1.)
+jq --argjson new "$ALERT_ENTRY" '.recent |= (. + [$new] | .[-50:])' "$ALERT_STATE_FILE" > "$ALERT_STATE_FILE.tmp"
 mv "$ALERT_STATE_FILE.tmp" "$ALERT_STATE_FILE"
 
 # CRITICAL FIX 3: Mark this alert as processed to prevent future duplicates
 echo "$(date -Iseconds) - $BEAD_ID${TARGET_BEAD_ID:+ (target: $TARGET_BEAD_ID)}" >> "$PROCESSED_ALERTS_FILE"
 log_alert "INFO" "Alert bead $BEAD_ID marked as processed"
+
+# CRASH HISTORY: append this generated alert to the 7-day dedup window ledger
+# (.beads/logs/crash-history.jsonl). `alert-deduplication.sh check` leg 4 reads
+# it back: the next alert bead for the same crash target is suppressed for
+# DEDUP_WINDOW_DAYS days (default 7) and names this bead to reference instead
+# of fanning out — the ledger leg that covers an alert investigated-and-closed
+# inside the window, which the open-alert leg can no longer see. crash-ts is
+# the trace's captured_at truncated to seconds (the closest record of the kill
+# this repo owns; needle owns the kill-time event itself). A failed record
+# never blocks the alert that already fired — the window is an optimization
+# on top of the other three legs, not a dependency of them.
+# Truncate captured_at to seconds. The closing quote must be stripped BEFORE
+# the fraction rule: `\.[0-9]*Z$` anchors at end-of-string, so with the quote
+# still present it never matched and the ledger stored full nanosecond
+# timestamps (test-alert-dedup-history.sh case 13, fixed 2026-09-07
+# domchk-fb636819).
+CRASH_TS=$(grep -o '"captured_at": *"[^"]*"' "$TRACE_DIR/$BEAD_ID/metadata.json" 2>/dev/null | head -1 | sed 's/.*"captured_at": *"//; s/"$//; s/\.[0-9]*Z$/Z/' || true)
+set +e
+HISTORY_RECORD_OUTPUT=$("$DEDUPE_SCRIPT" record "$BEAD_ID" \
+    --target "${TARGET_BEAD_ID:-}" \
+    --classification "$CLASSIFICATION" \
+    --crash-ts "${CRASH_TS:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}" 2>&1)
+HISTORY_RECORD_RC=$?
+set -e
+if [[ $HISTORY_RECORD_RC -eq 0 ]]; then
+    log_alert "INFO" "Crash history recorded: $HISTORY_RECORD_OUTPUT"
+else
+    log_alert "WARN" "Crash history record failed (exit $HISTORY_RECORD_RC) - the 7-day window will not cover this alert"
+    log_alert "WARN" "$HISTORY_RECORD_OUTPUT"
+fi
 
 # Exit with alert code
 log_alert "ALERT" "Alert generated for bead $BEAD_ID (classification: $CLASSIFICATION)"
