@@ -177,3 +177,78 @@ re-check: `412582c`, `63ba024`, `7dd79eb` all fail `git cat-file`.
 5. Treat as unreliable: bf-1wz2w's Notes and `docs/bead-verification/bf-1wz2w.md` (five
    counts in §5) — and any "685+", "666", "340" or "332" divergence figure, which are all
    stale pre-squash snapshots of a divergence that is 0/0 today.
+
+## 8. Classification and root-cause determination (domchk-00e228b9, 2026-09-07)
+
+Applied per [`docs/crash-response-guide.md`](../../crash-response-guide.md): Quick Reference
+exit-code table row 2 + note 2, the crash-classifier table's INFRASTRUCTURE row, False-Positive
+Rules 1–3 (with the domchk-64e1461a storm caveats), and **Pattern 3 (Infrastructure —
+Repository Bloat)**. Chain context: this is the gather → **classify** → fix chain's middle link
+(child 1 = domchk-02f84337, this document; child 3 = domchk-e9234a0d, apply the matched fix).
+Every load-bearing figure in §1–§5 was re-verified live before classifying — extract lines
+901–920 (claim seq 5964 → retry claim seq 5992, `agent.completed` seq 5976 = `exit_code=-1`,
+`duration_ms=108759`), alert bead bf-1wz2w's `Timestamp` = 23:53:11.034551744Z, transcript
+f818432d (90 rows / 17 tool calls / 297,530 B, `git branch --contains 7dd79eb` → `* main` at
+23:52:40.614Z, `wc -l` = 332, push issued 23:52:52.390Z with **no tool result ever returned**),
+bf-1s6c3 closed event 2026-08-16T14:00:13.240405326Z actor `system`, and today's repaired
+state (`.git` 102 MB · 134 loose objects · in-pack 11,182 · garbage 0 · `fsck --full` exit 0,
+dangling trees only · 0/0 divergence · gc-bounds `--verify` exit 0).
+
+### 8.1 Verdict
+
+| | |
+|---|---|
+| **Category** | **INFRASTRUCTURE EVENT** |
+| **Specific mechanism** | **Push-side pack-objects memcg-OOM** — `git push origin main` was 13.0 s in flight (23:52:52.390 → 23:53:05.432Z) when the kill landed, pack-objects inside the 12 GiB dispatch scope against the then-≈18 GB object store. The bf-198ne mechanism, four days before `pack.windowMemory` bounds existed (added 2026-09-02, now covering gc *and* push) |
+| **False positive?** | **No** — see §8.3; the death was real and mid-task |
+| **Alert disposition** | No further action for the crash event itself: subject closed, deliverable on `main` (`46293c5`), repository condition repaired and verified holding. Alert closure belongs to bf-1wz2w's own closure chain |
+
+### 8.2 Exit-code mapping and Pattern-3 criteria
+
+`exit_code = -1` with `outcome.classified = crash` maps to **Infrastructure** via guide note 2
+(`-1` is needle's `wait()` sentinel for *died by signal*, not a signal number). Pattern 3,
+criterion by criterion for this attempt:
+
+| Pattern 3 criterion | Attempt 48 | Status |
+|---|---|---|
+| Signal death, `exit -1` | seq 5976, `exit_code=-1`, classified `crash` | ✅ re-verified from extract |
+| Repository > 5 GB | ≈18 GB at crash time (canon-sourced); 102 MB today | ✅ |
+| Routine git operation triggers the kill | The kill's command **is** the push — 16 of 17 tool calls were read-only verification that completed cleanly; the first mutating git call is what died | ✅ from transcript |
+| Zero exit-code variation | Storm-wide 71 × −1; this attempt is one of them, no variation | ✅ |
+| Fixed-cadence re-dispatch | Retry claimed **10.0 s** after the kill (23:53:15.412Z); attempt 49 died the same way at 23:57:13.220Z | ✅ |
+
+**Excluded alternates** (guide Phase 2B/2C/2D):
+
+- **Workflow failure** — requires `exit 1` + `error_max_turns`. Attempt 48 was signal-killed at
+  108.9 s, 18% of the 600 s dispatch cap; the four genuine timeouts are the exit-124 attempts
+  on Aug-13, a different class 27 attempts later. This also refutes bf-1wz2w's Notes claim
+  "agent timeout (600s) exceeded" (§5).
+- **Service failure** — no gateway 5xx at any point; the failure was local, instantaneous, and
+  precisely coincident with the push.
+- **Code defect** — the killed process was git's own pack-objects; the task never touched
+  domain-check code. Consistent with the standing no-defects finding.
+
+### 8.3 False-positive rules — applied
+
+| Rule | bf-1wz2w / attempt 48 | Verdict |
+|---|---|---|
+| **1. Work committed < 30 s before crash** | Last commit was `7dd79eb` at 21:47:07Z — **2 h 6 m** before the kill — and the kill landed mid-push, mid-attempt | **Not triggered** |
+| **2. Crash → retry → success** | Attempt 49 died the same way 4 min later; the eventual attempt-76 exit 0 is the guide's documented *surface* match (persistent cause outlasted the kills, not healed) | **Surface match only — no downgrade** |
+| **3. 10+ crashes / 10 min** | 1 kill in this window (storm-wide 2.68/10 min) | **Not triggered** — its absence is part of Pattern 3's signature (bloat is per-repository and persistent, not system-wide and instantaneous) |
+
+**The two-layer reading, resolved for this attempt.** The alert does carry the
+deliverable-landed-mid-storm component — `git branch --contains 7dd79eb` → `* main` at
+23:52:40.614Z proves from the attempt's own transcript that the task was already satisfied
+~12 s before it issued the push — but under the guide's Rule-1 storm caveat that is
+verify-then-close debt on the *subject*, not a downgrade of the *death*: the kill was real, it
+was mid-task, and its mechanism is the same one that killed 70 other attempts. **Classification:
+INFRASTRUCTURE — repository bloat (Pattern 3); not FALSE_POSITIVE, not Workflow, not Service,
+not Code defect.**
+
+### 8.4 Canonical-record sync
+
+Per the workspace dedup rule, a dated re-verification subsection resolving the **bf-1wz2w /
+attempt-48** instant (the last of the storm's named instants without one) was appended to
+[`docs/crash-analysis-bf-1s6c3-2026-09-06.md`](../../crash-analysis-bf-1s6c3-2026-09-06.md) §12.
+The verdict above is §5's, unchanged — this section renders it for this chain's specific
+attempt and adds no new mechanism.

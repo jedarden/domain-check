@@ -817,6 +817,50 @@ investigation of the 22:20:07Z alert) has existed since 2026-08-26 and was corre
 2026-09-07 by `635bb21`; the workspace already holds ~460 crash docs. This dated
 subsection is the bead's only change.
 
+### Re-verification 2026-09-07 (domchk-00e228b9 — the gather→classify→fix chain's classification step, alert bf-1wz2w / attempt 48)
+
+This bead is the middle link of a further parallel instance of the chain (child 1
+domchk-02f84337 = the [attempt-48 artifact bundle](docs/crashes/bf-1s6c3-attempt48-crash-artifacts-2026-09-07.md),
+committed as `93da1c1`; child 3 domchk-e9234a0d = apply the matched fix). Its dispatched
+deliverable — a classification section appended to child 1's crash-artifacts document — is
+that document's new §8, which applies this report's §5 verdict to attempt 48 specifically.
+This subsection records its first-hand re-verification and resolves the **bf-1wz2w** instant,
+which until now was the one named storm instant (after 21:36:51Z, 22:20:07Z, 22:25:51Z,
+00:38:41Z) with no §12 entry.
+
+**The named instant resolved:** `2026-08-12T23:53:11.034551744Z` (bf-1wz2w's `Timestamp`)
+is the `HANDLING_RELEASE_DONE` heartbeat — **kill + 5.6026 s**, the widest of the storm's
+alert lags. The real kill is `agent.completed` **23:53:05.431962513Z** (`exit_code = −1`,
+`duration_ms = 108759`, extract line 908 seq 5976), `outcome.handled action=alerted`
+23:53:13.173Z, retry claim **10.0 s** after the kill (23:53:15.412Z). It is one mid-storm
+attempt boundary — attempt 48 of 49 that day — not a distinct crash.
+
+**Live re-verification (all re-run 2026-09-07):**
+
+- **Attempt-48 transcript** (tarball member `f818432d-…jsonl`, 90 rows / 17 tool calls /
+  297,530 B, matching `sessions-index.tsv` row 48): 16 read-only git/bead verifications, then
+  `git push origin main` at 23:52:52.390Z with **no tool result ever returned** — the kill
+  landed 13.0 s into the push. `git branch --contains 7dd79eb` → `* main` at 23:52:40.614Z
+  (first-hand proof the deliverable was on local `main` mid-storm); `origin/main..7dd79eb`
+  measured **332** (the phantom-divergence family; 0/0 today).
+- **Ancestry re-checked:** `42a7b07` = commit, **not** an ancestor of `main`; `46293c5` **is**;
+  `412582c`, `63ba024`, `7dd79eb` all fail `git cat-file`.
+- **Repository:** `.git` 102 MB · 134 loose objects · in-pack 11,182 · garbage 0 ·
+  `git fsck --full` exit 0 (dangling trees only) · `HEAD...origin/main` → 0 / 0.
+- **Safeguard layer:** `./scripts/setup-git-gc-config.sh --verify` exit 0 (the bound covering
+  exactly this attempt's push path). Subject `bf-1s6c3` closed 2026-08-16T14:00:13.240405326Z,
+  actor `system`, re-read from the forensic closed event. Host: 45 G memory available,
+  52 G disk free, load 4.76 — healthy.
+
+**Classification verdict (unchanged, confirmed):** Infrastructure — repository bloat
+(Pattern 3, exit-code table row 2). Mechanism for this attempt: **push-side pack-objects
+memcg-OOM**, the bf-198ne mechanism, four days before `pack.windowMemory` bounds existed.
+False-positive rules: Rule 1 not triggered (last commit 2 h 6 m before the kill; death
+mid-task), Rule 2 surface match only, Rule 3 not triggered; the deliverable-landed-mid-storm
+component is verify-then-close debt on the subject, not a downgrade of the death. Excluded
+alternates per §5.4 — including bf-1wz2w's Notes' "600 s timeout" claim, which the 108.9 s
+signal death refutes. **Alert disposition: no further action for this event.**
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
