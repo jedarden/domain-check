@@ -1837,3 +1837,81 @@ beads the same evening plus two later single-cause variants — and **prevented 
 repository** (payload path closed, pack bounds deployed, detection automated; all re-verified
 live today). The documentation deliverable is this subsection within the already-committed,
 already-index-linked final report; closing this bead unblocks the umbrella `domchk-b79733ba`.
+
+### Repository-health + resource analysis 2026-09-07 (domchk-3639ec92 — the domchk-7dc70ccd chain's resource step)
+
+Third link of the gather → classify → resource → report chain (forensic dep edges:
+`domchk-2a28452d` blocks this bead; this bead blocks the report-compiler `domchk-762caf4b`).
+Its dispatch names a standalone `docs/crash-bf-1s6c3-resource-analysis.md`; that file is
+deliberately **not** created — per the dedup rule the analysis lives here, since §4.3 already
+fixes the epistemics of "resources at crash time" and a further standalone document would fork
+the record. What this bead contributes first-hand: a **telemetry census of the crash-day slot
+logs** (the one contemporaneous source that can constrain resource availability at all), a
+**storm-window load reconstruction** from it, and **this pass's live repository/host figures**.
+Sources re-verified before use: the bundle's `MANIFEST.sha256` checks 5/5 OK.
+
+**What "at crash time" can mean — full event-type census.** Both raw slot logs
+(`~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-12/13.jsonl`, still on disk)
+record **29 event types; the only resource telemetry among them is `fleet.cpu_saturated`**
+(1,147 events, 2026-08-12T05:37Z → 08-13T23:59Z). No memory, disk, PSI or per-scope-RSS event
+exists in Aug-12/13 slot telemetry, and journald on this box starts Aug-15 — so **host memory
+and disk at crash time are unrecoverable**, confirming §4.3 by census rather than assertion.
+Host CPU is the single quantity with contemporaneous samples.
+
+**Host load during the storm** (`fleet.cpu_saturated` is threshold-gated: emitted only while
+1-min load > 0.8 × the sampler's counted cores; `core_count` is 9 in every event — the box
+presents 12 via `nproc` today, so all ratios below use needle's own 9-core denominator):
+
+| Measure | Storm window 21:31:27Z → 02:01:28Z (265 min) | Both days outside it |
+|---|---|---|
+| Samples | 73 | 1,074 |
+| 1-min load median / max | **11.12 / 19.16** (1.24 × cores) | 10.57 / 41.85 |
+
+- Saturation was the **ambient condition of both days, not a storm anomaly**. The storm's five
+  clock hours hold 78 samples = 15.6/h, against 28.1/h across the two days' other 38 sampled
+  hours (5 zero-sample hours) — the storm hours were *less* saturated than ambient, and the
+  busiest hours (08-13T20Z: 84, 08-13T12Z: 83, 08-12T12Z: 73 samples) are nowhere near the
+  window.
+- **71/71 kills have a saturation sample within ±60 s** — expected, not evidential: the
+  in-window sampler's median inter-sample gap is 176 s, so continuous coverage makes the
+  coincidence automatic. No kill instant is distinguishable by load.
+- Needle's only dispatch-time resource gate, `worker.launch.deferred` (reason string
+  "system saturated: CPU load … > threshold 0.80"; 1-min loads 7.28–15.05 where it fired),
+  fired **305× across the two days and 0× inside the window** — and it gates on CPU, so it
+  could never have caught a pack-objects RSS breach in any case.
+
+**Repository + host, live 2026-09-07 (this bead's own runs):**
+
+| Check | Result |
+|---|---|
+| `./scripts/check-repo-health.sh` | ✅ exit 0 — 93 loose objects / 856 KiB · in-pack 11,360 · 1 pack / 99.11 MiB · garbage 0 · fragmentation acceptable · effective pack-memory bound verified (windowMemory=2g / threads=1 / deltaCache=1g, worst case ≈3,072 MiB inside the 12 GiB ceiling) · no unmanaged aggressive gc |
+| `du -sh .git` / `.git/objects` | 102 MB / 101 MB — was ≈18 GB / ≈17 GB loose at crash time (canon-sourced from the bf-4yjq cleanup verification; the offending blobs are packed away and no longer re-measurable, §4.3) |
+| Loose:packed ratio | ≈ 1:118 (856 KiB : 99.11 MiB) — the healthy band is < 1:10 |
+| `git fsck --full` | exit 0 (dangling objects only) |
+| `git ls-files .beads` | 0 — `.gitignore:66` `.beads/` and `:70` `*.jsonl` keep bead state out of git |
+| Host now | 62 GiB RAM, 42 GiB available · 45 G disk free of 444 G (above the 30 G warning line, under the guide's 50 G minimum) · load 6.10 / 5.52 / 6.00 on 12 threads |
+
+**Determination — repository bloat caused the 71 kills, through the scope ceiling, not
+through host exhaustion.** Three legs:
+
+1. **The binding constraint was the dispatch scope, not the host.** The kill is a memcg kill
+   by mechanism — kernel-proven on the siblings (bf-4x12ec `gc`, bf-198ne `push`) and at scale
+   by the harness subsections above (domchk-2125075e / domchk-1835a393), whose intended-kill
+   scopes died at 512M **while host MemAvailable stayed ≥ 43.7 GiB**. A cgroup
+   `MemoryMax=12GiB` binds regardless of host headroom, so the unrecoverable host-memory figure
+   is immaterial to the mechanism: even abundant host memory could not have saved an 18 GB
+   push.
+2. **No host resource correlates with the kill instants.** CPU was ambiently saturated all day
+   (above), the storm hours sat below ambient saturation, needle's CPU gate never fired inside
+   the window, and host memory/disk have no record at all. The only resource inequality that
+   changed between the 71 dying attempts and the surviving one is the repository itself — and
+   the storm ended when the task shape changed (auto-split), not when any host resource
+   improved.
+3. **The cause is removed and holding.** 17+ × ~237 MB `.beads/*.jsonl` commits → 0 tracked
+   bead files behind refuse-at-commit gitignore rules plus the installed >10 MB pre-commit
+   hook; the object store packed to 99.11 MiB with `fsck` clean; and both death steps now exit
+   0 under the deployed pack bounds (harness B1/B2).
+
+**Disposition:** determination unchanged from §6, now grounded in the only contemporaneous
+telemetry that exists. Deliverable = this subsection; the chain's report-compiler
+(`domchk-762caf4b`) should cite it here rather than expect the dispatch-named file.
