@@ -1,5 +1,7 @@
 # Crash Evidence Summary: bf-4k2ws
 
+> **SUPERSEDED (2026-09-07):** the “**did not crash** / FALSE POSITIVE” critical finding below is wrong — 55 real exit −1 kills hit bf-4k2ws on 2026-08-13 (02:01–07:18Z), recounted first-hand from the surviving worker log; the SIGHUP-cascade mechanism it describes is retired corpus-wide. Current determination: **INFRASTRUCTURE (repository-bloat-era kill regime)** — [`docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`](../../investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md). The task-completion finding (8/8 criteria met, closed 2026-08-16T15:35:42Z) stands.
+
 **Investigation Date:** 2026-09-02
 **Investigation Task:** domchk-e45b0a80
 **Original Bead ID:** bf-4k2ws

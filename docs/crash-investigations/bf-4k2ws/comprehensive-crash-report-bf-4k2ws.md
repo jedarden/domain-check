@@ -1,5 +1,7 @@
 # Comprehensive Crash Investigation Report: bf-4k2ws
 
+> **SUPERSEDED (2026-09-07):** the SIGHUP-cascade root cause below is wrong — the “200+ processes, 2026-08-16 12:00–17:00 UTC” event belongs to the alert-bead era (bf-3561g), and bf-4k2ws itself took **55 real exit −1 kills on 2026-08-13 (02:01–07:18Z)**, recounted first-hand from the surviving worker log; exit −1 is the unrecorded-signal sentinel, not SIGHUP. Current determination: **INFRASTRUCTURE (repository-bloat-era kill regime)** — [`docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`](../../investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md). The task-completion finding (8/8 criteria met, closed 2026-08-16T15:35:42Z) stands.
+
 **Report Date:** 2026-09-02  
 **Investigation Task:** domchk-b42fae1b  
 **Original Bead ID:** bf-4k2ws  

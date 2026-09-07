@@ -1,5 +1,7 @@
 # Crash Investigation Summary: Bead bf-4k2ws
 
+> **SUPERSEDED (2026-09-07):** the “crash occurred in a different bead (bf-3561g)” premise below is wrong — bf-4k2ws itself took **55 real exit −1 kills on 2026-08-13 (02:01–07:18Z)**, recounted first-hand from the surviving worker log; exit −1 is the unrecorded-signal sentinel, not SIGHUP. Current determination: **INFRASTRUCTURE (repository-bloat-era kill regime)** — [`docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`](../../investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md). The task-completion finding (8/8 criteria met, closed 2026-08-16T15:35:42Z) stands.
+
 **Investigation Date:** 2026-08-26
 **Original Bead ID:** bf-4k2ws
 **Investigation Task:** domchk-9377ad1d
