@@ -6,6 +6,15 @@
 **Classification:** FALSE POSITIVE - No crash occurred  
 **Status:** RESOLVED
 
+> **SUPERSEDED IN PART (2026-09-07):** the "no crash occurred" premise, the SIGHUP-cascade
+> mechanism, and the "NOT Repository Bloat" exclusion below are superseded. The crashes were
+> real: a 62-attempt loop on 2026-08-13 — **55 × exit −1, 5 × 124 (timeout), 2 × 0** —
+> recounted first-hand from the surviving needle worker log
+> ([crash artifact bundle](../crash-artifacts-bf-4k2ws/README.md)). Corrected classification:
+> **INFRASTRUCTURE** (repository-bloat-era kill regime, alert layer false-positive) — see
+> [Classification Correction](#classification-correction-2026-09-07-domchk-3fca6de4) at the
+> end. The task-completion finding (all criteria met, closed 2026-08-16) stands.
+
 ---
 
 ## Executive Summary
@@ -336,3 +345,102 @@ All fixes have been implemented and verified (12/12 tests passing):
 **Classification:** Infrastructure Event - False Positive Alert  
 **Impact:** NONE - No data loss, no project impact  
 **Confidence Level:** HIGH - DEFINITIVE (based on comprehensive 4800+ line investigation)
+
+---
+
+## Classification Correction (2026-09-07, domchk-3fca6de4)
+
+Re-classified against `docs/crash-response-guide.md` (third pass, 2026-09-07), every figure
+below re-verified live from primary sources: the surviving needle worker log
+(`~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl`, mtime 2026-08-13
+19:59 local, untouched) and the alert↔death mapping collected by domchk-8e0fc94d in
+`docs/crash-artifacts-bf-4k2ws/`.
+
+**Corrected classification: INFRASTRUCTURE** (guide's four-way category), with a
+false-positive **alert-generation** layer. The original "FALSE POSITIVE — No crash
+occurred" is wrong on its premise: the crashes happened.
+
+### Exit-code analysis
+
+62 `agent.completed` records for bf-4k2ws, 2026-08-13 02:03:33Z → 07:17:41Z, one worker
+session (`8446529e`):
+
+| Exit | Count | Guide row | `outcome.classified` |
+|------|-------|-----------|----------------------|
+| −1 | 55 | Infrastructure event (signal death, code unrecorded) | crash |
+| 124 | 5 | Workflow: 600 s dispatch-cap timeout | timeout |
+| 0 | 2 | success | success |
+
+Zero exit-code variation across the 55 kills (all −1) at a fixed re-dispatch cadence for
+5 h 16 m — Pattern 3's stated signature. Per guide note 2, −1 is needle's
+unrecorded-signal sentinel, **not a signal number**, and no signal-level claim is possible
+for this bead: the kernel records for Aug-13 were lost to the Aug-14 16:39 reboot (system
+journald starts Aug-15 19:46 EDT). There are **zero 129s** anywhere in the loop, which
+excludes the SIGHUP mechanism the 2026-09-02 text claimed — consistent with the guide's
+corpus-wide retirement of that framing ("never kernel-confirmed and excluded by the
+exit-code record").
+
+### Sub-type: repository-bloat era — inferred from the chain, not kernel-verified for this bead
+
+- bf-4k2ws's first claim landed at **02:01:29.710Z — 7.1 s after** bf-1s6c3's last
+  `agent.completed` in the same log (02:01:22.561Z, exit 0), on the **same worker**. The
+  predecessor's 71-kill storm (Aug-12 21:31Z → Aug-13 02:01Z) IS kernel-verified memcg OOM
+  inside the dispatch scope on the same then-~18 GB repository
+  (`docs/crash-analysis-bf-1s6c3-2026-09-06.md`).
+- The task itself is git-remote-heavy (fetch / ls-remote / rev-list against Forgejo and
+  GitHub) — exactly the operation class the bloat era turned into deterministic kills.
+
+### Active work vs post-task cleanup: both
+
+- **30 kills mid-task** (02:03 → 04:48, before any verified success).
+- The task then **completed twice inside the loop**: exit 0 + `verification.passed` at
+  04:48:09.546Z and 07:17:41.039Z. Each was followed ~6 s later by `bead.orphaned` rather
+  than a close, so the loop re-claimed satisfied work and the remaining **25 kills are
+  post-completion** (04:48 → 07:17) — the guide's Rule-1 storm corollary: deliverable
+  present + bead still open = workflow debt (verify-then-close), whatever killed the
+  workers.
+- Rule 1's 30-second commit check has no commit to compare: **no commit exists in the
+  storm window** (`git log --since 2026-08-13T01:00Z --until 09:00Z` is empty). The
+  deliverable entered git only in the 2026-08-16 squash `c27899f`; the bead closed
+  2026-08-16T15:35:42Z with all 8 acceptance criteria met (re-verified live by
+  domchk-59478499, commit `0aded2e`).
+
+### Repository-health contribution
+
+Contributed, era-contextually. The crash-night repo was the bf-1s6c3/bf-4yjq bloat-era
+repository (~18 GB, ~17 GB loose objects). This report's "Clean repository state (<500MB)"
+and "52GB, 83% free" readings were captured 2026-09-02 — three weeks post-repair — and
+describe the wrong night. Live 2026-09-07: `.git` 102 MB, 88 loose objects, one
+99.11 MiB pack, `fsck` clean; the `.beads/` gitignore, 10 MB pre-commit gate and
+`pack.windowMemory` bounds (repo CLAUDE.md, Current Repository Health) prevent recurrence.
+
+### Automated classifier (Phase 1) — honest empty result
+
+`./scripts/crash-classifier.sh bf-4k2ws` → "ERROR: Bead trace not found": no trace
+survives (single-slot traces; oldest surviving trace dir is 2026-08-16). The
+classification above therefore rests on the log + bead-state evidence per the guide's
+manual path.
+
+### Co-factor: CPU saturation
+
+58 `fleet.cpu_saturated` samples inside the loop window — load 7.63–18.51 on 9 cores
+against a saturation threshold of load > 7.2 (bundle extract header). The box was
+saturated throughout; a host-axis stressor is confirmed present, though per-kill causal
+attribution is impossible without kernel records.
+
+### What this corrects in the 2026-09-02 text
+
+| 2026-09-02 claim | Status |
+|---|---|
+| "did not crash" premise | **Superseded** — 55 real kills (census above) |
+| "SIGHUP cascade … exit −1 was SIGHUP, not SIGKILL" | **Superseded** — zero 129s; −1 is the unrecorded-signal sentinel (guide note 2) |
+| SIGHUP window "2026-08-16 12:00–17:00" | **Superseded** — wrong day; the loop ran 2026-08-13 02:01–07:17Z |
+| "NOT Repository Bloat — clean repository state (<500MB)" | **Superseded for crash night** — bloat-era repo; the <500MB reading is the 09-02 state |
+| "Crash alert filed 06:09:56Z (3.5 days BEFORE completion)" | **Superseded** — alerts were pre-dedup needle's one-alert-per-kill (per-kill on 08-13, no fingerprint on any of the 55; target legitimately still open at generation time — 9ae17f2) |
+| Task completed, all criteria met, closed 2026-08-16 | **Stands** |
+| Alert-system fixes (closed-bead filter, dedup, cooldown, exit-code validation) | **Stands** — bf-4k2ws remains their motivating case |
+
+**Net:** INFRASTRUCTURE for the kills; the false-positive element is confined to the alert
+layer (one alert bead per kill, pre-dedup, plus post-completion kills after the first
+verified success). No code defect, no service failure, and the 5 exit-124 timeouts are the
+only workflow-class events in the loop.
