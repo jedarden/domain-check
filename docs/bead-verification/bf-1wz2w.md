@@ -1,5 +1,19 @@
 # Verification Report: Bead bf-1wz2w
 
+> **⚠️ CORRECTED 2026-09-07 (domchk-4e8821ca — the alert's verification-and-closure step).**
+> This report's root-cause attribution is superseded: the crash was **not** a "600 s agent
+> timeout". The instant it documents (`2026-08-12T23:53:11Z`) is the alert heartbeat **5.6 s
+> after** attempt 48's real death — an `exit_code = −1` signal kill **108,759 ms** into the
+> attempt, at `git push`'s pack-objects (memcg-OOM against the then-≈18 GB object store; the
+> bf-198ne mechanism). The "685+ commit divergence" framing is likewise retired — divergence
+> is 0/0 today and the phantom figure belongs to the resolved pre-squash state
+> (`docs/branch-divergence-analysis.md`). Everything else here stands: bf-1s6c3 is CLOSED
+> (completed on retry), this alert was a duplicate for an already-resolved crash, and closing
+> it was correct. Corrected record:
+> [`docs/crash-analysis-bf-1s6c3-2026-09-06.md`](../crash-analysis-bf-1s6c3-2026-09-06.md)
+> (§11 catalogues each correction; the attempt-48 subsections in §12 carry the first-hand
+> evidence).
+
 **Bead ID:** bf-1wz2w
 **Title:** ALERT: Agent crash on bead bf-1s6c3
 **Status:** RESOLVED - Duplicate alert for resolved crash
