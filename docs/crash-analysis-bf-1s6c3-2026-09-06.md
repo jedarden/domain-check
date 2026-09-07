@@ -1956,3 +1956,72 @@ clean (all inside the suite's own assertions).
 **Disposition:** split refused; bead closed complete with **no new document** — this dated
 subsection is its only change. Closing unblocks domchk-46d4b8d5, whose Notes already carry
 the verification outcome; its worker can close it on the same evidence.
+
+### Umbrella verification + closure 2026-09-07 (domchk-b79733ba — "Investigate crash logs and root cause for bf-1s6c3")
+
+This is the umbrella itself — created 2026-08-26T12:34:30Z, re-dispatched repeatedly, and the
+bead the chains above name as their blocker. Its dispatch names
+`2026-08-13T00:28:36.425389752+00:00` and asks for three things: the root cause of the −1
+exit, related error/system events, and whether the crash is reproducible or one-time. All
+three were already answered by §§1–12 by the time this dispatch ran — its chain had closed
+beneath it minutes earlier (`domchk-6d8acd21`, the final documentation link, closed
+2026-09-07T09:37:45Z and pushed `86e3a7f`; the `domchk-6d8acd21 blocks domchk-b79733ba` edge
+was added 2026-09-02T03:33:09Z). This subsection records the umbrella's own first-hand
+re-verification and its closure; no new analysis was authored, because nothing was missing.
+
+**Attempt 58 re-mapped first-hand** (this bead's own recount of both committed extracts,
+1,458 events): the 00:28:30.196295497Z kill is the **58th of 76** `agent.completed` records
+and the **9th of the 27 Aug-13 attempts** (49 attempts on Aug-12) — confirming the
+domchk-904abc88 mapping independently. Census: exit −1 × 71 · 124 × 4 · 0 × 1. Bundle
+`sha256sum -c MANIFEST.sha256` → 5/5 OK.
+
+| Event | Timestamp (Z) | Source |
+|---|---|---|
+| Attempt 57 completed (135,798 ms) / released | 00:23:32.927659711 / 00:23:41.623940977 | L139 / L148 (seq 6233 / 6243) |
+| Attempt 58 claimed / dispatched | 00:23:44.047163899 / 00:23:44.059808202 | L151 / L155 (seq 6249 / 6258) |
+| **Kill — `agent.completed`, `exit_code=-1`, duration 285,898 ms (≈285.9 s, not a 600 s timeout)** | **00:28:30.196295497** | L158 (seq 6261) |
+| `outcome.classified` → `crash` | 00:28:30.204702034 | L160 (seq 6264) |
+| heartbeat `HANDLING_RELEASE_DONE` | 00:28:36.425380287 | L166 (seq 6270) |
+| **Dispatch's named timestamp** | **00:28:36.425389752** = kill + **6.229094 s** (heartbeat + **9.465 µs** — clock provenance, not a second event) | — |
+| Attempt 58 released (`release_success`) / attempt 59 claimed | 00:28:38.648722216 / 00:28:40.881312950 | L167 / L170 (seq 6271 / 6277) |
+
+**What the agent was doing** (transcript re-read live: `sessions-index.tsv` row 58 → session
+`9a709a38-09b4-42ff-8213-9be744ffb7ef`, 324,203 B — byte-identical to the still-live
+`~/.claude/projects/-home-coding-domain-check/9a709a38….jsonl`): divergence inspection
+(`git log --oneline origin/main..github/main` and the reverse, `git rev-parse HEAD
+origin/main github/main`), then `git add .beads/ .needle-predispatch-sha` → `git commit -m
+"chore: update needle predispatch SHA"` → `git push origin main` called at 00:28:15.495 with
+**no result recorded** — the kill lands ~14.7 s into that push. The `git add .beads/` is the
+bloat mechanism itself in one line (§6 underlying cause): on 2026-08-13 `.beads/` was not yet
+gitignored, so the attempt re-staged bead state for a push whose pack-objects then ran against
+the 12 GiB dispatch scope.
+
+**Related system events — none recoverable, re-verified:** `journalctl`'s earliest entry on
+this box is `2026-08-15T19:56:33-04:00` (this bead's own check), i.e. retention begins two
+days after the storm; per §4.3 the pre-journal kernel records for Aug-12/13 were lost to the
+Aug-14 16:39 EDT reboot. The −1 attribution for attempt 58 therefore rests on the
+corpus-level evidence (§4, §6), not on a per-kill kernel record.
+
+**Reproducibility** — adopted from the domchk-6d8acd21 assessment above, which this bead's own
+figures re-confirm: **reproducible under its trigger conditions** (≈18 GB object store +
+unbounded pack-objects + the ~10 s no-backoff re-dispatch amplifier; harness-recreated at
+1/17 scale with kernel attribution) and **prevented in the repaired repository — zero
+recurrences here since the 2026-09-01 pack-down**. Live re-checks (2026-09-07): `.git` 102 MB ·
+102 loose objects / 1.00 MiB · in-pack 11,360 · 1 pack 99.11 MiB · garbage 0 · `git fsck
+--full` exit 0 · `git ls-files .beads` → 0 · `HEAD...origin/main` → 0/0 ·
+`setup-git-gc-config.sh --verify` exit 0 · `.gitignore` `.beads/` :66 / `*.db` :68 / `*.jsonl`
+:70 · `scripts/test-bf-1s6c3-crash-condition.sh` present (19,224 B).
+
+**Collateral correction — the subject bead's Notes pointer.** bf-1s6c3's Notes (written by an
+earlier attempt of this same umbrella) cite
+`docs/crash-investigation-summary-bf-1s6c3-2026-09-01.md`, which **does not exist** — a
+pointer into the superseded 2026-09-01 corpus (§11); the note's "18GB → 138MB, 99.2%" cleanup
+figure is stale too (the repository has held at ~93–103 MB since 2026-09-01; 102 MB on this
+bead's own `du`). A dated correction was appended to the closed bead's notes (original text
+preserved verbatim) pointing at this report; this subsection is the auditable record of that
+edit.
+
+**Disposition:** umbrella closed complete with **no new document** — this dated subsection is
+its only change, and it supersedes the stale note-citation as the investigation's record.
+Closing it unblocks `domchk-9c040403` (duplicate-detection for alert bf-5cfqn), which has
+waited on this bead since 2026-08-26.
