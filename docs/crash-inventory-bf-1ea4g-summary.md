@@ -108,6 +108,26 @@ The fix needed no new mechanism — the bound above was already effective, re-ve
 
 That case is now asserted in the suite (test adopted from a prior attempt's uncommitted work, then fixed and completed): bounded `git push` over a 192MiB unpacked 6×32MiB near-identical-snapshot backlog under `MemoryMax=768M` (1/16th of the 12GiB dispatch scope) — exit 0, the bare remote receives the backlog, the store stays loose (push alone did no gc), peak push RSS **232,504KB** vs the >12GiB the unbounded push consumed on 2026-08-13. Full suite **16/16** (gc replay unchanged: peak 320,532KB). Also fixed en route: the push test now runs with the suite's GNU `time -v` wrapper, which was defined after its first use.
 
+### 5.2 Preventive-measures verification — the bf-393iv umbrella chain (domchk-e4b94513, 2026-09-07)
+
+bf-393iv is the alert-layer twin of this record: the ALERT umbrella minted for bf-1ea4g's 08:58:35Z kill — one of the 88 bf-1ea4g-title-mentioning alert beads counted in §5 — carrying the same 2026-08-16-era "SIGHUP cascade / repo still 18GB" premises that §6.2 and §7 supersede. Its own two earlier verification reports (ef95fec, 2026-08-26; the meta-verification of domchk-690f7a43, 1748787, 2026-09-01) live frozen under `docs/archive/crash-investigations/`. Its chain: domchk-4e2f7b61 (remediation decision — FALSE_POSITIVE, no action required; closed 2026-09-02) and domchk-e4b94513 (verify + document, this subsection), the latter reached through domchk-89147775 (implement preventive measures per root cause domchk-6bdfe4dc = INFRASTRUCTURE, unbounded git-push pack-objects over the 422-commit backlog; closed 2026-09-07). The implement step found every measure in its dispatch's INFRASTRUCTURE branch already committed on origin/main and fixed the one live defect it met: `scripts/verify-work-completion.sh` died of instant SIGPIPE (exit 141, zero output) under `set -euo pipefail` whenever the shared worktree's dirty/staged count outgrew one early-exiting `head -5` read — fixed to `sed -n '1,5p'` in c3afc8a, folded into the restored tree as d6f8b53. A false-*blocking* failure of the verification tooling, not a new crash mechanism.
+
+The terminal verify step re-ran the whole stack live 2026-09-07 and passed all of it:
+
+| Measure (target: the unbounded-push-over-unpacked-backlog mechanism) | Result, 2026-09-07 |
+|---|---|
+| `./scripts/check-repo-health.sh` | exit 0 — 106 MB, 319 loose objects (3 MiB), 1 pack 99.11 MiB, 0 garbage, 11,360 in-pack; pack-memory-bound section ✅ |
+| `./scripts/setup-git-gc-config.sh --verify` (the direct fix) | exit 0 — effective bound ≈3072MiB worst case, within the 6 GiB ceiling; covers gc *and* push |
+| `./scripts/test-gc-memory-bounds.sh` (recurrence replay, §5.1) | **16/16** — bounded push over the 192MiB unpacked backlog under `MemoryMax=768M`, peak push RSS **232,488KB** this run (§5.1's run: 232,504KB — two independent passes) |
+| `./scripts/safe-git-gc.sh --check-only` | resource checks pass; "GC not needed" (exit 1 is the documented not-needed outcome) |
+| `./scripts/test-safe-git-gc-limits.sh` | **33/33** |
+| `./scripts/test-verify-work-completion.sh` (the c3afc8a fix) | **11/11** |
+| Pre-commit 10 MB gate + gitignore | hook byte-identical to tracked source (`setup-git-hooks.sh --check` exit 0); `.beads/`, `*.db`, `*.jsonl` ignored, **0** tracked `.beads/` files |
+| Scheduled maintenance | **8/8** `domain-check-*` systemd user timers future-scheduled |
+| Regression check | `go build ./...` + `go test ./...` exit 0 — worktree including a co-tenant's in-flight `internal/resilience` + resource-monitor changes compiles and passes |
+
+Chain verdict: domchk-4e2f7b61 closed 2026-09-02 + this bead closing leaves bf-393iv with **no open blockers** — the umbrella is closable, and its stale `verification-failed` label postdates a verification that has now passed twice (ef95fec, this subsection). No new crash pattern and no new measure owed: the chain's only novel finding is the SIGPIPE gate defect above.
+
 ---
 
 ## 6. Document inventory — what was reviewed
