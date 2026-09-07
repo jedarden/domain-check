@@ -255,6 +255,18 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
   when the gate ran at 18:52:53Z. In this shared worktree a close can be reverted by a
   *neighbor's* unpushed commit: check `git log origin/main..HEAD` and attribute before
   re-deriving work.
+- Re-executed again against HEAD d23f24d (2026-09-07 19:31Z, the bead's 6th attempt): suites
+  12/12 at HEAD and 13/13 in the worktree (the 13th test is a co-tenant's uncommitted
+  addition — count drift = suite growth, not staleness), `test-closed-bead-filter.sh` 7/7
+  both ways, replay 10/10, health exit 0, 0 unpushed, all 8 timers future-triggered.
+  New lesson — **`test-closed-bead-filter.sh` is cwd-sensitive**: its premise calls the real
+  `bead show bf-2vtzg` from PATH, and bead-rs resolves the workspace from cwd. Run from
+  outside the repo (e.g. a `git archive HEAD` extract in /tmp), the ancestor
+  `/home/coding/.beads` workspace answers with no bf-2vtzg record → empty status →
+  "test premise broken" plus a downstream `Classification failed` exit 2: a 3/7 red that is
+  pure environment, not a regression (the same HEAD code passes 7/7 from the repo cwd).
+  When a HEAD-extract run of this suite goes red, re-run from the repo workspace before
+  investigating the alert manager.
 
 **Known defect (mechanism FIXED at HEAD 8cc1172 — bead `domchk-f6fff20f` still open,
 pending its owner):** `crash-alert-manager.sh` used to read `CLASSIFICATION` as the
