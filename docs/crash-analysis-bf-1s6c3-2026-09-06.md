@@ -861,6 +861,76 @@ component is verify-then-close debt on the subject, not a downgrade of the death
 alternates per §5.4 — including bf-1wz2w's Notes' "600 s timeout" claim, which the 108.9 s
 signal death refutes. **Alert disposition: no further action for this event.**
 
+### Re-verification 2026-09-07 (domchk-2c00c930 — the bf-3laof pool's repository-bloat root-cause step)
+
+This bead ("Identify root causes of repository bloat crash", child of alert **bf-3laof**) is
+the root-cause link of that alert's own four-bead pool (the closed context sibling
+domchk-42769e52, this bead, and two implementation/verification siblings still open). Its five
+acceptance criteria map onto material that already exists: root cause → **§6**; repository
+state → §12 plus the table below; `.gitignore` → live below; prevention → **§8**; and the
+fifth criterion's named file — `docs/crash-root-cause-analysis-bf-1s6c3-final.md` — **already
+exists**: written 2026-09-01 by domchk-1d72c097 (introduced by `40d23dd`, 391 lines), moved by
+`git mv` into `docs/archive/crash-investigations/` by `a883044` (2026-09-06, archive bead
+domchk-87a7bb2a), blob **`f3544fb6`** byte-identical on both sides of the move (re-verified
+here first-hand). Per the workspace dedup rule this bead shipped **no new document**.
+
+**Live re-verification (all re-run 2026-09-07, byte-exact against this report):**
+
+- **Census recounted** from the committed extracts (1,458 lines): `agent.completed` × 76 →
+  exit −1 × 71, 124 × 4, 0 × 1; `outcome.classified` (`data.outcome`) → crash × 71,
+  timeout × 4, success × 1; `outcome.handled` → alerted × 71, deferred × 4, none × 1; first
+  claim 21:31:27.663Z; last completion 02:01:22.561Z
+- **Ancestry:** `42a7b07` = commit, 2026-08-12T21:47:07Z "Merge reconciliation: Forgejo and
+  GitHub remote histories" — **not** an ancestor of `main`; `46293c5` **is**; `2832106` and
+  `7dd79eb` both fail `git cat-file`
+- **Repository:** `.git` 102 MB · 130 loose objects / 948 KiB · 3 packs 99.13 MiB · garbage 0 ·
+  `git fsck --full` clean (7 unreachable trees, no unreachable blobs) · `git ls-files .beads` →
+  0 · `.gitignore:66` `.beads/`, `:68` `*.db`, `:70` `*.jsonl`
+- **Convergence:** `HEAD...origin/main` → 0 / 0; Forgejo `origin/main` = local `HEAD` =
+  `aa4d11c`
+- **Prevention layers 3–4:** `scripts/setup-git-gc-config.sh --verify` exit 0 (effective
+  windowMemory=2g / threads=1 / deltaCache=1g, worst case ≈3072 MiB within the 12 GiB
+  dispatch-scope ceiling); `scripts/setup-git-hooks.sh --check` exit 0 (installed hook
+  byte-identical to tracked source)
+- **Host today:** 44 G memory available, 52 G disk free, load 6.21 — healthy
+- **Surviving-history checks re-run, matching domchk-c3955b52's:** `git log --all -- .beads/`
+  → 0 commits across every ref; largest blob in the object store 14,970,288 bytes
+
+**New: even the cleanup-era instrumentation never observed the bloat.** `.git/safe-gc.log` —
+the safe-gc layer's own machine record — begins **2026-09-01 15:47:14** with the repository
+already at 91 MB / 0 loose objects / 1 pack, and across every run through 2026-09-06 its
+largest recorded loose count is 75 (0 MiB); `.git/safe-gc-checkpoint.json` reads
+`stage: complete, repo_size: 93M`. This sharpens §4.3's "canon-sourced, not re-measurable":
+the ≈18 GB / 17.16 GB loose / 4,482-object figures rest **solely** on the cleanup-verification
+docs' measurements (`docs/crashes/bf-4yjq-cleanup-verification.md:74-84`) — no line written by
+git or by safe-gc ever recorded the bloated state.
+
+**Then-vs-now ratios, recomputed for this bead's "calculate the ratios" criterion:**
+
+| Metric | At crash (canon) | Now (this bead) |
+|---|---|---|
+| `.git` | ~18 GB | 102 MB |
+| Loose | 17.16 GB / 4,482 objects | 130 / 948 KiB |
+| Packs | 9.60 MB | 3 packs / 99.13 MiB |
+| Loose : packed | **≈ 1,832 : 1** | **≈ 1 : 107** (packed-dominant) |
+
+**Root-cause verdict (unchanged, confirmed):** Infrastructure — repository bloat (Pattern 3).
+Underlying: 17+ identical ~237 MB `.beads/*.jsonl` bead-state snapshots committed to git (§6;
+the objects themselves are confirmed destroyed — §4.3 plus the zero-ref check above).
+Immediate: memcg-OOM SIGKILL of pack-objects inside the 12 GiB dispatch scope, 71 of 76
+attempts at the push step. Amplifying: the ~10 s no-backoff re-dispatch loop with no
+stop-condition for satisfied work (§8 item 6, still open fleet-side). One current-state note:
+the live `.beads/` store is **4.2 GB on disk** (3.9 GB needle traces + 306 MB state) — fully
+gitignored, so it cannot repeat bf-1s6c3 *through git*, but it is the same bulky state the
+prevention layers exist to keep out.
+
+**Dispositions:** root cause → §6; prevention → §8; the criterion's named deliverable →
+`docs/archive/crash-investigations/crash-root-cause-analysis-bf-1s6c3-final.md` (blob
+`f3544fb6`). Pool siblings domchk-892df91c (cleanup implementation) and domchk-3bf425da
+(stability verification) are verify-then-close debt — both subjects are already satisfied by
+§8 and `docs/crashes/bf-4yjq-cleanup-verification.md`; re-verify, don't redo. Alert bf-3laof →
+no further action; closure belongs to its dedicated closure bead.
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
