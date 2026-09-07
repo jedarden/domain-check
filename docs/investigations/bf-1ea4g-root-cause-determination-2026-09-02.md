@@ -6,6 +6,17 @@
 **Confidence Level:** HIGH
 **Classification:** FALSE POSITIVE - Post-Completion Infrastructure Termination
 
+> ⚠️ **SUPERSEDED IN PART — see [§2026-09-07 root-cause re-determination](#2026-09-07-root-cause-re-determination-domchk-c2b8c832) at the end of this document.**
+> The **FALSE POSITIVE alert** classification stands (re-verified 2026-09-07 by child
+> bead domchk-596f8499). The **mechanism** determination below — "SIGHUP cascade
+> (Signal 1)" against a "healthy repository" — is **wrong on both counts** and is
+> retained only as a record of what the 2026-09-02 corpus concluded: `exit_code -1`
+> is needle's died-without-exit-code sentinel and carries **no signal number** (the
+> SIGHUP reading was retired fleet-wide in the 2026-09-07 reclassification), and the
+> Aug-13 repository was 3 weeks into the documented 18 GB bloat era, not healthy.
+> The 2026-09-07 section re-derives the mechanism from the surviving attempt
+> transcripts: 54 of the 57 attempts died inside `git push`.
+
 ---
 
 ## Executive Summary
@@ -515,3 +526,202 @@ For bf-1ea4g:
 **Original Bead:** bf-1ea4g
 **Confidence Level:** HIGH
 **Classification:** FALSE POSITIVE - Post-Completion Infrastructure Termination
+
+---
+
+## 2026-09-07 root-cause re-determination (domchk-c2b8c832)
+
+Appended per the corpus dedup-append convention (this document stays the
+canonical bf-1ea4g root-cause record; nothing above is rewritten). This section
+is child bead 2 of alert bead **bf-1nb5u**'s 2026-09-02 split — the root-cause
+half, building on child bead 1's classification (domchk-596f8499: alert =
+FALSE_POSITIVE because the bead self-recovered and closed the same morning;
+mechanism class = INFRASTRUCTURE, era-attributed). Its deliverable is the
+**mechanism**: what actually killed the agent process, and why it happened 56
+times.
+
+**Primary root cause: an unbounded `git push` — pack-objects materializing a
+multi-hundred-commit unpushed backlog still carrying the retired bead-forge
+object mass, inside the 12 GiB per-dispatch `MemoryMax` — killed the agent
+process (memcg-OOM class). 54 of the 57 attempts died inside `git push`;
+the two that did not died inside `git commit`; the one attempt that skipped
+the push (attempt 57) is the one that succeeded.**
+
+### 1. The named instant, resolved
+
+bf-1nb5u's "2026-08-13T08:23:51.806516385+00:00" is the post-kill
+`HANDLING_RELEASE_DONE` heartbeat. The kill is `agent.completed exit_code: -1`
+at **08:23:44.918359819Z**, duration 92,079 ms — **attempt 30 of 57** dispatches
+of bf-1ea4g that day. Full resolution table: `docs/crashes/bf-1ea4g/README.md`
+(domchk-93ac565b's artifact bundle, commit 2ce9cd9). Nothing in this section
+re-litigates that resolution; it builds on it.
+
+### 2. What attempt 30 was doing when it died — new evidence
+
+The bundle proves the kill was mid-task (transcript ends mid-tool-call). Reading
+the transcript's actual tool sequence (`docs/crashes/bf-1ea4g/session-transcript-attempt30-449405f5.jsonl`,
+40 records, byte-identical to the surviving original
+`~/.claude/projects/-home-coding-domain-check/449405f5-1fc7-4766-82fe-20dc0fd400b2.jsonl`)
+identifies the operation:
+
+| Time (UTC) | Action |
+|---|---|
+| 08:22:32.247 | `git log -1 main` → tip `33356c14…` — **the prior attempt's own commit, stamped 08:21:35Z, 37 s before attempt 30 was dispatched** |
+| 08:23:01 / 08:23:13 | write + verify `.local-main-branch-state.json` (the bead's actual deliverable — trivial) |
+| 08:23:18.435 | `git add .local-main-branch-state.json && git commit -am "docs: capture local main branch state for bead bf-1ea4g"` → `[main 6da701b]` — *5 files changed, 13 insertions(+), 1018 deletions(-), delete mode 100644 .beads/.bf_history/issues-20260813T074101-974223951.jsonl* |
+| **08:23:31.123** | **`git push`** — tool_use issued, **no matching result** |
+| **08:23:44.918** | **kill recorded: `agent.completed exit_code: -1`** — 13.8 s into the push |
+
+Two facts fall out of that one commit line:
+
+- **`.beads/` state was still tracked in git on Aug-13.** Attempt 30's `-am`
+  commit swept in the deletion of a `.beads/.bf_history/issues-*.jsonl` file —
+  i.e. on the morning of Aug-13 the repo still carried committed bead-forge
+  state, the exact material that produced the 17+ identical 237 MB snapshots of
+  Aug-12 (bf-1s6c3 / bf-4yjq). The `.beads/` gitignore fix did not exist yet.
+- **Main advanced by one commit per retry.** Attempt 30's snapshot documented
+  main's tip as the *previous attempt's* commit. Each killed attempt left its
+  snapshot commit behind unpushed, so every retry inherited a **larger** backlog
+  than the one before it — the loop was self-amplifying.
+
+### 3. The pattern across all 57 attempts (new evidence)
+
+All 57 attempt transcripts survive (first-line dispatch tag
+`[needle:claude-code-glm-4.7-lab-domain-check:bf-1ea4g:*]`, mtime = death time,
+07:19–09:10Z; independently corroborating the 57-attempt count in
+`attempt-index.tsv` — child bead 1's bead notes say "64 attempts", which is
+incorrect). Their **last recorded tool call**:
+
+| Last tool call before death/success | Attempts |
+|---|---|
+| `git push` / `git push origin main` — no result follows | **54** |
+| `git add … && git commit …` — no result follows (08:18:12Z, 08:55:16Z) | 2 |
+| `bf close bf-1ea4g` — succeeded (attempt 57, 09:10:16Z) | 1 |
+
+The deaths are **operation-correlated, not time-correlated and not
+fleet-event-correlated**: they land on the same heavy git operation every time,
+scattered across 1 h 50 min. This is the single strongest discriminator between
+mechanisms (see §7) and it is new — the 2026-09-02 corpus never examined where
+in each attempt the kill landed.
+
+Attempt 57's transcript (`d4110c21-…jsonl`, last record 09:10:16.513Z) shows
+*why the loop ended*: it wrote its snapshot to **`/tmp`** (not the repo), never
+ran `git push` at all, and closed the bead. The kill loop stopped because the
+57th dispatch happened to skip the expensive operation — **not** because the
+underlying condition eased: a sibling bead's commit 20 minutes later (1ec2354,
+09:28:57Z) still describes main as ~500 commits ahead of origin. The backlog
+only drained with the later plain push recorded in
+`docs/branch-divergence-analysis.md` (660 → 422 → 0), and the repo condition
+itself persisted until the 2026-08-16 squash / 2026-09-01 de-bloat.
+
+### 4. Why the push killed the process
+
+- **Backlog size:** local main was **660 commits ahead** of both remotes on
+  Aug-12 (bf-qzvan, at `61d27ac`), **422 ahead on Aug-13**, 0 only after a later
+  plain push (`docs/branch-divergence-analysis.md`). Pushing means pack-objects
+  materializing every object the remote lacks.
+- **What the backlog carried:** retired bead-forge state. Three days later the
+  same mechanism was kernel-proven with the size attached — bf-198ne (Aug-16):
+  *"720-commit backlog whose tree still carried **5.6 GB** of retired
+  bead-forge state"*, killed by memcg OOM inside the dispatch scope
+  (`docs/crashes/bf-198ne-crash-report.md`). Aug-13's 422-commit backlog is the
+  same object mass mid-drain; the exact GB figure for Aug-13 is not recoverable
+  (§6).
+- **The bound that turned "big" into "dead":** the needle dispatch scope's
+  **12 GiB `MemoryMax`** — kernel-proven binding on the Aug-16 records at 100 %
+  of the limit with `CONSTRAINT_MEMCG`, `task=git` (`docs/crash-artifacts-bf-3561g.md`
+  §4/§6). No `pack.windowMemory` / `pack.deltaCacheSize` / `pack.threads` bounds
+  existed on Aug-13; those were applied 2026-09-02 (bf-198ne's remediation,
+  `setup-git-gc-config.sh`) and bound both `gc` and `push` pack-objects.
+- **Mechanism class, proven for the era if not for this instant:** memcg OOM
+  SIGKILL of a git transport/pack operation inside the dispatch scope. A
+  SIGKILLed process yields no exit code — exactly what needle's
+  `exit_code: -1` sentinel records.
+
+### 5. System resources at crash time (acceptance item)
+
+| Resource | Value at 08:23:44Z, Aug-13 | Source |
+|---|---|---|
+| **Load (1 min)** | **10.80** at attempt-30 dispatch (08:22:12.657Z); **9.86** 12 s post-kill (08:23:56.683Z); neighbors 9.84 / 9.89 — on **9 cores**, i.e. >100 % for the whole window | needle `fleet.cpu_saturated` samples, re-derived byte-exact from the Aug-13 worker log 2026-09-07 (bundle `system-state-2026-08-13T082344Z.md`) |
+| Load, storm window | 71/71 samples in 07:00–10:00Z above the 0.8 saturation threshold (continuous saturation); window peak 19.87 | same |
+| **Memory** | **No record exists.** First memory/disk sampler (lab-health-collector) starts 2026-08-15 23:53 EDT; needle emitted no memory event types on Aug-13. Dispatch-scope bound: 12 GiB `MemoryMax` | documented absence, re-checked live |
+| **Disk** | **No record exists** (same collector gap); no disk-exhaustion signature in any attempt record | same |
+
+The box was CPU-saturated by fleet load all morning — bf-4k2ws's 55-kill storm
+had only just ended (07:04Z) before bf-1ea4g's began (07:17Z), the documented
+rolling-handoff pattern. CPU saturation amplifies (concurrent workers' git
+operations sharing the box) but does not kill processes; it is context, not the
+mechanism.
+
+### 6. Repository size and git operation history at Aug-13 (acceptance item)
+
+- **Direct measurement: none survives.** The 2026-08-16 squash rewrote this
+  history line: attempt 30's commit `6da701b`, the tip it documented
+  (`33356c14…`), and attempt 57's tip (`a9f58f3…`) are all unresolvable in this
+  clone, and `61d27ac` (the 660-ahead datum) is gone with them. The
+  `pre-squash-history-20260816` branch (local-only) preserves the era's commit
+  *structure* — 40+ bf-1ea4g snapshot commits between 07:51Z and 09:28Z — but as
+  a rewritten copy, so it cannot bound Aug-13 sizes either.
+- **What is known:** Aug-12 (bf-1s6c3/bf-4yjq) measured 18 GB `.git` / 17.16 GB
+  loose objects from committed 237 MB `.beads` snapshots; Aug-13 still had
+  `.beads/` state tracked (§2's commit line proves it for that morning,
+  first-hand); Aug-16 measured the push backlog at 720 commits / 5.6 GB. Aug-13
+  sits between the two measured endpoints, with the backlog measured at 422
+  commits.
+- **Git operation history of the kill window:** 56 commits + 56 failed pushes
+  from this bead alone between 07:17:49Z and 09:08:39Z (one snapshot commit per
+  attempt, every push dying), interleaved with the same from neighboring beads
+  in the same storm era — all unbounded (no `pack.windowMemory` until
+  2026-09-02).
+
+### 7. Alternative mechanisms ruled out
+
+| Hypothesis | Why it fails |
+|---|---|
+| Network/remote error during push | Would return an exit code (1) and an error result in the transcript; these pushes have **no result** — the process died mid-call, and needle recorded the no-exit-code sentinel |
+| Needle timeout | Timeouts are recorded as their own outcome class with exit code **124** (5 of bf-4k2ws's 62 completions, same day, same log) — never here; all 56 are `exit_code: -1` |
+| Disk exhaustion | Would fail with write errors and an exit code; no such record in any attempt; disk telemetry absent but no error signature |
+| **SIGHUP cascade (this document's 2026-09-02 conclusion)** | Retired: `exit_code -1` is needle's sentinel for "died without an exit code" and identifies **no signal** (2026-09-07 fleet reclassification); a SIGHUP cascade would strike workers irrespective of what they were executing, yet 54/56 of these deaths land in one specific operation. The "repository healthy" premise was anachronistic — repo health was measured **after** the 2026-09-01 repair, against an Aug-13 instant inside the bloat era |
+| Code defect in domain-check | Uninvolved — the killed process was `git`, the workload a docs snapshot; consistent with every investigation of this fleet (zero application defects) |
+
+### 8. Root-cause statement
+
+**Primary:** unbounded `git push` (pack-objects) over a multi-hundred-commit
+unpushed backlog still carrying retired bead-forge object mass, on a repo still
+tracking `.beads/` state, inside the 12 GiB per-dispatch `MemoryMax` → memcg-OOM
+SIGKILL, recorded as `exit_code: -1`.
+
+**Amplifiers (why it happened 56 times, and why it produced 88 alert beads):**
+
+1. **Self-amplifying retry loop** — each killed attempt committed another
+   snapshot onto main before dying, so every retry's push was bigger than the
+   last. Nothing bounded the retry.
+2. **No memory bound on git transport** — `pack.windowMemory` /
+   `deltaCacheSize` / `threads=1` landed only on 2026-09-02
+   (`setup-git-gc-config.sh`, covering gc *and* push).
+3. **Pre-dedup alerting** — needle raised one alert bead per kill (88
+   bf-1ea4g-titled alerts; 33 still open against a bead that closed 2026-08-13),
+   which is the FALSE-POSITIVE *alert* problem child bead 1 classified —
+   distinct from the kill mechanism.
+4. **Fleet load** — continuous CPU saturation 07:00–10:00Z (peak 19.87/9 cores)
+   with adjacent same-mechanism storms, increasing per-operation memory pressure
+   and slow pushes.
+
+**Confidence: HIGH on the operation where death occurred** (54/57 transcripts,
+first-hand, verbatim); **HIGH on mechanism class** (the identical
+operation + scope + era combination is kernel-proven on Aug-12-era and Aug-16
+records); **MEDIUM on memcg OOM as the specific killer of this instant** — no
+kernel record for Aug-13 exists (journald's first entry is 2026-08-15 19:56:33
+EDT, single boot, verified live; earliest surviving kernel OOM line is Aug-16
+00:27:35 EDT, `task=git`, `CONSTRAINT_MEMCG`, dispatch scope), so the instant
+itself can never be kernel-proven. Remediation belongs to the already-landed
+infrastructure layer (repo de-bloat, `.beads/` gitignore, pack bounds,
+backlog-draining pushes) — this bead proposes no new fix.
+
+**Attribution:** every figure in §2–§7 was derived first-hand 2026-09-07 from
+the artifacts cited (bundle `docs/crashes/bf-1ea4g/`, commit 2ce9cd9; the 57
+surviving attempt transcripts under
+`~/.claude/projects/-home-coding-domain-check/`; the Aug-13 needle worker log;
+live `journalctl`/`git` checks). Figures quoted from other documents are
+cited to those documents rather than restated as first-hand. Child bead 1's
+"64 attempts" is corrected to 57 in §3.
