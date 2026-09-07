@@ -483,6 +483,112 @@ the checked application.
 
 ---
 
+## 10. Fix specification — implementation requirements for the fix chain (bead `domchk-9bd1f524`, 2026-09-07)
+
+Dispatched to "document specific fix requirements based on root cause
+analysis": review the crash docs, name the exact change needed, list affected
+files/components, and hand the next bead an implementation checklist. Appended
+here per §6 rather than as a new document. Chain position: fix-type
+determination `domchk-2222ea44` (closed) → implementation bead
+`domchk-20f2666d` (closed **no-commit** — the fix type is already implemented)
+→ **this requirements document** → `domchk-aa986d4b` "Implement and locally
+test the crash fix" (open; its description names "bead from step 1
+(requirements document)" as its blocker — that is this section) →
+`domchk-ecf47b49` (test) → `domchk-26ccd69b` / `domchk-05d44870`
+(document/commit/push) → `domchk-34871e96` (verify effectiveness).
+
+The fix type per `domchk-2222ea44`'s determination, re-verified this session:
+**PRIMARY — resource limit** (bound the memory a dispatch can materialize; the
+5 × exit 124 are the 600 s dispatch cap — attempts 16, 17, 58, 59, 61 at
+600.02 s ± 20 ms — a work-time bound, not a repo defect); **SECONDARY — safer
+git patterns**; signal handling ruled out (G-6); NEEDLE-infrastructure
+reporting already discharged as G-9..G-13. **Every component of that fix
+already exists, committed on `origin/main`.** This spec therefore binds each
+requirement to the exact committed artifact that satisfies it, marks the short
+list of items still open *with their owners*, and gives the implementing bead
+a pass/fail battery — so it verifies rather than rebuilds, and does not
+manufacture a code change. Every "verified live" figure below is this bead's
+own run at HEAD `7587471` = `origin/main`, 2026-09-07.
+
+### 10.1 Requirement → committed artifact
+
+| # | Requirement (from the fix type) | Committed artifact (affected files/components) | Live verification, this bead |
+|---|---|---|---|
+| R1 | Pack memory bounded inside the 12 GiB dispatch scope — for **both** `gc` and push-side `pack-objects` | git config `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` at **global and local** scope; installer/verifier `scripts/setup-git-gc-config.sh` | `--verify` exit 0: effective chain resolves system→global→local, worst case ≈3072 MiB, "within the 6442450944 ceiling for a 12GiB dispatch scope" |
+| R2 | Object store must not re-bloat | `.gitignore` lines 66–70 (`.beads/`, `*.db`, `*.db.backup.*`, `*.jsonl`); `scripts/setup-git-hooks.sh` → 10 MB `.git/hooks/pre-commit` gate (G-1, closed `dfa60a9`) | `git ls-files .beads` → empty; hook check exit 0 "byte-identical to tracked source"; `.git` 103 MB, 157 loose objects / 1.69 MiB, one 99.11 MiB pack, garbage 0 |
+| R3 | Remediation stays bounded and **unconditional** | `scripts/safe-git-gc.sh` (staged, checkpoint/resume, `--check-only`); daily 03:00 `domain-check-git-gc.service` + weekly Sun 04:00 `--full`, both `MemoryMax=4G` | `--check-only` exit 0, resource checks pass ("GC not needed" is the healthy line, not a failure); all 7 `domain-check-*` user timers present with future NEXT |
+| R4 | Heavy work gated on environment | `scripts/preflight-health-check.sh`; `scripts/resource-monitor.sh` (`PRESSURE_WARNING=70` / `PRESSURE_CRITICAL=80`); `scripts/system-event-mode.sh` surge gate (G-3 implementation, `e0fab45`) | preflight exit 0, 4/4 checks; resource/service/monitoring timers fired minutes before this run; `system-event-mode.sh check` exit 0 "clear" |
+| R5 | **Not** the fix: signal handling (G-6 — hardens `internal/server/server.go`, not the dying needle workers); domain-check code (§9.5 exoneration); the alert-dedup layer (§9.4's caveat: knobs present, pipeline never fired — D-1..D-10) | — | — |
+
+The storm's two kill legs are covered by different halves of this table: the
+55 mid-run kills by R1+R2 (bound the allocation, keep the object store small),
+the 5 × exit 124 by nothing in this repo — the cap is a NEEDLE work-time knob
+(G-11/G-12), and the correct repo-side response is the R4 gate, not a longer
+cap.
+
+### 10.2 Genuinely open items — with owners; not this chain's work
+
+| Item | Where | Owner / vehicle |
+|---|---|---|
+| G-3 adoption half — actually *call* the `system-event-mode.sh` gate from `crash-alert-manager.sh` and `preflight-health-check.sh` | those two scripts | **OPEN bead `domchk-6951fe0c`** — do not duplicate |
+| Alert-layer D-1..D-10 (dedup pipeline never once fired in production) | `docs/alert-deduplication-gap-analysis-2026-09-07.md` | `domchk-b5448b6a`'s prioritized fix list; note its repo-boundary caveat (needle owns bead creation) |
+| Work-completion detection at the alert source (G-9), dispatch-scope sizing (G-10), retry/backoff (G-11), turn budgets (G-12), CPU throttling (G-13) | NEEDLE repo | external canon — Phase 3 of `docs/crash-prevention-requirements.md` |
+| G-4 / G-5 / G-7 / G-8 hygiene (gateway failover, prevention feedback loop, `monitoring-setup.sh` retirement, evidence retention) | `docs/crash-prevention-requirements.md` §5 | register items, separate scope |
+
+**Worktree hazard for any implementation bead:** `scripts/` currently carries
+~48 files of co-tenant uncommitted edits — including `safe-git-gc.sh` and
+`preflight-health-check.sh`, two of R3/R4's artifacts. Build on the committed
+versions (`git ls-tree origin/main -- scripts/<file>`), never on the dirty
+copies, and do not sweep them into a commit.
+
+### 10.3 Anti-requirements (do NOT do these)
+
+1. No bare `git gc --aggressive` — the bf-4x12ec mechanism; the guard is
+   persistent git config (R1), not convention.
+2. No gc-threshold re-tuning and no conditional `--auto-when-needed` gating of
+   the nightly gc — withdrawn at G-2 with the bf-198ne rationale (conditional
+   gates are blind to bloat *inside* a pack).
+3. No Go changes: the crash population never touched the application (§9.5);
+   a "fix" commit under `internal/` would be manufacture.
+4. No new signal-handling work (G-6).
+5. No new `bf-4k2ws`-scope document — append a dated § here per §6.
+
+### 10.4 Implementation checklist for `domchk-aa986d4b` (implement + local test)
+
+Because R1–R4 are already implemented, "implement and locally test" for this
+chain means **run the battery, record each result on the bead, and change
+nothing unless a line FAILS** — a failure is the work item; a full pass is the
+correct terminal state, and the bead closes without a code commit (mirroring
+`domchk-20f2666d`).
+
+| # | Command | Pass criterion |
+|---|---|---|
+| 1 | `git fetch origin; git rev-parse HEAD origin/main; git merge-base --is-ancestor HEAD origin/main` | equal SHAs, exit 0 — zero unpushed |
+| 2 | `./scripts/setup-git-gc-config.sh --verify` | exit 0; worst case ≈3072 MiB within the 6 GiB ceiling |
+| 3 | `git config --show-scope --get-all pack.windowMemory` and likewise `pack.threads`, `pack.deltaCacheSize` | both a `global` and a `local` row for each key |
+| 4 | `du -sh .git; git count-objects -vH` | `.git` ≈103 MB; loose ≲2 MiB; pack ≈99 MiB; garbage 0 |
+| 5 | `grep -n -e beads -e '\.db' -e jsonl .gitignore` then `git ls-files .beads` | the four ignore rules; second command prints nothing |
+| 6 | `./scripts/setup-git-hooks.sh --check` | exit 0, "byte-identical to tracked source" |
+| 7 | `./scripts/safe-git-gc.sh --check-only` | exit 0; resource checks pass |
+| 8 | `./scripts/preflight-health-check.sh` | exit 0, 4/4 checks |
+| 9 | `systemctl --user list-timers 'domain-check-*' --all` | 7 timers, every NEXT in the future |
+| 10 | `./scripts/system-event-mode.sh check` | exit 0 "clear" (75 = defer is the correct *active-event* answer, not a failure) |
+| 11 | `./scripts/test-crash-alert-fixes.sh` | exit 0, 12/12 (knobs present; pipeline effectiveness is §9.4/D-1..D-10, out of scope) |
+| 12 | `./scripts/test-safe-git-gc-limits.sh` (33 assertions, seconds), optionally `./scripts/test-gc-memory-bounds.sh` (768 MiB cgroup replay of the crash command) | exit 0 |
+
+Optional negative proofs are the `DOMCHECK_RUN_LONG_TESTS=1` variants per
+`scripts/README.md` — not required for closure.
+
+*§10 appended by `domchk-9bd1f524`, 2026-09-07. Docs reviewed: this document
+§1–§9, `docs/crashes/bf-4k2ws-crash-report.md` including its Classification
+Correction, `docs/crash-prevention-requirements.md` (G-1..G-13 with the
+09-06/09-07 closures and the G-2 withdrawal), and
+`docs/alert-deduplication-gap-analysis-2026-09-07.md` (D-1..D-10). Every R1–R4
+verification line in §10.1 and steps 1–11 of §10.4 were executed live this
+session at HEAD `7587471`; step 12 cites the committed self-tests unexecuted.*
+
+---
+
 *Determination by `domchk-7f838f36`, 2026-09-07; §8 appended by
 `domchk-4311aaa8`, 2026-09-07; §9 appended by `domchk-a7bc56b5`, 2026-09-07.
 Every count in §2 was re-derived this session from
@@ -491,4 +597,5 @@ live repository state; no figure is cited from prior reports without
 independent reproduction. §8's counts were likewise re-derived from the same
 primary log, the live bead store, and `origin/main`. §9's counts were
 re-derived from the same primary log, the live bead store, `origin/main`, and
-live `scripts/crash-alert-manager.sh`.*
+live `scripts/crash-alert-manager.sh`. §10's verification lines were executed
+live by `domchk-9bd1f524` as itemized in its footer.*
