@@ -1,5 +1,11 @@
 # Crash Investigation: Bead bf-1s6c3
 
+> **⚠️ SUPERSEDED 2026-09-06** — the "Original Crash Date 2026-08-12 21:36:51 UTC" here is
+> one attempt of a **76-dispatch / 71-kill storm** (first kill 21:36:44.519Z), and this
+> doc's deliverable-SHA and cleanup figures are corrected in the comprehensive report.
+> Use [bf-1s6c3-comprehensive-investigation-2026-09-06.md](bf-1s6c3-comprehensive-investigation-2026-09-06.md),
+> §5.1 supersession table. Retained below for history only.
+
 **Investigation Date:** 2026-09-01  
 **Original Crash Date:** 2026-08-12 21:36:51 UTC  
 **Investigation Bead:** domchk-608a52aa  

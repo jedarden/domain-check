@@ -1,5 +1,11 @@
 # Crash Evidence Report: Bead bf-1s6c3
 
+> **⚠️ SUPERSEDED 2026-09-06** — the "Crash Date 2026-08-13T00:38:41Z" and "SIGKILL
+> (signal 9)" claims here describe one attempt of a **76-dispatch / 71-kill storm**; exit −1
+> is a signal-death sentinel, not a signal number, and this doc's deliverable SHAs are dead.
+> Use [bf-1s6c3-comprehensive-investigation-2026-09-06.md](bf-1s6c3-comprehensive-investigation-2026-09-06.md),
+> §5.1 supersession table. Retained below for history only.
+
 **Report Date:** 2026-09-01
 **Bead ID:** bf-1s6c3
 **Agent:** claude-code-glm-4.7-lab-domain-check

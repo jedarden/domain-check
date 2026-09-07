@@ -187,6 +187,14 @@ df -h /                    # Disk space
 uptime                     # Load average
 ```
 
+**Crash-timestamp caveat (learned from bf-1s6c3, added 2026-09-06):** the `Timestamp` in a
+crash-alert bead's description is the crash handler's `HANDLING_RELEASE_DONE` **heartbeat,
+not the kill** — it trails the real death by 6.4 s (bf-1s6c3: alert 22:04:12.524613796 vs.
+`agent.completed` 22:04:06.124743603Z), 7.2 s (its 22:24:04 event), and 8–120 s (bf-173o7e).
+An investigation window built on the alert time can miss the death entirely. Get the real
+time from the needle worker log's `agent.completed` record for the bead/agent, and widen
+`<crash_timestamp>` windows below (and any journalctl `--since`) to absorb the drift.
+
 ### Phase 2A: Infrastructure Event (Exit Code -1)
 
 **Pattern:** SIGKILL, SIGHUP, OOM killer → System-wide resource pressure

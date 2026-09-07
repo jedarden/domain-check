@@ -1,5 +1,12 @@
 # Crash Report: Bead bf-1s6c3
 
+> **⚠️ SUPERSEDED 2026-09-06** — this 2026-09-01 report's "False Positive /
+> post-completion" framing, single-crash date, and `7dd79eb`/`2832106` deliverable SHAs
+> are refuted by the primary worker logs: the event was a **76-dispatch / 71-kill storm**
+> and the merge landed **16 minutes into it**. Use
+> [bf-1s6c3-comprehensive-investigation-2026-09-06.md](bf-1s6c3-comprehensive-investigation-2026-09-06.md)
+> and the supersession table in its §5.1. Retained below for history only.
+
 **Report Date:** 2026-09-01  
 **Bead ID:** bf-1s6c3  
 **Status:** ✅ RESOLVED - False Positive  
