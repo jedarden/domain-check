@@ -212,6 +212,7 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
 - `scripts/crash-classifier.sh` - Crash categorization
 - `scripts/alert-deduplication.sh` - Duplicate detection
 - `scripts/test-crash-alert-fixes.sh` - Test suite (re-verified 2026-09-06: 12/12 passing)
+- `scripts/test-closed-bead-filter.sh` - Functional closed-bead filter test: runs a fabricated trace for closed bead bf-2vtzg through crash-alert-manager.sh in a sandbox and asserts no alert is generated (7 assertions; `test-crash-alert-fixes.sh` only checks the FIX 1/5 markers are present)
 
 **Usage:**
 ```bash

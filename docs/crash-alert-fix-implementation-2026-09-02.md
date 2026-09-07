@@ -144,3 +144,42 @@ The fix correctly handles the bf-4k2ws pattern:
 **Changes Committed:** Yes  
 **Tested:** Yes (12/12 tests passing)  
 **Production Ready:** Yes
+
+---
+
+## Appendix — Functional closed-bead filter test (2026-09-07)
+
+`scripts/test-crash-alert-fixes.sh` verifies the closed-bead filter by grepping
+for its `CRITICAL FIX 1` / `CRITICAL FIX 5` markers. That catches a deleted
+marker string, not a broken gate. `scripts/test-closed-bead-filter.sh` is the
+functional counterpart the closed-bead criterion calls for: it runs the real
+`crash-alert-manager.sh` end-to-end against **bf-2vtzg** — the resolved crash
+whose duplicate-alert storm (bf-5o8ey, bf-xg2gg, bf-39xem, …) the filter exists
+to stop — and asserts that no alert is generated.
+
+```bash
+./scripts/test-closed-bead-filter.sh     # 7 assertions, exits 0 on pass
+```
+
+How it works:
+
+- Builds a throwaway sandbox with the manager's expected layout
+  (`<root>/scripts/…`, `<root>/.beads/traces/bf-2vtzg/…`) and a fabricated
+  trace carrying `exit_code: -1`, bf-2vtzg's real crash signature. A `0` would
+  trip FIX 4 (completion awareness) before the closure gate could be exercised.
+- `PROJECT_ROOT` is derived from the copied script's own path, so every write —
+  fabricated trace, alert log, processed-alerts state — lands in the sandbox,
+  never in the live `.beads/traces`.
+- `crash-resolution-tracker.sh` is deliberately **not** copied into the
+  sandbox. Live, that tracker answers first (bf-2vtzg resolves as
+  `bead_closure`), so FIX 1 is the *second* gate; dropping the tracker is what
+  lets the test prove the closed-bead filter itself fires. Assertions then pin
+  the exact FIX 1 output ("is already CLOSED - no alert needed"), exit 0, and
+  the absence of any ALERT-level log entry or processed-alert record.
+
+Gate layering, verified live 2026-09-07: for a closed bead the manager exits 0
+via FIX 1 with `Reason: Bead already closed`; for an open bead the same gate
+lets it through (`Processing crash alert for bead: … (status: Status: Open)`)
+and processing continues toward classification and alerting. The test's
+precondition assertion fails with a distinct message if bf-2vtzg is ever
+reopened or deleted — a broken test premise, not a filter result.
