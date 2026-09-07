@@ -1,5 +1,19 @@
 # Root Cause Analysis: Signal -1 Exit Crashes
 
+> **SUPERSEDED (2026-09-07):** the SIGHUP-cascade mechanism and the
+> SIGHUP/SIGKILL reading of exit −1 below are wrong — **exit −1 is the
+> unrecorded-signal sentinel**, and the bf-4k2ws kill regime is
+> **INFRASTRUCTURE (repository-bloat-era)**: 55 real exit −1 kills on
+> 2026-08-13 (02:01–07:18Z) recounted first-hand from the surviving worker
+> log. Current determination:
+> [`docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`](../../investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md)
+> (see [`root-cause-analysis-final-bf-4k2ws.md`](root-cause-analysis-final-bf-4k2ws.md)
+> for the sibling banner). Also stale here: the 40/30/15/15 % cause
+> distribution is not evidence-derived, and the bf-1s6c3 figures are
+> superseded by its canonical report
+> ([`../../crash-analysis-bf-1s6c3-2026-09-06.md`](../../crash-analysis-bf-1s6c3-2026-09-06.md):
+> 76 dispatches / 71 kills, 93 MB after cleanup, 99.5 % reduction).
+
 **Analysis Date:** 2026-09-02
 **Task:** domchk-6951ce55
 **Investigated by:** claude-code-glm-4.7-lab-roam-7
