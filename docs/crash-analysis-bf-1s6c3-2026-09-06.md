@@ -478,6 +478,51 @@ layers 1–6, re-verified in force above. **Alert disposition: no further action
 event** — the bead is closed, the deliverable is represented on `main` by `46293c5`, and the
 repository condition is repaired and holding.
 
+### Re-verification 2026-09-07 (domchk-6be24808 — the parallel chain's classification step)
+
+This bead is the "Classify crash and collect evidence" link of a further parallel instance of
+the gather → classify → investigate chain. Its dispatched deliverable — crash classification,
+collected evidence, repository health metrics, work-completion check, classification report —
+is rendered by **§5, §4, §4.4/§12 and §2/§5.3** above, and stands alone as
+`docs/crashes/bf-1s6c3-crash-classification-2026-09-06.md` (domchk-56b5ba67). Per the
+workspace dedup rule this bead shipped **no new classification document**; what follows is its
+own first-hand re-verification plus the resolution of its dispatch's named crash instant.
+
+**Live re-verification (all re-run 2026-09-07, byte-exact against this report):**
+
+- **Census recounted** from the committed extracts (945 + 513 lines): `agent.completed` × 76
+  → exit −1 × 71, 124 × 4, 0 × 1; `outcome.classified` → crash × 71, timeout × 4, success × 1;
+  `outcome.handled` → alerted × 71, deferred × 4, none × 1
+- **Ancestry:** `42a7b07` = commit, 2026-08-12T21:47:07Z "Merge reconciliation: Forgejo and
+  GitHub remote histories", parents `47e7758` + `00117cb` — **not** an ancestor of `main`
+  (contained only by `pre-squash-history-20260816`); `46293c5` **is**; `2832106` and
+  `7dd79eb` both fail `git cat-file`
+- **Repository:** `.git` 102 MB · 82 loose objects · in-pack 11,182 / 99.13 MiB · garbage 0 ·
+  `git fsck --full` exit 0 (dangling trees only) · `git ls-files .beads` → 0 · `.gitignore:66`
+  `.beads/`, `:70` `*.jsonl`
+- **Convergence:** `rev-list --left-right --count HEAD...origin/main` → 0 / 0; GitHub mirror
+  `main` = `5d29b47` = local HEAD
+- **Health scripts (dispatch steps 1–2):** `preflight-health-check.sh` 4/4 passed;
+  `check-repo-health.sh` passed — 101 MB, 3 packs, effective pack-memory bound ≈3072 MiB
+  verified within the 12 GiB dispatch-scope ceiling, no unmanaged aggressive gc running
+- **Host today:** 43 GiB memory available, 53 G disk free, load 6.59 — healthy
+
+**The dispatch's named crash instant resolved:** `2026-08-12T22:25:51` is not a distinct
+crash. It is the post-kill handling boundary of one of the 71 identical deaths —
+`agent.completed` **22:25:44.342Z** (`exit_code: −1`, duration 94,581 ms, mid-task),
+`HANDLING_RELEASE_DONE` heartbeat 22:25:51.760Z, `outcome.handled action=alerted` 22:25:53.889Z,
+re-claim 22:25:56.251Z (2.4 s). Like the `21:36:51Z` and `00:38:41Z` variants catalogued in
+§11, it is one mid-storm attempt boundary, not "the" crash.
+
+**Classification verdict (unchanged, confirmed):** Infrastructure — repository bloat
+(`docs/crash-response-guide.md` Pattern 3, exit-code table row 2; every Pattern-3 criterion
+present per §5.2). Work completion: the deliverable landed at 21:47:07Z (attempt 4) while
+deaths continued **mid-task** — 72 of 76 dispatches ran against already-satisfied work; the
+on-`main` reconciliation is `46293c5` with 0/0 divergence today. Excluded alternates per
+§5.4: workflow (no exit-1/max-turns signature), service failure (no 5xx to the gateway), code
+defect (the task never touched application code). **Alert disposition: no further action for
+this event.**
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
