@@ -38,7 +38,8 @@ The one *actionable defect this corpus exposes* is in the observability plumbing
 application: bf-57nao4's kill is the only one of the corpus's two captured crashes with **no
 crash record in `.beads/events.jsonl`** — because the needle worker that would have written
 it died in the same wave first (§4-C). The alert layer consequently cannot see that crash at
-all, and the known `domchk-f6fff20f` banner defect would swallow the verdicts that do exist.
+all. (The formerly-compounding `domchk-f6fff20f` banner defect is **fixed at this document's
+own HEAD** — correction dated 2026-09-07 ~19:50Z, see §5 gap 2.)
 
 ---
 
@@ -175,7 +176,7 @@ classification's §7.2 suspected, now with the mechanism named.
 | "Domain-check code has NO defects; crashes are external" | Holds for the corpus: 0 panics, 0 application errors, 0 real goroutine dumps across all 176 failure/crash/timeout records (E11), HEAD builds and vets clean in isolation (§7) |
 | Repository-bloat prevention layer (gitignore, 10 MB pre-commit gate, pack-memory bound, daily health timer) | Unexercised by this corpus by design — the era it guards against (bf-1s6c3/bf-4yjq, GB-scale memcg kills) is absent: all Sep-6→present kernel kills are the bound-verification harnesses' own scopes (E12), and the repo is 105 M with health exit 0 today |
 | Monitoring stack (resource/service monitors, crash-pattern detection) | Correctly silent on Aug 26 (`.beads/logs/` starts Sep 1 — journald is the only surviving Aug source); the 50,488-line crash-monitor log against 3 real crash records confirms the guide's alert-noise caveat |
-| Known defect `domchk-f6fff20f` (alert manager reads the classifier's `====` banner as `CLASSIFICATION`) | Compounds the §4-C capture gap: even the verdicts that exist never reach the alert layer. Both defects are alert-plumbing, not application, and both are already owned |
+| Formerly-open defect `domchk-f6fff20f` (alert manager reads the classifier's `====` banner as `CLASSIFICATION`) | **Fixed at this document's HEAD** (`339b696`): `crash-alert-manager.sh` line 285 now extracts `CLASSIFICATION` by grepping for a bare `FALSE_POSITIVE|SERVICE_FAILURE|INFRASTRUCTURE|CODE_DEFECT|UNKNOWN` line — the `====` banner cannot match — falling back to `head -1` only when no verdict line exists. The fix arrived mid-chain via `8cc1172` (domchk-701bcfa5's classifier-to-alert wiring); verified by this bead reading HEAD's script at ~19:50Z. The tracking bead still reads Open / "NOT yet fixed" (rev 3, noted against older HEAD `ba23173`) — closing it out is bookkeeping owed, not a code change |
 
 **Genuine gaps this corpus adds to the prevention register** (for domchk-3b605127):
 
@@ -186,9 +187,13 @@ classification's §7.2 suspected, now with the mechanism named.
    but `events.jsonl` has no crash record, classify from the trace, not from the events
    layer.** This is the same window trap recorded in the classification §5 for
    `crash-classifier.sh`.
-2. **The `domchk-f6fff20f` banner defect** (pre-existing, open) — reconfirmed as live by
-   this chain; the FALSE_POSITIVE branch of the alert manager remains dead code until it
-   lands.
+2. **The `domchk-f6fff20f` banner defect** — *dated correction (~19:50Z, after the first
+   version of this document was drafted):* the wiring fix is **landed at HEAD `339b696`**
+   (arrived via `8cc1172`, domchk-701bcfa5): the manager now greps the classifier output
+   for a bare classification-token line, so the `====` banner can no longer be mistaken
+   for the verdict and the FALSE_POSITIVE branch is live. Residual owed is closing the
+   still-open tracking bead, whose "NOT yet fixed" note predates the fix (it cites HEAD
+   `ba23173`).
 3. **Exit-0-without-close release cycling** (§4-A residual) — a queue-policy question for
    needle, already documented as the alert-loop root; this corpus adds a quantified
    instance (one alert bead cycling across nine days, four dispatches, two exit=0 runs
@@ -268,8 +273,9 @@ scope is:
 1. **Needle-side (primary, outside this repo):** the worker-churn actor (§4-B) and the
    crash-record capture race (§4-C). Both need fleet-level authority; this document is the
    evidence package for escalating them.
-2. **Workspace-side, already-owned:** land `domchk-f6fff20f` (the CLASSIFICATION banner
-   fix) so the verdicts that do exist reach the alert layer.
+2. **Workspace-side, bookkeeping only:** the `domchk-f6fff20f` wiring fix is already
+   landed at HEAD (§5 gap 2) — the residual is closing the stale-open tracking bead so
+   the register reflects the tree.
 3. **Workspace-side, cheap and new:** the manual classification rule from §5 gap 1 —
    "trace says crash, events layer silent → classify from the trace" — is already how this
    chain worked; the residual is recording it where the next classifier consumer will find
