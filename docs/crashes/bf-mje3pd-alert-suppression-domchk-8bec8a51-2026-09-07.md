@@ -152,3 +152,31 @@ that is **not** this dispatch's and was left untouched:
   used the `79e45de` extract, whose alert scripts are byte-identical to
   those at `395cf89`, and citations are to paths verified present at HEAD,
   not to the dirty worktree.
+
+## 7. Closing-attempt re-verification (2026-09-07 ~21:35Z, HEAD `ab9042f`)
+
+Re-executed first-hand by the bead's closing attempt, against a
+`git archive HEAD` extract of `ab9042f` (the note above + two docs-only
+commits later than the `79e45de` extract; `git diff --stat
+79e45de..ab9042f -- scripts/` is empty, so the same scripts ran), from
+the repo cwd so `bead show` resolves the live workspace. Extract copies
+only — `PROJECT_ROOT` derives from `SCRIPT_DIR/..`, so nothing was
+written to the live `.beads/logs/`:
+
+- `test-crash-alert-fixes.sh` → **12/12 passed, 0 failed, exit 0** — the
+  task's expected count, matched at HEAD (`13/13` remains the shared
+  worktree's count, the co-tenant's uncommitted 13th test).
+- `test-closed-bead-filter.sh` → **7/7 passed, exit 0** — its premise
+  re-resolved bf-2vtzg as CLOSED in the live store. This is an
+  end-to-end `crash-alert-manager.sh` run for a closed bead, so it
+  re-proves §4 scenario A live; §4 scenario B's gate is re-proven by the
+  dedup leg below.
+- `alert-deduplication.sh check bf-3dxljn` → `DUPLICATE: crash target
+  bf-mje3pd is already resolved`, exit 0, via leg 2:
+  `crash-resolution-tracker.sh bf-mje3pd check` → `RESOLVED`,
+  `"resolution_type": "bead_closure"`, `"verified": true`.
+- Live store re-read matches §1 exactly: bf-mje3pd **Closed**;
+  bf-3dxljn / bf-1pidqn / bf-56kmlk / bf-x88dnf **Open** (4 open alerts
+  covering the target); bf-1cezsk **Closed**.
+
+Every result matches §§1–4; nothing in this note needed correction.
