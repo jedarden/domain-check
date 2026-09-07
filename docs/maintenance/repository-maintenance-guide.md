@@ -327,6 +327,17 @@ files, `setup-git-hooks.sh --check` exit 0. Two more deltas for future battery r
    working-tree copy also carried a co-tenant's in-flight edit adding a push-side
    integration test; only the HEAD extract isolates the committed 12.)
 
+**Third-pass delta, 2026-09-07 (bead `domchk-34871e96` close-time
+re-verification):** `test-safe-git-gc-limits.sh` needs repo context too. Its
+fail-fast, `ulimit`-fallback, and `--check-only` cases run git against the repo
+root, so a bare scratch-dir extract of `scripts/` fails **29/4 by construction**
+— the giveaway is `--check-only: rc=128` (git exits 128 outside a repository;
+the other three are its cascade: "over-limit process survived the 64M ceiling",
+"under-limit process failed", "fallback mode broken"). The apples-to-apples
+subject is a HEAD **clone** — `git clone <repo> /tmp/x && cd /tmp/x &&
+./scripts/test-safe-git-gc-limits.sh` → **33/33** — which gives the suite a real
+`.git` without touching the shared worktree's dirty `scripts/`.
+
 ---
 
 ## Prevention Checklist

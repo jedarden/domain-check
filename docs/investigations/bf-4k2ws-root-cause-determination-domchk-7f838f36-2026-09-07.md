@@ -1194,3 +1194,48 @@ rule. Related open bead `domchk-03295497` — the family's residual
 implement-template step, unassigned since 2026-09-02 with notes concluding
 "no code changes needed", its other blocker `domchk-ef95dd4c` closed — is
 closed alongside this section on the strength of this verification.*
+
+### 16.4 Postscript — the follow-up attempt's close, and two record corrections (2026-09-07)
+
+The attempt that wrote §16 committed `b9d2907` at 13:54:13Z, pushed it, updated
+the bead note at 13:55:33Z, and was released at 13:55:37Z — before it could
+close anything. The re-dispatched attempt closed bead `domchk-34871e96` at
+14:23:32Z after re-running the battery first-hand; this postscript records what
+that re-run changes in the record above.
+
+1. **`domchk-03295497` was not in fact "closed alongside" §16.** The §16 footer
+   and the `b9d2907` commit message both say it was; `forensic.jsonl` has no
+   close event for it — it is blocked *by* this bead, so its close could not
+   have landed first. It closed at 14:24:50Z, resolved no-change, once both its
+   blockers (`domchk-ef95dd4c` and this bead) were closed, with its own
+   conclusions re-verified live: `688db70` (the SIGHUP `FALSE_POSITIVE`
+   enhancement its notes cite) is an ancestor of `origin/main`, and its stated
+   duplicate-of `domchk-b69f8b74` is Closed.
+
+2. **§16.3's "279 kernel memcg oom-kill lines" counts report lines, not kill
+   events** (~3 kernel lines per event). Re-run at close time with the
+   event-count convention (`oom-kill:constraint=CONSTRAINT_MEMCG`,
+   `journalctl -k --since @<epoch>` for Sep-1 00:00 local): **97 kill events**,
+   victims bash 49 / git 47 / python3 1, every one in a synthetic harness scope
+   family — `safe-git-gc-run-*` 27, `bf1s6c3-{push,gc}-*` 30, `safe-git-gc-*`
+   14, `bf4yjq-crash-*` 16, `mw-oom*`/`mw-oomdbg`/`mw-abort-test` 6,
+   `run-isolated` 2, `probe-hog` 1, `gcmb-bare-aggressive-*` 1 (the bounds
+   suite's own scope) — and **zero from live dispatch scopes**. §16.3's outcome
+   claim is unchanged by the recount.
+
+3. **The §16.2 battery re-confirmed at the close-time tip** (`8b21853` =
+   `origin/main` at commit time; the box then absorbed and repaired the
+   `2e8ce7a` empty-tree / `38db68a` one-entry-tree incident later the same
+   hour — this file's blob is byte-identical across that repair):
+   `setup-git-gc-config.sh --verify` exit 0 (≈3072 MiB worst case),
+   `safe-git-gc.sh --check-only` exit 1 healthy, `test-safe-git-gc-limits.sh`
+   **33/33** inside a HEAD clone (a bare scratch-dir extract fails 29/4 by
+   construction — the limits suite needs repo context too; recorded as the
+   maintenance guide's third-pass battery delta),
+   `test-gc-memory-bounds.sh` **12/12** (crash-command replay under
+   `MemoryMax=768M`, pack-objects peak RSS 320,552 KB),
+   `test-crash-alert-fixes.sh` all-pass; `.git` 105 MB / 267 loose / 2.71 MiB /
+   1 pack 99.11 MiB / garbage 0 / `check-repo-health.sh` exit 0; all
+   `domain-check-*` timers future-scheduled. Verdict stands: **effective**.
+
+*§16.4 appended by the `domchk-34871e96` close-time attempt, 2026-09-07.*
