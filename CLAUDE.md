@@ -247,14 +247,29 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
   18:37Z): replay 10/10 assertions — the extra one proves the cooldown is a *window*, not a
   wall (backdating the state by the real 6080s gap between kills lets a 7th alert fire) —
   both suites green, health exit 0, 0 unpushed.
+- Re-executed again against HEAD e9ab3d4 (2026-09-07 19:04Z, the bead's 5th attempt): suites
+  13/13 and 7/7, replay 10/10, health exit 0, 0 unpushed, all 8 timers future-triggered.
+  Process lesson from the same hour: the closing attempt's *verified* close had been
+  auto-reverted by NEEDLE's `shipped_work` gate — not by any verification failure, but
+  because co-tenant commit 8cc1172 (the FP-wiring fix, landed 18:51:30Z) was still unpushed
+  when the gate ran at 18:52:53Z. In this shared worktree a close can be reverted by a
+  *neighbor's* unpushed commit: check `git log origin/main..HEAD` and attribute before
+  re-deriving work.
 
-**Known defect (open — `domchk-f6fff20f`):** `crash-alert-manager.sh` reads
-`CLASSIFICATION` as the classifier's first stdout line, but `crash-classifier.sh main()`
-prints its `====` banner first — so `CLASSIFICATION` is always the banner string. The
-manager's `FALSE_POSITIVE` branch therefore never fires (an FP-classified crash on an open
-bead can still generate an alert), the cooldown keys on a constant string (global across
-classifications, not per-type), and `crash-history.jsonl` records a garbage classification
-field. Cascade prevention is *not* affected — verified above. Lesson: the suite's
+**Known defect (mechanism FIXED at HEAD 8cc1172 — bead `domchk-f6fff20f` still open,
+pending its owner):** `crash-alert-manager.sh` used to read `CLASSIFICATION` as the
+classifier's first stdout line, but `crash-classifier.sh main()` printed its `====` banner
+first — so `CLASSIFICATION` was always the banner string. The manager's `FALSE_POSITIVE`
+branch was therefore dead code (an FP-classified crash on an open bead could still generate
+an alert), the cooldown keyed on a constant string (global across classifications, not
+per-type), and `crash-history.jsonl` recorded a garbage classification field. Cascade
+prevention was *never* affected — verified above. **Fixed by 8cc1172 (domchk-701bcfa5,
+2026-09-07 18:51Z):** the classifier's `main()` now emits the verdict before any human
+context, and the manager greps an anchored classification token
+(`^(FALSE_POSITIVE|SERVICE_FAILURE|INFRASTRUCTURE|CODE_DEFECT|UNKNOWN)\s*$`) with a
+`head -1` fallback. Verified first-hand against HEAD e9ab3d4 the same hour — the cascade
+replay logs `Classification: UNKNOWN`, not a banner. The tracking bead remains open with
+its owner; it tracks closure/verification, not the mechanism. Lesson: the suite's
 grep-marker tests (tests 4–12) cannot see wiring bugs like this; a functional replay can.
 
 ### Resource Limits
