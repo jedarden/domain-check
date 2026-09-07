@@ -6,6 +6,21 @@
 **Confidence:** HIGH
 **Classification:** INFRASTRUCTURE EVENTS (not code defects)
 
+> **Dated correction 2026-09-07 (bead domchk-15999f2c):** the technical record for
+> exit −1 now lives in
+> [`docs/signal-analysis-exit-code-negative-one.md`](../signal-analysis-exit-code-negative-one.md)
+> (§1–§6), which re-verified every claim here against the NEEDLE source
+> (`~/NEEDLE` 9d09220) and live records. Two corrections to *this* document: the
+> `exit_code = -signal_number` convention in the code block and `-1 → SIGHUP` row
+> in the table below is the **Python-subprocess** writer convention only — NEEDLE
+> is Rust, `ExitStatus::code()` returns `None` for *any* signal death, and needle
+> normalizes that to **−1**, so a needle `-1` identifies no signal at all (SIGHUP,
+> SIGKILL, SIGTERM all flatten to the same recorded value). And the
+> "SIGHUP Cascade (~20%)" rank has zero log support — 0 sighup/hangup records in
+> `.beads/events.jsonl`; the 2026-08-16 wave was kernel memcg OOM inside 12 GiB
+> dispatch scopes. The overall conclusion of this document (infrastructure, not
+> code defects) is unchanged and strengthened.
+
 ---
 
 ## Executive Summary
