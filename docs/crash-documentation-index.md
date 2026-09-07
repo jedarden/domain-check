@@ -1,6 +1,6 @@
 # Crash Documentation Index
 
-**Last Updated:** 2026-09-07 (added the bf-1ea4g consolidated inventory to Key Individual Reports — 56-kill `git push` loop across 57 attempts, kill INFRASTRUCTURE / alert FALSE_POSITIVE, corpus claim-conflict matrix, resolution live-verified 2026-09-07; prior update 2026-09-06 added the bf-1s6c3 comprehensive crash report and the bf-4yjq final summary and canonical record, classification INFRASTRUCTURE/repository-bloat, remediation deployed and verified, see `crash-summary-bf-4yjq-2026-09-06.md` and `crash-prevention-requirements.md` for the live-verified gap list)  
+**Last Updated:** 2026-09-07 (added `root-cause-analysis-bf-1ea4g-2026-08-13.md` — the dispatch-named RCA rendering for domchk-e940d850, cross-registered in the consolidated inventory §5.5; earlier the same day added the bf-1ea4g consolidated inventory to Key Individual Reports — 56-kill `git push` loop across 57 attempts, kill INFRASTRUCTURE / alert FALSE_POSITIVE, corpus claim-conflict matrix, resolution live-verified 2026-09-07; prior update 2026-09-06 added the bf-1s6c3 comprehensive crash report and the bf-4yjq final summary and canonical record, classification INFRASTRUCTURE/repository-bloat, remediation deployed and verified, see `crash-summary-bf-4yjq-2026-09-06.md` and `crash-prevention-requirements.md` for the live-verified gap list)  
 **Purpose:** Navigate crash investigation findings, procedures, and remediation status
 
 ---
@@ -210,6 +210,7 @@ done
 
 **Key Individual Reports:**
 - [`crash-inventory-bf-1ea4g-summary.md`](crash-inventory-bf-1ea4g-summary.md) - **bf-1ea4g consolidated inventory** — 56 × exit −1 `git push` kills across 57 attempts (2026-08-13); kill INFRASTRUCTURE / alert FALSE_POSITIVE; inventories the whole bf-1ea4g corpus and its claim conflicts (3 crash instants, 4 snapshot SHAs, SIGHUP-vs-SIGKILL-vs-sentinel); resolution live-verified 2026-09-07
+- [`root-cause-analysis-bf-1ea4g-2026-08-13.md`](root-cause-analysis-bf-1ea4g-2026-08-13.md) - bf-1ea4g RCA at the dispatch-named path (domchk-e940d850) — thin rendering of the canonical determination, no re-derivation; taxonomy branches walked, preventive stack re-verified live 2026-09-07 (gc-bound --verify 0, memory-bounds suite 16/16 incl. the death-op push replay), residuals H-1/M-2 with tracking docs
 - [`crash-analysis-bf-1s6c3-2026-09-06.md`](crash-analysis-bf-1s6c3-2026-09-06.md) - **bf-1s6c3 final report** — repository-bloat push storm: 76 dispatches in 4h30m (71 × exit −1 memcg-OOM at `git push`, 4 × timeout, 1 × success); merge `42a7b07` landed mid-storm but is not on `main` (reconciliation there is `46293c5`); supersedes the 2026-09-01 bf-1s6c3 corpus
 - [`crash-summary-bf-4yjq-2026-09-06.md`](crash-summary-bf-4yjq-2026-09-06.md) - **bf-4yjq final summary** — repository-bloat crash, 50 memcg-OOM kills, remediation verified live, what worked well, monitoring gaps, open items
 - [`crash-investigations/bf-4yjq-crash-investigation.md`](crash-investigations/bf-4yjq-crash-investigation.md) - bf-4yjq canonical crash record (verified 50-crash count at ~3.1-min intervals)
