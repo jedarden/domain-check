@@ -1,5 +1,15 @@
 # Repository Bloat Crash Analysis: 2026-08-12
 
+> **⚠️ SUPERSEDED 2026-09-06** — verified by the bf-1s6c3 raw-log census: the "9+ crashes
+> over 2.5 hours" count and the "18 GB → 138 MB" cleanup figures below are superseded — the
+> event is **76 dispatches / 71 kills over 4h30m**, and the cleanup verified at **93–94 MB
+> (2026-09-01; 101–102 MB on 2026-09-06)**. The "94.71% memory pressure" figure is attested
+> by no surviving primary source ([REPORTED], not [LIVE]), and "Task completed successfully
+> after cleanup" is superseded too: the bead closed 2026-08-16 with its merge already on
+> disk — there was nothing to retry. See
+> [bf-1s6c3-comprehensive-investigation-2026-09-06.md](bf-1s6c3-comprehensive-investigation-2026-09-06.md)
+> §5.1 supersession table. Retained below for history only.
+
 **Crash Date:** 2026-08-12  
 **Primary Affected Bead:** bf-1s6c3  
 **Classification:** Infrastructure Failure - OOM SIGKILL  

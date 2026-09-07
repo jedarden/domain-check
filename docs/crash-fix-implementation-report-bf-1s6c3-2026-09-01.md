@@ -1,5 +1,15 @@
 # Crash Fix and Mitigation Implementation Report
 
+> **⚠️ SUPERSEDED 2026-09-06** — this report's mechanism ("SIGHUP cascade", "no OOM events")
+> and its conditional-retry guidance ("⚠️ CONDITIONAL — DO NOT RETRY YET") are both
+> superseded: the verified mechanism is **memcg-OOM SIGKILL of `git push`'s pack-objects
+> inside the 12 GiB dispatch scope**, and there is **nothing to retry** — the subject bead
+> closed 2026-08-16 with its work on `main` (`46293c5`, 0/0 divergence). See
+> [crashes/bf-1s6c3-remediation-2026-09-06.md](crashes/bf-1s6c3-remediation-2026-09-06.md)
+> "Supersession note" and
+> [crashes/bf-1s6c3-comprehensive-investigation-2026-09-06.md](crashes/bf-1s6c3-comprehensive-investigation-2026-09-06.md)
+> §5.1. Retained below for history only.
+
 **Report Date:** 2026-09-01
 **Bead ID:** domchk-ee6d185d
 **Crash Under Investigation:** bf-1s6c3

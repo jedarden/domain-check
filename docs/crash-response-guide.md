@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-01  
 **Purpose:** Agent guide for investigating and responding to crash alerts  
-**Related:** `docs/crash-mitigation-strategies.md`, `docs/comprehensive-crash-investigation-report-2026-09-01.md`, `docs/maintenance/repository-maintenance-guide.md`
+**Related:** `docs/crash-mitigation-strategies.md`, `docs/crash-analysis-bf-1s6c3-2026-09-06.md` (bf-1s6c3 canonical report — the 2026-09-01 corpus it supersedes is listed under Related Documentation below), `docs/maintenance/repository-maintenance-guide.md`
 
 ---
 
@@ -17,6 +17,7 @@ When investigating a crash, first classify the type:
 | **1** | error_max_turns | Workflow failure | Verify task completed, check bead closing issues |
 | **1** | HTTP 503/502 | Service unavailability | Check inference gateway status, retry with backoff |
 | **137** | SIGKILL (128+9) | OOM killer | Check memory pressure, verify git gc safety |
+| **124** | Needle's 600 s dispatch cap | Workflow: timeout | Read the transcript — a timeout with **no tool calls** in the window means the agent never started work (4 of bf-1s6c3's 76 attempts; the terminal ones issued none) |
 | **Other** | Application error | Code/task issue | Standard debugging |
 
 > **1. Repository bloat is a distinct infrastructure sub-type**, not generic memory pressure: the
@@ -69,7 +70,7 @@ The crash alert manager automatically implements all 6 critical fixes:
 |----------------|-------------|-----------------|
 | **FALSE_POSITIVE** | Post-completion cleanup failure, max_turns, or completed bead | No action - close bead |
 | **SERVICE_FAILURE** | External service unavailable (HTTP 503/502) | Retry with backoff when service restored |
-| **INFRASTRUCTURE** | OOM, SIGHUP cascade, resource exhaustion, repository bloat | Check system resources, verify work completion |
+| **INFRASTRUCTURE** | memcg-OOM inside the dispatch scope, resource exhaustion, repository bloat | Check the cgroup boundary and repo size, verify work completion |
 | **CODE_DEFECT** | Actual application error | Standard investigation required |
 | **UNKNOWN** | Unable to classify | Manual investigation required |
 
@@ -405,6 +406,22 @@ git fsck --full
 - **Repaired:** packed to ~94MB, `.beads/` fully gitignored (0 tracked files), `git fsck` clean —
   re-verified 2026-09-06 (`docs/crashes/bf-4yjq-cleanup-verification.md`)
 
+**Evidence from bf-1s6c3 (same evening, 21:31Z → 08-13 02:01Z) — the push-side sibling:**
+- **76 dispatches: 71 × exit −1, 4 × 124, 1 × 0** over 4 h 30 m, median 177 s between deaths —
+  and **71 crash alerts, one per kill**. (The 2026-09-01 corpus's "9 crashes / FALSE POSITIVE"
+  reading is superseded; the canonical report's §11 lists each correction.)
+- **71 of 76 attempts died with a `git push` as their last issued command** — the kill lands
+  inside pack-objects, not the merge. The last-command distribution across attempts is a
+  detection signature in its own right: when many attempts of one bead end mid-`push`/`gc`/`fsck`,
+  suspect the repository, not the task.
+- The deliverable (merge `42a7b07`) landed at attempt 4 — **59.6 s before its worker died** — so
+  72 later dispatches re-ran expensive git work against an already-satisfied task on a ~10 s
+  re-claim cycle, until attempt 76 survived *by changing the task shape* (auto-split into
+  bead-only children), not because the environment improved.
+- Canonical record: `docs/crash-analysis-bf-1s6c3-2026-09-06.md` — its §12 carries first-hand
+  re-verifications (repository at ~102 MB, `42a7b07` a commit but not an ancestor of `main`,
+  on-`main` reconciliation `46293c5`).
+
 **Detection heuristics (run before any significant git operation):**
 ```bash
 du -sh .git                # < 1GB healthy · 1-5GB warning · > 5GB critical
@@ -442,8 +459,10 @@ exit 1 means no bound is in force or threads are unpinned.
 - ✅ Keep the **whole `.beads/` directory** (plus `*.db` and `*.jsonl` repo-wide) in
   `.gitignore` — never re-track bead state. This is the fix that ended bf-4yjq; ignoring only
   `.beads/*.jsonl` patterns is not sufficient. Verify: `git ls-files .beads | wc -l` → 0
-- ✅ 10MB pre-commit hook (installed at `.git/hooks/pre-commit`, per-clone — the tracked source
-  copy is `scripts/pre-commit-repo-size-hook`)
+- ✅ 10MB pre-commit hook — install/verify per clone with `./scripts/setup-git-hooks.sh install`
+  / `--check` (committed 2026-09-07 as `dfa60a9`; per-clone, so a fresh clone is unprotected
+  until installed). Source: `scripts/pre-commit-repo-size-hook` + `.githooks/pre-commit`;
+  self-test `scripts/test-setup-git-hooks.sh`
 - ✅ Scheduled maintenance via **systemd user timers**: `./scripts/setup-repo-maintenance.sh`
   (repo health + auto-gc check daily 02:00, incremental gc daily 03:00, full gc Sun 04:00).
   Do **not** use `./scripts/monitoring-setup.sh` — it is cron-based and this box (NixOS) has no
@@ -502,12 +521,25 @@ if [ $gap -lt 30 ]; then
 fi
 ```
 
+> **Rule 1 across a storm (bf-1s6c3, 2026-09-06):** the 30-second check compares the *last*
+> commit with the *last* crash. When a re-dispatch loop is involved, also ask whether the
+> **deliverable** landed anywhere in the storm window — bf-1s6c3's merge landed at attempt 4 and
+> the loop then ran 72 further dispatches against satisfied work. Deliverable-present +
+> bead-still-open is workflow debt (verify-then-close, don't re-run the task), whatever killed
+> the workers.
+
 ### Rule 2: Success Pattern Check
 ```bash
 # If crash → retry → success pattern → SELF-HEALED TRANSIENT FAILURE
 # Check bead event history for successful retries
 bead show <id> --json | jq '.history[] | select(.outcome == "success")'
 ```
+
+> **Rule 2 caveat (bf-1s6c3, 2026-09-06):** an exit-0 terminal attempt after a kill storm is
+> only a *surface* match for "self-healed". bf-1s6c3's attempt 76 exited 0 because the
+> auto-split changed the task shape (bead-only children, no `git push`) — the 18 GB cause was
+> untouched. A persistent cause outlasting the retry loop is Infrastructure, not transient:
+> confirm the environment actually changed before classifying the storm self-healed.
 
 ### Rule 3: System-Wide Event Check
 
@@ -531,6 +563,12 @@ Two corollaries from bf-4yjq:
 - **A sustained low-and-slow cadence is still an environmental regime.** Fixed-cadence
   exit −1 re-dispatch deaths across multiple beads means triage repo size / memory / load at
   the workspace level before any per-bead debugging.
+- **Watch the re-dispatch loop, not just the kills (bf-1s6c3).** A kill → release → re-claim
+  cycle measured in seconds (~10 s there) with no backoff and no resource gate converts one
+  undrainable kill into a storm: 71 kills → 71 alerts at 1:1. When you see fixed-cadence
+  deaths, compare the `outcome.handled action=alerted` count against the number of *distinct
+  causes* — many alerts, one cause means the loop is the amplifier, and fixing the repo (not
+  the alerts) drains the whole pool.
 
 ---
 
@@ -800,6 +838,13 @@ if [ $AVAILABLE_MEM -lt 10 ]; then
 fi
 ```
 
+> **The host-memory gate does not cover the repository-bloat class (bf-1s6c3, 2026-09-06).**
+> There the violated axis was the **repository-size** axis — an ≈18 GB object store against the
+> dispatch scope's 12 GiB `MemoryMax` — not the host axis: host memory read healthy for all
+> 76 dispatches and this gate would have passed every one of them. The operative pre-flight for
+> git-heavy work is the **Repository Size Pre-Flight** above (`du -sh .git`,
+> `git count-objects -vH`, `./scripts/preflight-health-check.sh`), not host memory alone.
+
 ---
 
 ## When to Escalate
@@ -849,11 +894,19 @@ monitoring:
         summary: "Less than 20GB disk space available"
     
     - name: CrashSurgeDetected
-      expr: needle_crashes_total{outcome="failed"} > 10
-      for: 10m
+      expr: increase(needle_crashes_total{outcome="failed"}[5m]) >= 3
+      for: 5m
       annotations:
-        summary: "Infrastructure event: 10+ crashes in 10 minutes"
+        summary: "Infrastructure event: 3+ crashes in 5 minutes"
+        description: "Matches the committed detector threshold —
+          scripts/crash-pattern-detection.sh CRASH_SURGE_THRESHOLD=3 over a 5-minute window."
 ```
+
+The alerting lesson from the bloat storms: **alerts scale with kills, not with causes.**
+bf-1s6c3 produced 71 alerts for one undrainable repository condition; bf-173o7e produced 131;
+bf-31mno 350. Deduplication and the 5-minute cooldown in `scripts/crash-alert-manager.sh`
+absorb part of this, but the durable fix is always the underlying condition — drain the cause
+and the alert pool empties with it.
 
 ### Application-Level Monitoring
 
@@ -878,7 +931,10 @@ monitoring:
 
 ### What Causes Crashes
 
-1. **Infrastructure Events (70%)**: Memory pressure, OOM killer, SIGHUP cascade, **repository bloat**
+1. **Infrastructure Events (70%)**: memcg-OOM inside the dispatch scope (kernel-verified for the
+   Aug-2026 git gc/push storms), memory pressure, OOM killer, **repository bloat**. The
+   "SIGHUP cascade" framing of the 2026-09-01 corpus is superseded — never kernel-confirmed and
+   excluded by the exit-code record (no 129 anywhere)
 2. **Workflow Failures (20%)**: Max turns exhaustion, bead closing loops
 3. **Service Failures (8%)**: Inference gateway unavailable, network issues
 4. **Code Defects (2%)**: Actual application errors
@@ -895,6 +951,9 @@ monitoring:
 Exit Code -1?
 ├─ Yes → Infrastructure Event
 │  ├─ Work completed within 30s? → FALSE POSITIVE
+│  ├─ Deliverable landed earlier in a re-dispatch storm? → Satisfied work; verify-then-close
+│  ├─ Final attempt exited 0 after a storm? → Surface match only — confirm the cause was
+│  │   removed, not that the task shape changed
 │  └─ No completion evidence? → Check system logs
 │
 Exit Code 1 with error_max_turns?
@@ -905,6 +964,11 @@ Exit Code 1 with error_max_turns?
 Exit Code 1 with HTTP 503/502?
 ├─ Yes → Service Failure
 │  └─ Check gateway status, retry with backoff
+│
+Exit Code 124?
+├─ Yes → Dispatch Timeout (600 s cap)
+│  ├─ Tool calls in the window? → Task too slow for the cap; consider decomposition
+│  └─ No tool calls? → Agent never started (environment/template issue)
 │
 Other Exit Code?
 └─ Standard Investigation
@@ -921,7 +985,12 @@ Other Exit Code?
   - `docs/monitoring-implementation-summary-2026-09-02.md` - Monitoring system implementation
   - `docs/verification-report-bf-4k2ws-crash-investigation-2026-09-02.md` - bf-4k2ws crash verification
 
-- **Comprehensive Investigation:** `docs/comprehensive-crash-investigation-report-2026-09-01.md`
+- **bf-1s6c3 canonical report (2026-09-06):** `docs/crash-analysis-bf-1s6c3-2026-09-06.md` —
+  the write-up layer of the same-evening push-side storm (71 kills in 76 dispatches). Its §11
+  lists every way the 2026-09-01 corpus is wrong ("9 crashes" → 76 dispatches/71 kills; the
+  FALSE-POSITIVE premise; the SIGHUP mechanism; dead SHAs `2832106`/`7dd79eb` → real merge
+  `42a7b07`, on-`main` reconciliation `46293c5`). Cite it, **not**
+  `docs/comprehensive-crash-investigation-report-2026-09-01.md` (superseded for bf-1s6c3)
 - **Mitigation Strategies:** `docs/crash-mitigation-strategies.md`
 
 - **Specific Crashes:** 
@@ -944,7 +1013,13 @@ Other Exit Code?
 ---
 
 **Guide Status:** ✅ Complete  
-**Last Updated:** 2026-09-06 (second pass, from the bf-4yjq closing summary
+**Last Updated:** 2026-09-07 (third pass, from the bf-1s6c3 canonical report
+`docs/crash-analysis-bf-1s6c3-2026-09-06.md`: exit 124 added to the classification table,
+INFRASTRUCTURE row and "What Causes Crashes" moved off the superseded SIGHUP framing,
+Rule 1/Rule 2 false-positive caveats for re-dispatch storms, re-dispatch-amplifier corollary,
+bf-1s6c3 push-side evidence block in Pattern 3, surge example aligned to the committed
+3-in-5-minutes threshold, host-memory-gate limitation note, pre-commit hook bullet pointed at
+the committed installer) — second pass 2026-09-06 (bf-4yjq closing summary
 `docs/crash-summary-bf-4yjq-2026-09-06.md`: `exit -1` documented as needle's unrecorded-signal
 sentinel rather than a signal number, cgroup/dispatch-scope memory check added to Phase 2A,
 surge threshold corrected to the detector's committed 3-in-5-minutes with the slow-burn
