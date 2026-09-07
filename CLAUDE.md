@@ -211,7 +211,7 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
 - `scripts/crash-alert-manager.sh` - Main alert processing with all 6 critical fixes
 - `scripts/crash-classifier.sh` - Crash categorization
 - `scripts/alert-deduplication.sh` - Duplicate detection
-- `scripts/test-crash-alert-fixes.sh` - Test suite (re-verified 2026-09-06: 12/12 passing)
+- `scripts/test-crash-alert-fixes.sh` - Test suite (re-verified 2026-09-07: 13/13 passing; the 2026-09-06 record said 12/12 — the suite grows as checks are added)
 - `scripts/test-closed-bead-filter.sh` - Functional closed-bead filter test: runs a fabricated trace for closed bead bf-2vtzg through crash-alert-manager.sh in a sandbox and asserts no alert is generated (7 assertions; `test-crash-alert-fixes.sh` only checks the FIX 1/5 markers are present)
 
 **Usage:**
@@ -230,6 +230,32 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
 ```
 
 **Documentation:** `docs/crash-alert-fix-implementation-2026-09-02.md`
+
+**Verified working (2026-09-07, domchk-81938e89 — the bf-5npjj closure leg):**
+- Suites: `test-crash-alert-fixes.sh` 13/13, `test-closed-bead-filter.sh` 7/7, both exit 0.
+- Cascade replay: a sandboxed replay of the bf-6d3d6 shape — six genuine exit -1 kills of one
+  bead, each packaged as its own alert bead, compressed into one minute — produced exactly
+  **one** alert. The 300s cooldown absorbed the other five; FIX 3 stopped the immediate re-run
+  ("Already processed this alert bead"); the surge detector fired `INFRASTRUCTURE EVENT
+  DETECTED`; zero bead mutations (the replay stubbed `bead`, so nothing touched the live store).
+- Health layer: `check-repo-health.sh` clean (105MB repo, effective pack-memory bound ≈3072MiB
+  worst case within the 6GiB ceiling, 0 unpushed backlog), `auto-gc-trigger.sh --dry-run`
+  → "GC not needed", `safe-git-gc.sh --check-only` passes preflight (its exit 1 there is the
+  "GC not needed" *verdict*, not a failure), and all 8 `domain-check-*` timers had future
+  trigger times.
+- Re-executed first-hand against HEAD c04f017 by this bead's closing attempt (2026-09-07
+  18:37Z): replay 10/10 assertions — the extra one proves the cooldown is a *window*, not a
+  wall (backdating the state by the real 6080s gap between kills lets a 7th alert fire) —
+  both suites green, health exit 0, 0 unpushed.
+
+**Known defect (open — `domchk-f6fff20f`):** `crash-alert-manager.sh` reads
+`CLASSIFICATION` as the classifier's first stdout line, but `crash-classifier.sh main()`
+prints its `====` banner first — so `CLASSIFICATION` is always the banner string. The
+manager's `FALSE_POSITIVE` branch therefore never fires (an FP-classified crash on an open
+bead can still generate an alert), the cooldown keys on a constant string (global across
+classifications, not per-type), and `crash-history.jsonl` records a garbage classification
+field. Cascade prevention is *not* affected — verified above. Lesson: the suite's
+grep-marker tests (tests 4–12) cannot see wiring bugs like this; a functional replay can.
 
 ### Resource Limits
 
