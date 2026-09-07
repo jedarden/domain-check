@@ -128,6 +128,28 @@ The terminal verify step re-ran the whole stack live 2026-09-07 and passed all o
 
 Chain verdict: domchk-4e2f7b61 closed 2026-09-02 + this bead closing leaves bf-393iv with **no open blockers** — the umbrella is closable, and its stale `verification-failed` label postdates a verification that has now passed twice (ef95fec, this subsection). No new crash pattern and no new measure owed: the chain's only novel finding is the SIGPIPE gate defect above.
 
+### 5.3 Documentation record — Child 4 of the 2026-09-02 split (domchk-3c8eaafc, 2026-09-07)
+
+Child 4's dispatch asked for a comprehensive investigation report in `docs/crash-investigations/`, compiled from Children 1–3, covering crash details (bead ID, agent, exit code, timestamp), classification, root cause, fix implementation, and evidence + verification, committed to git. Per the corpus dedup-append convention **this record is that report** — no new bf-1ea4g doc was created. Where each criterion lives:
+
+| Acceptance criterion | Where it is documented |
+|---|---|
+| Crash details — bead ID, agent, exit code, timestamp | §1 (determination at a glance) + §2 (timeline). Agent first-hand from the bundle's raw log: `worker_id: claude-code-glm-4.7-lab-domain-check`, first claim 07:17:49.928Z |
+| Classification | §3 — kill = **INFRASTRUCTURE**, alert = **FALSE_POSITIVE** (child 1, domchk-596f8499) |
+| Root cause | §4 and the re-determination's §8 (child 2, domchk-c2b8c832): unbounded `git push` pack-objects over the unpacked 422-commit backlog inside the 12 GiB dispatch scope |
+| Fix implementation | §5.1 (child 3, domchk-9d840579) + the §5 table |
+| Evidence and verification results | Evidence bundle `docs/crashes/bf-1ea4g/` (2ce9cd9); §5.2's live stack; the re-verification below |
+
+First-hand re-verification, this session (2026-09-07):
+
+- Target bead **closed** 2026-08-13T09:10:16.731Z (`bead show`); bundle `attempt-index.tsv` = 1 header + 57 rows.
+- `./scripts/setup-git-gc-config.sh --verify` **exit 0** — effective bound ≈3072 MiB worst case (windowMemory 2g / deltaCache 1g / threads 1), covers gc *and* push.
+- `./scripts/test-gc-memory-bounds.sh` **16/16, exit 0**, re-run in a throwaway clone at this tip (c0f2b70) — including the bf-1ea4g death-operation replay: bounded push over the 192 MiB unpacked backlog under `MemoryMax=768M`, peak push RSS **232,336KB** (third independent pass — §5.1: 232,504KB, §5.2: 232,488KB), and the gc-side replay's pack-objects at 320,476KB.
+- Repository: `.git` 106 MB, 323 loose objects (3.14 MiB), 1 pack 99.11 MiB, 0 garbage, `origin/main...HEAD` 0/0 — all from direct `du`/`count-objects -vH`/`rev-list` this session; `check-repo-health.sh` exit 0 over the live worktree.
+- Co-tenant disclosure: the worktree's `scripts/check-repo-health.sh` carries an **uncommitted** +97-line addition implementing the M-1 unpushed-commit-backlog monitor (warn ≥50) from the gap analysis. It is in-flight work by another worker — not attributed as landed here; HEAD's version does not have it.
+
+One deliverable-shaped gap this dispatch did surface: the doc sitting at the dispatch-named path — `docs/crash-investigations/bf-1ea4g-crash-investigation.md` (2026-08-17) — is outside the §6 census's reviewed scopes and still argued the pre-re-determination record. It now carries a dated correction banner pointing here; see §6.4.
+
 ---
 
 ## 6. Document inventory — what was reviewed
@@ -175,6 +197,10 @@ All six archive docs were moved there 2026-09-06 (domchk-87a7bb2a; 387 files) an
 | `docs/crash-investigation-bf-5tgsk-2026-08-16.md` | bf-5tgsk *was* an early bf-1ea4g alert investigation (itself crashed, exit −1) |
 | `docs/crash-investigation-bf-4yjq-summary-2026-08-26.md`, `docs/crash-investigation-report-bf-4yjq-final.md`, `docs/remediation-strategy-bf-4yjq.md`, `docs/crash-context-report-bf-4yjq-comprehensive.md` | List bf-1ea4g among related signal-−1 beads (one gives "1 crash", another "2026-08-13 08:13" — see §7) |
 | `docs/crash-documentation-index.md` | Indexed bf-1ea4g **nowhere** until this summary was added to its Key Individual Reports list |
+
+### 6.4 The dispatch-named directory's own bf-1ea4g doc (registered 2026-09-07)
+
+The §6 census reviewed `docs/*.md`, `docs/investigations/`, the archive and the evidence bundle — it did not sweep `docs/crash-investigations/`, which holds exactly one bf-1ea4g-named file: `docs/crash-investigations/bf-1ea4g-crash-investigation.md` (2026-08-17). Written before the bundle and the re-determination, it carries four superseded readings — single 07:42:34Z instant (§7 row 1), exit −1 = SIGKILL (row 3), era-level bloat OOM as the whole mechanism (row 5), and task-completed-before-crash (row 7) — alongside what stands: the agent attribution (`claude-code-glm-4.7-lab-domain-check`, re-confirmed from the raw log) and the era-level mechanism family. The file now carries a dated correction banner pointing at the canonical record; its body is untouched.
 
 ---
 
