@@ -46,9 +46,18 @@ When investigating a crash, first classify the type:
 > shipped in `48aafce`). Run the gate **before** starting any investigation of an
 > ALERT bead — most alerts today point at work another worker already finished.
 > Caveats on the subsections below: nothing in production invokes
-> `crash-alert-manager.sh` (no timer, no hook), and at HEAD its
-> FALSE_POSITIVE / SERVICE_FAILURE branches are inert — its classification
-> variable is the classifier's `=====` banner (gap D-3). Architecture, usage,
+> `crash-alert-manager.sh` (no timer, no hook), and its FALSE_POSITIVE /
+> SERVICE_FAILURE branches stay unreachable — the classification variable is
+> the classifier's `=====` banner (gap D-3); the SERVICE_FAILURE-only dedup
+> grep has since been removed outright, because duplicate detection now runs
+> once for every classification as the `check` gate above. Alerts that do
+> fire are recorded into `.beads/logs/crash-history.jsonl` (the manager calls
+> the gate's `record`), and `check` leg 4 then suppresses a fresh alert for
+> the same crash target for **7 days** (`DEDUP_WINDOW_DAYS`, default 7),
+> naming the covering alert to reference — a window that also covers an alert
+> investigated and closed inside it, which the live-closure leg can no longer
+> see (wiring + hermetic suite: `alerting-system-guide.md` §3.1,
+> `scripts/test-alert-dedup-history.sh`, 2026-09-07). Architecture, usage,
 > testing, and troubleshooting: **[alerting-system-guide.md](alerting-system-guide.md)**.
 
 ### Quick Start: Automated Crash Processing

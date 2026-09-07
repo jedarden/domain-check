@@ -74,11 +74,12 @@ a tool you invoke (§6); putting it in an automated path is open work
 
 | Script | Role | Contract |
 |---|---|---|
-| `scripts/alert-deduplication.sh` | per-alert duplicate gate | `check <bead-id>` → exit 0/1/2/3 (§3) |
+| `scripts/alert-deduplication.sh` | per-alert duplicate gate | `check <bead-id>` → exit 0/1/2/3 (§3); `record <bead-id> [--target ID] [--classification TYPE] [--crash-ts ISO]` → exit 0/2/3 (§3.1) |
 | `scripts/crash-resolution-tracker.sh` | single authority for "is this crash resolved" | `check` → 0 resolved / 1 not / 2 error (§4) |
 | `scripts/crash-classifier.sh` | crash categorization | prints FALSE_POSITIVE / SERVICE_FAILURE / INFRASTRUCTURE / CODE_DEFECT / UNKNOWN |
 | `scripts/crash-alert-manager.sh` | 2026-09-02 pipeline wrapping the above | exit 0 no alert / 1 alert / 2 classification failed / 3 error (§5) |
 | `scripts/test-alert-dedup-check.sh` | hermetic suite for the gate + tracker | 41 assertions, exit 0/1 |
+| `scripts/test-alert-dedup-history.sh` | hermetic suite for the 7-day crash-history window (`record` + `check` leg 4 + manager wiring) | 13 assertions, exit 0/1 (§3.1) |
 | `scripts/test-crash-alert-fixes.sh` | suite for the 2026-09-02 manager fixes | 12 assertions, exit 0/1 |
 
 ### State and ledgers — what is truth and what is cache
@@ -90,6 +91,7 @@ a tool you invoke (§6); putting it in an automated path is open work
 | `.beads/state/crash-resolutions.json` | tracker's `mark-resolved` + live-evaluation backfill | **cache only** — manual marks and FALSE_POSITIVE auto-marks; non-closure records expire after 30 days |
 | `.beads/logs/processed-alerts.txt` | manager fix 3 | instance-keyed ledger (superseded by target-keyed dedup) |
 | `.beads/logs/alert-state.json` | manager fix 5 | cooldown state, keyed on classification |
+| `.beads/logs/crash-history.jsonl` | gate's `record` mode, called by the manager after an alert is generated | **ledger for the 7-day window** (`check` leg 4); one entry per alert bead, idempotent; gitignored runtime state like every `.beads/logs` file |
 | `.beads/events.jsonl` | needle (append-only crash record) | **source of truth** for crash *history*; `report` reads this |
 | `.beads/logs/alert-deduplication.log`, `crash-resolution-tracker.log`, `crash-alert-manager.log` | their scripts | audit trails |
 
