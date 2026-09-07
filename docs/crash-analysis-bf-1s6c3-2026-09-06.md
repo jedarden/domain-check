@@ -1603,3 +1603,61 @@ verify-live-and-append path, not a new document.
 **Classification:** Infrastructure — repository bloat (Pattern 3); alert disposition: no further action
 **No domain-check code defects:** confirmed — the task never touched application code
 **Report completed:** 2026-09-06 · domchk-ed3ed12b
+
+### Run-the-test verification 2026-09-07 (domchk-1835a393 — the run-the-reproduction-test step of the harness chain)
+
+The link after domchk-2125075e's harness (subsection above): execute the reproduction test,
+monitor resources during it, and document before/after. This bead went through four
+claim→release cycles on 2026-09-07 (released 06:50:50Z, 07:21:38Z, 07:50:41Z and
+07:58:18Z) in which the harness was run clean each time but nothing was documented or
+closed — the release cycle again, not failed work. Raw logs of those runs survive in the
+gitignored state dir `.beads/state/domchk-1835a393/` (`run.log`, `run2.log`, `run3.log` —
+all `harness_exit=0`, 7/7, byte-identical bloat figures). **This attempt ran it a fourth
+time first-hand and shipped the missing deliverable, the record below.**
+
+**Live run 2026-09-07 08:13:52Z → 08:16:10Z (wall 2 m 18 s, exit 0, 7/7):**
+
+- **A1 — bloat forms** (32 commits of one near-identical 64 MiB `.beads/issues.jsonl`,
+  the way bf-1s6c3 actually formed): 128 loose objects, **1122 MiB loose** from 2048 MiB
+  raw, 0 packs, built in 52 s — the ~1/17th-scale stand-in for 17 GB loose
+- **A2 — the crash re-created, bare `git push`** (71/76 of the original deaths) over the
+  1122 MiB loose set inside MemoryMax=512M: SIGTERM in 2 s, loose set intact; scope
+  `Failed with result 'oom-kill'`, **512M memory peak, 2.332 s CPU**; kernel
+  `Memory cgroup out of memory: Killed process 971639 (git) anon-rss:522332kB`
+- **A3 — the Aug-14 variant, bare `git gc --aggressive --prune=now`** in the same 512M:
+  SIGTERM in 3 s, 128 loose objects / 0 packs intact; `oom-kill`, **512M peak, 2.266 s
+  CPU**; kernel killed process 971885 (git), anon-rss 522472 kB
+- **B1 — deployed bounds mitigate:** the same aggressive gc with
+  `pack.windowMemory=128m / pack.deltaCacheSize=64m / pack.threads=1` (the scaled
+  stand-ins for the deployed 2g/1g/1) **completed exit 0, 1 pack**, 68 s wall /
+  1 m07.759 s CPU; scope peak reports 512M but that counts reclaimable page cache — the
+  boundable anonymous working set is what the pack config caps
+- **B2 — deployed bounds mitigate:** the same push over the packed store to a fresh
+  remote **completed exit 0**, remote received HEAD, 13 s wall / 13.120 s CPU, **278.4M
+  peak** — the step that killed 71/76 original dispatches now finishes inside a scope
+  24× smaller than the original 12 GiB one
+- **C — gitignore prevents:** live `.gitignore:66` (`.beads/`) and `:70` (`*.jsonl`)
+  refuse all four payload shapes before a commit can form
+- **D — hook prevents:** the installed pre-commit hook blocked both an 11 MB file and a
+  force-added `.beads/issues.jsonl`
+
+**Resource metrics during the run** (2 s sampler, 103 samples, same state dir): host
+MemAvailable never fell below **43,759 MiB** of 62 GiB, max load1 **7.12**, max CPU busy
+**70%**; **zero collateral kernel kills** in the run window — the only OOM events are the
+two intended ones above, both CONSTRAINT_MEMCG inside the scratch scopes. The kills are
+contained to the disposable scratch repo; in the original event they landed on the live
+dispatch.
+
+**Before/after:**
+
+| | 2026-08-12 (bf-1s6c3) | 2026-09-07 (this run / live repo) |
+|---|---|---|
+| repository | ~18 GB, ~17 GB loose | `.git` 102 MB · 31 loose objects / 380 KiB · pack 99.11 MiB · garbage 0 |
+| push over the bloat | 71/76 attempts memcg-OOM SIGKILL (exit −1), ~4.5 h | unbounded stand-in dies at 512M in 2 s (A2); **with deployed bounds: exit 0 in 13 s (B2)** |
+| aggressive gc | same mechanism, the Aug-14 variant | unbounded dies in 3 s (A3); **bounded exit 0 in 68 s (B1)** |
+| payload path | 17+ × 237 MB `.beads/*.jsonl` commits landed | gitignore refuses (C) + pre-commit hook blocks, including force-add (D) |
+| pack bounds | absent | `setup-git-gc-config.sh --verify` exit 0 — windowMemory=2g / threads=1 / deltaCache=1g, worst case ≈3072 MiB, inside the 12 GiB dispatch scope |
+
+The fix holds under the original crash conditions at reproducible scale: the death steps
+still die when unbounded (the mechanism is real), the deployed bounds let both finish,
+and the two prevention layers stop the bloat from forming at all.
