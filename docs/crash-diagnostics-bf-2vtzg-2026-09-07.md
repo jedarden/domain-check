@@ -203,3 +203,56 @@ Residuals, neither actionable under this bead: box disk free is 22 GB (95% used)
 - **Classification INFRASTRUCTURE, no code defect: HIGH** — every alternative class is excluded by re-verified exit-code classes and death positions, and the same-day mechanism is kernel-proven for siblings.
 - **Mechanism = dispatch-scope memcg OOM over the bloat-era store: MEDIUM-HIGH** — chain-inferred; the only reason it is not HIGH is that Aug-13 kernel proof is *impossible to exist* (journald boot 2026-08-15), not that any evidence contradicts it.
 - **No action required beyond already-landed safeguards: HIGH.**
+
+## 12. Resolution verification and investigation record (`domchk-1ec90d5e`, 2026-09-07)
+
+Renders the chain's fourth and final dispatch — "verify resolution and document investigation findings" — whose elements (resolution verified live, why no code change, alert-system improvement check, consolidated artifact index) are distinct from the analyzer's §11 set. Classification and root cause are **stated in §11.1/§11.4 and not re-argued here**; every figure below was re-measured this session (2026-09-07 ≈15:45–16:00Z), after §11's, so the table in §11.5 now has a second, independent reading.
+
+### 12.1 Crash classification and root cause (summary; full statement in §11)
+
+- **Classification:** INFRASTRUCTURE — confidence HIGH (`domchk-c45df846`). **Root cause:** memcg-OOM SIGKILL of the dispatching agent inside its 12 GiB `MemoryMax` scope, during git work over the bloat-era object store (≈18 GB `.git` / ≈17 GB loose), inside a same-day fleet kill regime; mechanism chain-inferred via kernel-proven siblings (MEDIUM-HIGH), since no Aug-13 kernel record can exist.
+- **Why no code change is needed:** the target task was read-only git/remote documentation and domain-check code is not in the causal path (§11.4); the bloat precondition is mechanically removed (gitignore + 10 MB pre-commit gate + bounded pack-objects, all re-verified in §12.2); every alert this crash seeded investigated work the retry loop itself finished (§11.4). Transient/external, with the recurrence path closed.
+
+### 12.2 Resolution verified live (this session, 2026-09-07)
+
+**Target work.** `bf-2vtzg` closed by its own attempt 10 at **2026-08-13T09:42:58.663Z** (`close_reason "Completed"`), re-verified today from **both** the live store and `.beads/checkpoint/forensic.jsonl` — revision still **1**, never reopened in 25 days. Both deliverable blobs are on origin/main: `01bac556` (`docs/archive/crash-investigations/forgejo-origin-state-bf-2vtzg.md`, attempt 9's bytes per §11.2) and `9cf6ee23` (`forgejo_remote_state_bf-2vtzg.json`, repo root).
+
+| Closure condition | Re-measured 2026-09-07 (this session) |
+|---|---|
+| Object store healthy | ✅ `.git` 106 MB; **348 loose / 3.34 MiB** (§11.5 saw 338 / 3.24 — ordinary churn); 1 pack 99.11 MiB; garbage 0; `git fsck --full` exit 0; `check-repo-health.sh` exit 0 |
+| Bloat precondition removed | ✅ `.gitignore:66 .beads/` (plus `*.db`, `*.jsonl`); **0 tracked `.beads` files**; 10 MB pre-commit gate installed and current (`setup-git-hooks.sh --check` exit 0) |
+| Mechanical bound on the mechanism | ✅ `setup-git-gc-config.sh --verify` exit 0 — effective `pack.windowMemory=2g` + `threads=1` + `deltaCacheSize=1g` → ≈3072 MiB worst case, repo-local and global; no unmanaged aggressive gc running |
+| Divergence | ✅ 0/0 `origin/main…HEAD` |
+| Alert layer | ✅ `test-crash-alert-fixes.sh` exit 0 (all six fixes); **`test-closed-bead-filter.sh` 7/7 — its sandbox case is this very bead**: a fabricated bf-2vtzg trace produces no alert. The verifier child `domchk-f27cf324`'s suites (12/12 + 4/4 + 2/2) thereby re-run passing live |
+| Environment now | ⚠️ disk 20 GB free (below the repo's 30 GB warning — box-level, the resource-monitor timer's domain; §11.5 saw 22 GB), memory 43 GB available |
+
+### 12.3 Are crash-alert-system improvements needed? No — the residue is elsewhere
+
+The alert-layer gap this chain exposed (pre-0.4.2 one-alert-per-kill, seeding investigation beads against finished work) is closed and re-proven above. The standing open items are **not alert-system gaps** but retry-loop hygiene (§11.5): **H-1** retry stop-condition, **M-1** commit-ahead counter, **M-2** dispatch-scope telemetry. New this session: **no bead in the store tracks H-1/M-1** — they live only in committed docs. Recommendation: give them tracking beads in the requirements owner's queue; nine re-dispatches re-doing identical work with no stop condition is exactly what they would have cut, and an untracked recommendation has never yet closed itself.
+
+Residue, verified open this session — all outside this chain, each gated behind its own children: of the 11 sibling alert beads, 8 are closed; still open are **`bf-4nyp7`** (blocked by `domchk-309f49bd`), **`bf-xg2gg`** (blocked by `domchk-c1b09ba2` + `domchk-cb4546f1`; a committed verification report already declares it a resolved duplicate FP), and **`bf-4fvi9h`** (title targets bf-2ildm — a different crash). This is the PF-1 residue pattern: the closed-bead filter now live would have prevented their creation, and their closure belongs to their own chains' final stages, not to this record.
+
+### 12.4 Actions taken
+
+- **No code change** — none warranted (§11.5); this record is the only artifact.
+- This section appended to the chain's own doc per the **dedup-append convention** — no new `crash-analysis-*`/`investigation-summary-*` file, which would have forked the canon this chain deliberately kept single.
+- **Stale `split-child` label removed** from closed `bf-2vtzg` (the classification flagged it as the re-split trigger pattern and declined for scope; this dispatch's resolution-verification scope covers it) and from this chain's umbrella at close. An auto-split against a closed bead would re-open the exact false-positive surface §12.2 proves closed.
+- **Chain terminal step:** this bead's close unblocks umbrella alert `bf-39xem`, closed immediately after with a completion reason — the last member of this crash's alert family that this chain owns.
+- Push disclosure: the push carrying this commit also carried co-tenant commit(s) already on shared local main at dispatch time (`a4c8ffa`, bead `domchk-87ef5683`) — the standard shared-worktree ancestor-carry, not swept staged work.
+
+### 12.5 Artifact index (the chain, end to end)
+
+| Element | Bead | Record |
+|---|---|---|
+| Crash (target) | `bf-2vtzg` | closed 2026-08-13T09:42:58.663Z "Completed", rev 1; deliverable `docs/archive/crash-investigations/forgejo-origin-state-bf-2vtzg.md` (`01bac556`) + `forgejo_remote_state_bf-2vtzg.json` (`9cf6ee23`) |
+| Alert family | `bf-39xem` (this chain's umbrella) + 11 siblings | siblings: bf-37jbh, bf-3uawn, bf-4fvi9h*, bf-4nyp7*, bf-58j3z, bf-5ami9, bf-5o8ey, bf-ive13, bf-ncxbt, bf-xg2gg* (*still open, §12.3) |
+| Archived FP report (premises corrected in §11.4) | — | `docs/archive/crash-investigations/crash-investigation-bf-2vtzg-false-positive-2026-09-02.md` (freeze policy: corrected here, not there) |
+| Duplicate-FP verification, xg2gg | — | `docs/archive/crash-investigations/verification-report-bf-xg2gg-duplicate-false-positive-alert-resolved-bf-2vtzg-crash.md` |
+| Stage 1 — data collection | `domchk-0befc321` | §1–§10 of this doc (commit `5af18e0`); raw extract at gitignored `.beads/state/domchk-0befc321/` |
+| Stage 2 — classification | `domchk-c45df846` | INFRASTRUCTURE/HIGH, recorded on the bead (no separate doc) |
+| Stage 3 — root cause analysis | `domchk-80860fb2` | §11 of this doc (commit `3ae946f`) |
+| Stage 4 — fix verification | `domchk-f27cf324` | closed; 12/12 + 4/4 + 2/2 (re-run live, §12.2) |
+| Stage 5 — resolution verification + documentation | `domchk-1ec90d5e` | this section (§12) |
+| Mechanism canon (siblings) | — | bf-4k2ws (55 kernel-proven kills), bf-1ea4g (push-side; one-stop citation `docs/crash-inventory-bf-1ea4g-summary.md`), bf-4x12ec (gc-side), bf-198ne (push variant) |
+
+**Resolution: verified.** The crash's target work shipped 25 days ago, the inferred mechanism is bounded out of recurrence, and the alert surface that kept the crash alive in the queue is tested closed — including a live replay of this very bead's trace. Nothing remains open against bf-2vtzg.
