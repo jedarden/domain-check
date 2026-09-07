@@ -300,12 +300,15 @@ git count-objects -vH
 2. **Pre-commit hook** (installed in this clone):
    ```bash
    ls .git/hooks/pre-commit   # blocks any staged file > 10MB
+   ./scripts/setup-git-hooks.sh --check   # exit 0 = installed and current
    ```
-   Installed at `.git/hooks/pre-commit` — untracked and per-clone, so a fresh
-   clone has **no** hook until it is restored by hand.
-   `scripts/pre-commit-repo-size-hook` is a tracked source copy but has drifted
-   from the installed version, and there is no installer script. This hook is
-   the backstop that would have blocked the 237MB `.beads/*.jsonl` commits.
+   Per-clone, so a fresh clone is unprotected until
+   `./scripts/setup-git-hooks.sh install` is run (idempotent; installs
+   `.githooks/pre-commit` — the installed hook is byte-identical to the tracked
+   source, superseding the drifted `scripts/pre-commit-repo-size-hook` copy).
+   Self-test: `scripts/test-setup-git-hooks.sh`. Shipped 2026-09-06 (`dfa60a9`)
+   as the last open gap in this layer (G-1). This hook is the backstop that
+   would have blocked the 237MB `.beads/*.jsonl` commits.
 
 3. **Scheduled Maintenance** — systemd user **timers**, not crontab (this box
    is NixOS; there is no `crontab`):
