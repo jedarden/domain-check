@@ -268,8 +268,81 @@ re-dispatch on the divergence premise; see the Standing conclusion above.
 
 ---
 
+## Commit Data Extraction — 2026-09-07 (domchk-53a64cb1)
+
+**Extraction-only step 1 of the `bf-y24az` divergence chain: raw commit
+records plus accessibility validation for every ref the chain compares — no
+statistics, no interpretation.** Steps 2–4 (`domchk-82a54a7c` divergence
+point/time, `domchk-ca6412a0` unique commits/authors, `domchk-884dd8ae`
+compilation) consume this dataset and own every number derived from it.
+
+### What was extracted
+
+One JSONL record per commit — `hash`, `parents`, `author_name`,
+`author_email`, `author_date`, `committer_date`, `subject`, full `message` —
+for four refs, written to `.beads/state/domchk-53a64cb1/` (gitignored via the
+`.beads/` rule; raw extracts stay out of git, this section is their durable
+record):
+
+| File | Ref | Records | Bytes |
+|---|---|---|---|
+| `commits-main.jsonl` | `main` (local target branch) | 1,859 | 1,359,129 |
+| `commits-origin__main.jsonl` | `origin/main` (Forgejo, source of truth) | 1,858 | 1,355,142 |
+| `commits-github-mirror__main.jsonl` | `github-mirror/main` (GitHub mirror) | 1,858 | 1,355,142 |
+| `commits-pre-squash-history-20260816.jsonl` | `pre-squash-history-20260816` (local-only branch behind `bf-y24az`'s stats) | 722 | 429,594 |
+
+The extractor (`extract_commits.py`, same directory) is re-runnable —
+**downstream beads should re-run it at their own dispatch time rather than
+cite these counts**, since `main` moves at doc-commit cadence (see the stale
+`bf-y24az` figures below). Extracted ~16:00 UTC 2026-09-07, immediately after
+`git fetch origin && git fetch github-mirror`, with the co-tenant commit
+`a4c8ffa` still unpushed on local `main` (its count includes it).
+
+### Validation results — 9/9 pass
+
+| Check | Result |
+|---|---|
+| `extract:main` | 1,859/1,859 records; hash-set byte-identical to `git rev-list`; schema clean; tip first |
+| `extract:origin/main` | 1,858/1,858; identical checks pass |
+| `extract:github-mirror/main` | 1,858/1,858; identical checks pass |
+| `extract:pre-squash-history-20260816` | 722/722; identical checks pass |
+| `remote-reachable:origin` | `ls-remote` tip = tracking ref = `3ae946f` (fresh) |
+| `remote-reachable:github-mirror` | `ls-remote` tip = tracking ref = `3ae946f` (fresh) |
+| common ancestor `main`·`origin/main` | merge-base `3ae946f`, ahead/behind **1/0** |
+| common ancestor `main`·`github-mirror/main` | merge-base `3ae946f`, ahead/behind **1/0** |
+| common ancestor `main`·`pre-squash-history-20260816` | merge-base `8373e5d9`, ahead/behind **1857/720** |
+
+Both branches have accessible commit history (the bead's validation
+criterion): all four refs resolve, every record carries hash/author/date/
+message, and both remotes answer `ls-remote`.
+
+### What the raw data shows (facts only — interpretation deferred)
+
+- The two mirror branches are **identical at `3ae946f`** (`origin/main` ↔
+  `github-mirror/main` 0/0) — the remotes remain synchronized, as every
+  re-verification above has found since 2026-09-06.
+- Local `main` is **1 ahead / 0 behind** both: `a4c8ffa`
+  (`domchk-87ef5683`, in flight at extraction time) — an unpushed
+  deliverable, not divergence; expected to land with that bead's own push.
+- `pre-squash-history-20260816` is **frozen** at `7e4edf6c`
+  (2026-08-16T18:17:58−04:00), 722 commits, a single author — it moved
+  not at all in the five days since `bf-y24az` measured it.
+- Main-branch authorship is 2 distinct emails across the 1,859 records
+  (raw count only; the distribution is step 3's deliverable).
+
+### Corrections — `bf-y24az`'s 2026-09-02 figures are stale, do not cite
+
+| `bf-y24az` note (2026-09-02) | Measured here (2026-09-07) |
+|---|---|
+| main = 1,593 commits | **1,859** (+266 in five days — the branch is live) |
+| pre-squash = 722 commits | 722 (unchanged; branch frozen since 08-16) |
+| main-only = 1,591 / pre-squash-only = 720 | raw ahead/behind now **1,857 / 720** (ratios are step 3's scope) |
+| divergence time "2026-09-02T04:10:53−04:00 (today — very recent split)" | **wrong by 18 days** — merge-base `8373e5d9` is dated 2026-08-15T09:56:53−04:00, and the comparison branch's own tip is 2026-08-16T18:17:58−04:00; the 09-02 timestamp was the earlier analysis' wall clock, not the divergence instant |
+
+---
+
 *Everything below this section is the 2026-09-02 analysis. Its specific
-figures (`debd24f`, `73ff9ab`) are superseded by the two sections above; its
+figures (`debd24f`, `73ff9ab`) are superseded by the dated sections above; its
 method and conclusions still hold.*
 
 ---
