@@ -215,6 +215,21 @@ about what the investigation does *not* close:
 4. **Per-clone hook protection**: the 10 MB gate is per-clone; a fresh clone is
    unprotected until `setup-git-hooks.sh install`. Documented in CLAUDE.md.
 
+**Implementation record (appended 2026-09-07, domchk-fb01f52d):** the mitigation
+dispatch for this crash is
+[`docs/mitigation-implementation-bf-2ildm-2026-08-13.md`](../mitigation-implementation-bf-2ildm-2026-08-13.md).
+It re-proves the §5 battery first-hand (safe-gc verdict, pack-memory bound,
+pre-commit hook, 8/8 timers, monitors, both alert suites, `.git` 105 MB / 0
+garbage, backlog 0), carries the two dispatch-premise corrections
+(`--check-only` verdict vs churn; `setup-repo-maintenance.sh` vs the retired
+cron installer), and re-states this section's residual-gap ownership. On gap 2
+(the CLASSIFICATION wiring defect at `scripts/crash-alert-manager.sh:279` of
+25eda96): its fix 8cc1172 (domchk-701bcfa5) landed mid-dispatch at 14:51:30 EDT
+and by ~15:20 EDT is **pushed** — `origin/main` sits at e9ab3d4 with the fix in
+it and the wiring test re-run 13/13 there — with domchk-701bcfa5 **Closed**
+(rev 10) and the defect bead `domchk-f6fff20f` still **Open** (rev 3, its
+owner's call). Verdict unchanged: nothing new owed on the mechanism.
+
 ## 7. Sources (all cited as of 2026-09-07)
 
 - `docs/crashes/bf-2ildm/` retrieval bundle (domchk-ea755548): `attempt-index.tsv`
