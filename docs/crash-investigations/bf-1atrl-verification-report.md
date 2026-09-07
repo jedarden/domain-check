@@ -1,5 +1,13 @@
 # Crash Investigation Verification: Bead bf-1s6c3
 
+> **⚠️ SUPERSEDED 2026-09-07 (domchk-a18b2c06).** The root-cause attribution inherited here
+> from bf-4hp9p — "agent timeout (600s) during complex git reconciliation" — is superseded:
+> 71 of 76 dispatch attempts died by signal at the `git push` step (memcg OOM of pack-objects
+> on an ≈18 GB repository); only 4 attempts hit the 600 s cap. Corrected record:
+> `docs/crash-analysis-bf-1s6c3-2026-09-06.md`. Current recommendations:
+> `docs/verification/bf-1s6c3-recommendations-verification-2026-09-07.md`.
+> Keep this file for provenance; do not cite it forward.
+
 **Alert Bead**: bf-1atrl
 **Investigation Date**: 2026-08-26
 **Status**: ✅ VERIFIED - Already Resolved

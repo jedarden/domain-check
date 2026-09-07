@@ -1,5 +1,13 @@
 # Crash Investigation Report: Bead bf-1atrl
 
+> **⚠️ SUPERSEDED 2026-09-07 (domchk-a18b2c06).** The "agent timeout (600s) … no OOM
+> condition, pure timeout issue" attribution below is wrong: only 4 of 76 dispatch attempts
+> timed out; the other 71 died by signal at the `git push` step on an ≈18 GB repository
+> (memcg OOM of pack-objects inside the 12 GiB dispatch scope). Corrected record:
+> `docs/crash-analysis-bf-1s6c3-2026-09-06.md`. Current recommendations:
+> `docs/verification/bf-1s6c3-recommendations-verification-2026-09-07.md`.
+> Keep this file for provenance; do not cite it forward.
+
 ## Alert Bead: bf-1atrl
 **Task**: ALERT: Agent crash on bead bf-1s6c3  
 **Crash Date**: 2026-08-12T22:20:07.308826347+00:00  

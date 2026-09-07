@@ -1,5 +1,16 @@
 # Crash Fix Verification Report: Bead bf-1s6c3
 
+> **⚠️ SUPERSEDED 2026-09-07 (domchk-a18b2c06).** This report predates the raw-log
+> extraction of the bf-1s6c3 crash window and is wrong on the mechanism and the scale: it
+> was not one crash at 23:41:46Z but **76 dispatches over 4 h 30 m — 71 × exit −1, 4 ×
+> timeout, 1 × success** — and no host memory figure for 2026-08-12 is knowable (system
+> journald on this box starts 2026-08-15), so "<2 GB available → OOM killer" is
+> reconstruction. The binding constraint was the dispatch scope's `MemoryMax=12GiB` against
+> an ≈18 GB object store; the deaths clustered at `git push`'s pack-objects. Corrected
+> record: `docs/crash-analysis-bf-1s6c3-2026-09-06.md` (§11 catalogues each correction).
+> Current recommendations: `docs/verification/bf-1s6c3-recommendations-verification-2026-09-07.md`.
+> Keep this file for provenance; do not cite it forward.
+
 **Report Date:** 2026-09-01
 **Verification Bead:** domchk-bb8a3f13
 **Original Crash Bead:** bf-1s6c3
