@@ -2100,3 +2100,54 @@ fixed, and re-verified, with this report as the canonical record; no new documen
 subsection is its only change. Stale labels `failure-count:5`, `verification-failed` and the
 co-resident `split-child` were removed; `alert` / `crash` / `signal--1` / `umbrella` kept as
 accurate descriptors of what the alert reported and what it became.
+
+### Log-review + comprehensive-report dedup close 2026-09-07 (domchk-762caf4b — "Review logs and create crash investigation report"; deliverable already committed)
+
+domchk-762caf4b was created 2026-09-02T03:49:06Z as the documentation step of the chain
+domchk-3639ec92 (repository-health + resource analysis, § above; closed, commit e332f72) →
+**this bead** → alert bf-kk87a ("ALERT: Agent crash on bead bf-1s6c3", created
+2026-08-13T00:10:08Z). Its dispatch asks for a comprehensive crash investigation report at a
+**new** path, `docs/crash-analysis-bf-1s6c3-2026-08-13.md`, explicitly modeled on
+`docs/comprehensive-crash-investigation-report-2026-09-01.md`, with service availability
+(inference gateway status) at crash time among the acceptance criteria. Two releases today
+(10:12:00Z, 10:21:15Z, `failure-count:1`→`2`) preceded this attempt with no notes and no file
+changes — failure-count cycling again, not failed work; the bead's acceptance boxes were
+already ticked in its description while nothing it names had been created.
+
+**The dispatch-named deliverable already exists, under the canonical path.** The committed and
+pushed report `docs/crash-analysis-bf-1s6c3-2026-09-06.md` renders every section the dispatch
+lists; creating the 2026-08-13 file would add a seventh top-level bf-1s6c3 analysis document
+(this repo already carries ~50 bf-1s6c3 paths), and near-duplicate artifact titles are exactly
+what §11 documents as the alert layer's main false-positive source. Section mapping against
+the dispatch's own template:
+
+| Template section (comprehensive-crash-investigation-report-2026-09-01.md) | Canonical report |
+|---|---|
+| Executive Summary | §1 |
+| Crash Summary / What-When-How | §2 (what the bead was doing), §3 (timeline) |
+| Root Cause Analysis + classification | §5 (classification rationale), §6 |
+| Impact Assessment | §7 |
+| Systematic Crash Patterns | §5.2 (Pattern 3 signature, every criterion present) |
+| Infrastructure Events | §5.4 (excluded alternates), §6 (mechanism) |
+| Recommendations | §8 (prevention), §9 (follow-ups) |
+| Evidence References | §4 (artifact analysis), §10 |
+| Conclusions / investigation complete | §1 (Resolution Status), §11 (corrections), §12 (verification appendix) |
+| **Service availability at crash time** | §5.4: service failure requires HTTP 503/502 to the inference gateway — none present in any attempt |
+
+**First-hand re-verification (this bead's own runs, 2026-09-07):** both committed extracts
+re-parsed (`docs/crashes/bf-1s6c3/needle-events-2026-08-12-bf-1s6c3.jsonl` +
+`…-2026-08-13-…`): **1,458 events**, **76 `agent.completed`**, exit census **−1 × 71 ·
+124 × 4 · 0 × 1** — identical to the domchk-b79733ba recount above. Event-type census: 76
+`bead.claim.succeeded` / 76 `agent.dispatched` / 76 `outcome.classified` / 75 `bead.released`
+/ 1 `bead.orphaned` / 1 `verification.passed`. **Service availability:** zero extract lines
+contain "gateway" and **zero whole-token 5xx (500–509) appear anywhere in either file** — a
+first substring pass had appeared to show 14 hits, but a token-bounded re-scan showed those
+were the digits `503` inside longer numbers (durations/counts), not HTTP codes — so §5.4's
+no-5xx exclusion is re-verified first-hand, and the gateway itself answers **HTTP 200** now
+via the documented `-skf` health check (plain `-sf` fails on the self-signed cert, curl 60).
+**Repository:** `.git` 103 MB · 118 loose objects · size-pack 99.11 MiB · garbage 0 — every
+figure inside the maintenance guide's healthy thresholds, consistent with the §-above
+resource analysis.
+
+**Disposition:** no new document — this dated subsection is the bead's only change, and the
+2026-08-13 path is deliberately **not** created. Closing unblocks alert bf-kk87a.
