@@ -663,6 +663,148 @@ banner on that one file, as was already done for its sibling.
 
 ---
 
+## 12. Patterns and lessons learned for future crash investigations — bead `domchk-42dcef04`, 2026-09-07
+
+Dispatched to "document insights and recommendations for future crash
+investigations", four scope items: false-positive detection patterns,
+post-completion cleanup awareness, infrastructure-event classification, and
+prevention strategies. Appended here per §6 rather than as a new document —
+which is itself the first lesson: the lessons-learned prose a search actually
+surfaces for this incident
+(`docs/crash-pattern-analysis-bf-4k2ws-2026-09-01.md`,
+`docs/crash-investigation-bf-4k2ws-false-positive-2026-09-02.md`
+§"Lessons Learned") predates the 2026-09-07 reclassification and still teaches
+the superseded SIGHUP-cascade / "no crash occurred" premises (§7, §8.3). This
+section restates the four items under the current determination.
+
+### 12.1 False-positive detection patterns
+
+Four patterns survive the reclassification, plus one correction to the
+corpus's own heuristic:
+
+1. **Multiplication signature.** 55 alerts name one target and one root
+   cause. An alerts-per-cause ratio > 1 means the alert layer multiplied, not
+   that N crashes happened (§8.2) — group alerts by target bead and time
+   window before investigating any single one, or the per-alert route
+   re-creates the ~20-reports-for-one-incident sprawl §6 exists to stop.
+2. **Stale-target signature.** Alerts raised after the target's first
+   *verified success* describe work already done: 25 of the 55 kills (45 %)
+   landed in the 2 h 16 min after 04:48:09.546Z's `verification.passed`
+   (§8.1, §9.2). Check the target bead's state **first**; every later alert
+   in this storm fired for a task that was already satisfied.
+3. **The closure-instant heuristic is unsound — correction.** The superseded
+   corpus's lesson "crash alerts with timestamps predating bead completion
+   are logically impossible and can be automatically detected as false
+   positives" (`docs/crash-investigation-bf-4k2ws-false-positive-2026-09-02.md`
+   §Lessons Learned, incl. its pseudocode) compares alerts against the
+   **closure** instant (2026-08-16 15:35:42Z). Against closure, *every*
+   Aug-13 alert — the 30 genuine pre-success kills included — "predates
+   completion", because the bead was not done until three days of retries
+   after the storm. The correct comparison instant is the first verified
+   success, not the closure; as written the heuristic fires on every
+   legitimately-retried bead.
+4. **Titles are not identity.** Near-identical artifact titles across beads
+   stay the main "already done" false match — read the report's Related Bead
+   field, not only its title (repo `CLAUDE.md`, Crash Investigation
+   Guidance).
+5. **Automation caveat — knobs are not a pipeline.** The "automated
+   false-positive detection" the corpus describes is presence, not behavior
+   (§9.4): re-verified this session, **no** systemd user unit invokes
+   `crash-alert-manager.sh`, and the only crash-detection timer
+   (`domain-check-monitoring.service`) runs the report-only
+   `crash-pattern-detection.sh`. `scripts/test-crash-alert-fixes.sh`
+   (12/12, exit 0 this session) tests the knobs. Until D-1..D-10 close, an FP
+   determination is the manual sequence: bead state → exit-code semantics
+   (12.3) → primary-log bracketing.
+
+### 12.2 Post-completion cleanup awareness
+
+- **The failure path acted stronger than the success path.** Both verified
+  successes were *known* successes — `verification.passed` +17/+19 ms after
+  `agent.completed` exit 0 — yet got `action: none` and were orphaned
+  +5.74 s / +6.33 s later (§9.2), while each of the 55 failures produced an
+  alert bead within 6 ms of its heartbeat (§8.2). The loop's terminal
+  condition was unreachable from the success side, so: **a crash alert on a
+  bead whose log holds a `verification.passed` is post-completion cleanup,
+  not an investigation.**
+- **Read the work-completion record before any trace.**
+  `scripts/verify-work-completion.sh` writes
+  `.beads/state/work-completion/<bead-id>.json` at close time precisely so
+  triage can split post-completion from mid-task; **172** marker files exist
+  this session. It is also the more durable witness — single-slot traces
+  retain nothing older than 2026-08-16 (§9.1).
+- **The 30-second rule is a pointer, not a verdict.** `CLAUDE.md`'s "work
+  committed < 30 s before crash → FALSE POSITIVE" needs the work-completion
+  record or the primary log behind it: this storm's 25 post-success kills
+  came up to 2 h 16 min *after* the verified success, so commit-time
+  proximity alone would have cleared only part of the re-work population.
+
+### 12.3 Infrastructure-event classification
+
+- **Exit codes are classes, not signals** (§8.4 restated as triage rules):
+  −1 = unrecorded-signal sentinel — never name a signal from it; 124 = the
+  600 s dispatch cap — **not** max-turns, with this session's day-wide
+  recount as the negative evidence (395 completions, zero `max_turn`
+  mentions, §2); 0 = success; 1 = check for synchronization before treating
+  as per-bead. This session's day-wide distribution, not previously
+  tabulated: **−1 ×344, 124 ×22, 0 ×18, 1 ×11** (their timing not analyzed
+  here).
+- **Classify the cause once; close the swarm as instances.** The 55 kills
+  share one cause (INFRASTRUCTURE, repository-bloat-era kill regime, §8.3
+  layer 3); the pool of beads naming `bf-4k2ws` stands at 189 today (§11.2).
+  The ratio between those two numbers is the cost of per-alert
+  investigation.
+- **A classification is only as good as its derivation.** The superseded
+  corpus classified this incident FALSE_POSITIVE / no-crash from derived
+  reports; the current INFRASTRUCTURE classification exists only because
+  successive beads re-derived the census from the untouched primary log (§2,
+  §11.1, this section). Rule: any figure you did not re-derive is a
+  hypothesis, and a classification built only on hypotheses inherits their
+  premise errors.
+
+### 12.4 Prevention strategies
+
+Bound to committed artifacts — the full requirement→artifact table is §10.1,
+the anti-requirements §10.3; these are the lessons, not a re-specification:
+
+- **The layers that held map one-to-one onto the incident's two kill legs.**
+  The 55 mid-run kills are covered by bounding the allocation (R1:
+  `pack.windowMemory=2g` / `deltaCacheSize=1g` / `threads=1`, worst case
+  ≈3 GiB inside the 12 GiB scope) and keeping the object store small (R2:
+  `.beads/` fully gitignored, 10 MB pre-commit gate); the 5 × 124 cap class
+  is answered repo-side by the R4 environment gates
+  (`preflight-health-check.sh`, `system-event-mode.sh`), not by a longer cap.
+- **Audit prevention by invocation, not existence.** §9.4's caveat
+  generalizes: a countermeasure that no timer, hook, or caller invokes is
+  documentation, not prevention. The check is
+  `grep -l <script> ~/.config/systemd/user/*.service` — this session:
+  0 units → `crash-alert-manager.sh`, 1 → `crash-pattern-detection.sh` —
+  not the README's claim about the script.
+- **Do not re-open owned gaps** (§10.2): G-3's adoption half =
+  `domchk-6951fe0c`; alert-layer D-1..D-10 = `domchk-b5448b6a`'s prioritized
+  list; G-9..G-13 are NEEDLE-external. Re-opening them from a
+  lessons-learned pass is the duplicate-generation pattern this incident
+  already paid for once.
+- **Documentation hygiene is prevention.** ~20 superseded-era `bf-4k2ws`
+  reports, and RCA files still carrying the retired premise as current
+  (§11.3), mis-teach the next investigator before any banner reaches them.
+  The §6 append-to-canonical protocol and supersession banners are part of
+  the prevention stack — and the cheapest layer to skip.
+
+*§12 appended by `domchk-42dcef04`, 2026-09-07. Live verification this
+session at HEAD `7e39f21` = `origin/main`: primary-log census re-derived
+byte-exact (bf-4k2ws 62 = 55 × −1 + 5 × 124 + 2 × 0; `outcome.handled`
+crash→alerted ×55 / timeout→deferred ×5 / success→none ×2) plus the
+previously untabulated day-wide distribution (395 = −1 ×344 + 124 ×22 +
+0 ×18 + 1 ×11, zero `max_turn` mentions); alert-bead ledger recount
+(exactly 55, 17 closed / 36 open / 2 in_progress); `work-completion` marker
+files counted at 172; `scripts/test-crash-alert-fixes.sh` 12/12 exit 0;
+systemd-unit invocation audit 0 → `crash-alert-manager.sh` / 1 →
+`crash-pattern-detection.sh`. The superseded-corpus lesson quoted in 12.1(3)
+was read from the file itself this session.*
+
+---
+
 *Determination by `domchk-7f838f36`, 2026-09-07; §8 appended by
 `domchk-4311aaa8`, 2026-09-07; §9 appended by `domchk-a7bc56b5`, 2026-09-07.
 Every count in §2 was re-derived this session from
@@ -675,4 +817,8 @@ live `scripts/crash-alert-manager.sh`. §10's verification lines were executed
 live by `domchk-9bd1f524` as itemized in its footer. §11's census and repo/
 bead-store/remote figures were re-derived live by `domchk-e02032f2`; its only
 delta is the missing superseded banner on
-`docs/crash-investigations/bf-4k2ws/root-cause-analysis-signal-minus1.md`.*
+`docs/crash-investigations/bf-4k2ws/root-cause-analysis-signal-minus1.md`.
+§12 appended by `domchk-42dcef04`; its own-session live verifications are
+itemized in its section footer, while figures quoted from §8–§9 (attempt
+chronology, orphan deltas, heartbeat deltas) are those beads' first-hand
+derivations, not re-derived there.*
