@@ -1020,8 +1020,8 @@ below plus its own first-hand re-verification.
 
 **Acceptance-criteria disposition (all five, decided 2026-09-07):**
 
-- **Investigation document created** — rendered by this report (§§ 1–11 + thirteen §12
-  appends from parallel chains). No new file warranted; a second
+- **Investigation document created** — rendered by this report (§§ 1–11 plus the dated
+  §12 appends from the parallel chains). No new file warranted; a second
   `crash-analysis-bf-1s6c3-2026-09-07.md` would fork the canonical record.
 - **Lessons learned in CLAUDE.md** — already carried by the repo CLAUDE.md's *Crash
   Prevention and Investigation* / *Key Learnings* sections (bloat mechanism, layered
@@ -1046,7 +1046,8 @@ below plus its own first-hand re-verification.
 
 **First-hand re-verification (all re-run 2026-09-07 by this bead):**
 
-- **Object store:** `.git` 103 MB · 157 loose objects / 1.20 MiB · in-pack 11,182 /
+- **Object store:** `.git` 103 MB · 162 loose objects / 1.22 MiB (recounted at commit
+  time; loose churn is normal) · in-pack 11,182 /
   99.13 MiB · 3 packs · garbage 0 · `git fsck --full` exit 0 (dangling trees only) ·
   `git ls-files .beads` → 0 · `git log --all -- .beads/` → 0 commits on every ref
 - **`check-repo-health.sh`** exit 0 — incl. the effective pack-memory bound
