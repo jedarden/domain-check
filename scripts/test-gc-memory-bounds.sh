@@ -4,11 +4,18 @@
 # (root cause of bf-173o7e / bf-4x12ec exit -1 storms; see
 # docs/maintenance/repository-maintenance-guide.md).
 #
-# Unit tests check the config lands and verifies. The integration test
-# reproduces the crash COMMAND at reduced scale (8x64MiB incompressible blobs
-# instead of 17GiB of loose objects) and asserts the bare aggressive gc the
-# agent ran 129 times now completes inside a 768MiB cgroup — 1/16th of the
-# 12GiB needle dispatch scope.
+# Unit tests check the config lands and verifies. Two integration tests
+# reproduce the two crash COMMANDs of the memcg-OOM era at reduced scale:
+#   * the bf-1ea4g death operation — `git push` of a multi-commit unpushed
+#     backlog of near-identical snapshots (6 x 32MiB, delta fodder) from an
+#     unpacked store, no gc in between (54/57 of its attempt transcripts died
+#     inside push);
+#   * the bf-173o7e/bf-4x12ec death operation — bare `git gc --aggressive
+#     --prune=now` over 8 x 64MiB incompressible blobs (instead of 17GiB of
+#     loose objects).
+# Both now complete inside a 768MiB cgroup — 1/16th of the 12GiB needle
+# dispatch scope — with the same scaled bound (128m window / 64m cache /
+# 1 thread) the deployed config ships.
 #
 # Usage: ./test-gc-memory-bounds.sh            # all tests
 #        ./test-gc-memory-bounds.sh --unit     # skip the slow integration test
@@ -40,6 +47,10 @@ TIME_BIN=""
 for c in /usr/bin/time /bin/time /run/current-system/sw/bin/time; do
   [[ -x "$c" ]] && { TIME_BIN=$c; break; }
 done
+# Defined up front: both integration tests (push and gc) wrap their command in
+# it, and the push test runs first.
+TIME_WRAP=()
+[[ -n "$TIME_BIN" ]] && TIME_WRAP=("$TIME_BIN" -v)
 
 # k/m/g or bare -> bytes
 to_bytes() {
@@ -74,6 +85,17 @@ verify_isolated_in() {
 
 get_rss_kb() {  # "$1" = /usr/bin/time -v stderr log
   grep -oE 'Maximum resident set size \(kbytes\): [0-9]+' "$1" | grep -oE '[0-9]+$'
+}
+
+scope_peak_kb() {  # "$1" = systemd-run scope unit -> peak KiB from its own accounting
+  # systemd writes "…scope: Consumed …, N memory peak" to the user journal when
+  # the scope stops; GNU time's report can be lost under --scope, this cannot
+  journalctl --user --no-pager -u "$1" 2>/dev/null \
+    | grep -oE '[0-9]+(\.[0-9]+)?[KMGT]? memory peak' \
+    | tail -1 \
+    | awk '{v=$1; u=substr(v,length(v),1); n=(u~/[KMGT]/)?substr(v,1,length(v)-1):v;
+            m=(u=="K")?1:(u=="M")?1024:(u=="G")?1048576:(u=="T")?1073741824:0.0009765625;
+            printf "%d\n", n*m}'
 }
 
 newrepo() {
@@ -129,6 +151,75 @@ git config --file "$gtmp" pack.threads 1
 
 [[ "${1:-}" == "--unit" ]] && { echo; echo "=== unit only: $PASS passed, $FAIL failed ==="; exit $(( FAIL > 0 )); }
 
+echo "=== integration: the bf-1ea4g death operation — bounded 'git push' over an unpacked backlog ==="
+# bf-1ea4g (2026-08-13, 54/57 attempt transcripts) died inside `git push`, not
+# gc: a 422-commit unpushed backlog of near-identical bead-snapshot commits,
+# pushed in one operation from a store that had never been packed, with no
+# pack.windowMemory bound (see
+# docs/investigations/bf-1ea4g-root-cause-determination-2026-09-02.md).
+# test-bf-1s6c3-crash-condition.sh covers the unbounded-push death (A2) and
+# the bounded push over a PACKED store (B2); the case between them — bounds
+# present, backlog still loose, no gc in between — is asserted here.
+r7=$(newrepo) || exit 1
+PACK_WINDOW_MEMORY=128m PACK_DELTA_CACHE_SIZE=64m PACK_THREADS=1 setup_in "$r7" >/dev/null 2>&1 \
+  || fail "setup failed in push integration repo"
+verify_in "$r7" || fail "push integration repo failed verify"
+remote="$WORKROOT/remote-bf1ea4g.git"
+git init -q --bare "$remote" || fail "bare remote init"
+git -C "$r7" remote add origin "$remote"
+# One snapshot path re-committed with a few bytes changed per round — the
+# near-identical, delta-fodder shape the backlog actually had. Incompressible
+# base so zlib cannot collapse the window work away.
+dd if=/dev/urandom of="$r7/snapshot.bin" bs=1M count=32 status=none || fail "dd snapshot base"
+for i in 1 2 3 4 5 6; do
+  printf 'round %d' "$i" | dd of="$r7/snapshot.bin" bs=1 seek=$((i * 4096)) conv=notrunc status=none
+  git -C "$r7" add snapshot.bin
+  git -C "$r7" commit -qm "backlog snapshot round $i"
+done
+loose_before_push=$(git -C "$r7" count-objects -v | awk '/^count:/{print $2}')
+packs_before_push=$(find "$r7/.git/objects/pack" -name '*.pack' 2>/dev/null | wc -l)
+echo "   prepared a $((6 * 32))MiB unpushed backlog: $loose_before_push loose objects, $packs_before_push packs"
+
+if systemd-run --user --quiet --scope --unit="gcmb-push-probe-$$" -p MemoryMax=768M true 2>/dev/null; then
+  ( cd "$r7" && timeout 300 systemd-run --user --quiet --scope \
+      --unit="gcmb-push-backlog-$$" -p MemoryMax=768M \
+      "${TIME_WRAP[@]}" git push -q origin HEAD ) 2> "$WORKROOT/push-stderr.log"
+  rc=$?
+  [[ $rc -eq 0 ]] && ok "bounded 'git push' over the unpacked backlog exited 0 under MemoryMax=768M" \
+                  || fail "bounded push over the backlog exited $rc under MemoryMax=768M (see $WORKROOT/push-stderr.log)"
+else
+  echo "   systemd-run --user unavailable; asserting the config bound via RSS only"
+  ( cd "$r7" && timeout 300 "${TIME_WRAP[@]}" git push -q origin HEAD ) 2> "$WORKROOT/push-stderr.log"
+  rc=$?
+  [[ $rc -eq 0 ]] && ok "bounded push over the backlog exited 0 (no cgroup available)" || fail "push exited $rc"
+fi
+if git -C "$remote" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+  ok "the bare remote received the pushed backlog (the operation bf-1ea4g never completed)"
+else
+  fail "remote has no HEAD after the bounded push — the backlog did not arrive"
+fi
+loose_after_push=$(git -C "$r7" count-objects -v | awk '/^count:/{print $2}')
+if [[ "$loose_after_push" -gt 0 ]]; then
+  ok "backlog stayed loose (${loose_after_push} objects) — push alone, no gc, the state bf-1ea4g pushed from"
+else
+  fail "store packed during the push ($loose_after_push loose) — the test no longer covers the unpacked-backlog path"
+fi
+if [[ -n "$TIME_BIN" ]]; then
+  rss=$(get_rss_kb "$WORKROOT/push-stderr.log" || echo 0)
+  if (( rss == 0 )); then
+    rss=$(scope_peak_kb "gcmb-push-backlog-$$")
+    [[ -n "$rss" ]] || rss=0
+    (( rss > 0 )) && echo "   (time -v report lost under --scope; using the scope's own peak: ${rss}KB)"
+  fi
+  if (( rss > 0 && rss < 700 * 1024 )); then
+    ok "push peak RSS ${rss}KB < 700MiB cap (bf-1ea4g's unbounded push exceeded 12GiB)"
+  else
+    fail "push peak RSS ${rss}KB outside expected range"
+  fi
+else
+  echo "   (GNU time not found; RSS assertion skipped, cgroup/exit assertions still ran)"
+fi
+
 echo "=== integration: the bf-173o7e crash command under a 768MiB cgroup ==="
 r5=$(newrepo) || exit 1
 PACK_WINDOW_MEMORY=128m PACK_DELTA_CACHE_SIZE=64m PACK_THREADS=1 setup_in "$r5" >/dev/null 2>&1 \
@@ -142,9 +233,6 @@ done
 loose=$(git -C "$r5" count-objects -v | awk '/^count:/{print $2}')
 echo "   prepared $loose loose objects of incompressible data (8 x 64MiB)"
 echo "   running the exact crash command: git gc --aggressive --prune=now"
-
-TIME_WRAP=()
-[[ -n "$TIME_BIN" ]] && TIME_WRAP=("$TIME_BIN" -v)
 
 if systemd-run --user --quiet --scope --unit="gcmb-probe-$$" -p MemoryMax=768M true 2>/dev/null; then
   ( cd "$r5" && timeout 300 systemd-run --user --quiet --scope \

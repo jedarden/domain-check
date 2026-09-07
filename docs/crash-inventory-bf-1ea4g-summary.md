@@ -102,6 +102,12 @@ Attempt distribution of last recorded tool call (all 57 surviving transcripts, f
 
 **Nothing is owed on the kill mechanism:** the fix layer (repo de-bloat, `.beads/` gitignore, pack bounds, backlog-draining pushes) had already landed when the 2026-09-07 re-determination was written, and it proposed no new fix.
 
+### 5.1 Fix implementation record (Child 3, domchk-9d840579, 2026-09-07)
+
+The fix needed no new mechanism — the bound above was already effective, re-verified live this session (`./scripts/setup-git-gc-config.sh --verify` exit 0, worst case ≈3072MiB, supplied repo-locally and globally). What was missing was a recurrence test for *this* death operation: `scripts/test-gc-memory-bounds.sh` replayed only the gc-side crash command (bf-173o7e/bf-4x12ec), and the push-side pair in `test-bf-1s6c3-crash-condition.sh` brackets the extremes (A2: no bounds → SIGKILL at `MemoryMax=512M`; B2: bounds over a *packed* store → exit 0) without the middle case — bounds over the **unpacked** backlog, the exact state bf-1ea4g pushed from.
+
+That case is now asserted in the suite (test adopted from a prior attempt's uncommitted work, then fixed and completed): bounded `git push` over a 192MiB unpacked 6×32MiB near-identical-snapshot backlog under `MemoryMax=768M` (1/16th of the 12GiB dispatch scope) — exit 0, the bare remote receives the backlog, the store stays loose (push alone did no gc), peak push RSS **232,504KB** vs the >12GiB the unbounded push consumed on 2026-08-13. Full suite **16/16** (gc replay unchanged: peak 320,532KB). Also fixed en route: the push test now runs with the suite's GNU `time -v` wrapper, which was defined after its first use.
+
 ---
 
 ## 6. Document inventory — what was reviewed
