@@ -68,3 +68,48 @@ The original task was completed successfully after the crash. This alert is a du
 
 ### Recommended Action
 Close bead bf-5cfqn with reason: "Duplicate alert for resolved crash - original task bf-1s6c3 completed successfully after timeout crash"
+
+## Correction 2026-09-07 (domchk-9c040403 — duplicate-determination re-verification)
+
+The duplicate determination above stands and was re-verified live, but the root-cause
+section of this report is wrong and is superseded as follows.
+
+**What was corrected:**
+
+- **"Primary Cause: Agent timeout (600s) … no OOM condition, pure timeout issue" is
+  false.** It contradicts the alert's own record (`exit code: -1 (signal -1)` — a
+  SIGKILL, not a timeout; timeouts are exit 124) and the canonical analysis. The
+  `bf-4hp9p` timeout attribution belongs to the superseded 2026-09-01 corpus.
+  Actual root cause: **kernel memcg-OOM SIGKILL of `git push`'s pack-objects on the
+  then-~18 GB repository (17 GB loose objects from committed `.beads/*.jsonl`
+  snapshots) inside the 12 GiB dispatch scope**, amplified into 71 kills by needle's
+  ~10 s no-backoff re-dispatch loop. Zero code defects.
+- **The named crash instant is not a distinct crash.** bf-5cfqn's timestamp
+  `2026-08-13T00:28:36.425389752+00:00` is **attempt 58's kill**
+  (00:28:30.196295497Z, exit -1, 285,898 ms — 58th of 76 `agent.completed` records)
+  plus the `HANDLING_RELEASE_DONE` heartbeat **6.229 s later**. Proven first-hand in
+  the canonical report, §12 ("Re-verification 2026-09-07, domchk-904abc88").
+- **Original alert bead identified:** **`bf-oplew`** (created
+  2026-08-12T21:36:51.250Z, alerting the crash at 21:36:51.240Z) — the first of
+  **76** alert beads for the bf-1s6c3 storm. The sibling list above (11 beads) is a
+  partial snapshot from 2026-08-26, not the full pool.
+- **Resolution authority:** [docs/crash-analysis-bf-1s6c3-2026-09-06.md](../crash-analysis-bf-1s6c3-2026-09-06.md)
+  (canonical, §12 holds every chain subsection's verification), closed under umbrella
+  bead domchk-b79733ba on 2026-09-07. The companion report
+  `docs/crash-investigations/bf-5cfqn-duplicate-alert-resolution.md` (same alert,
+  same day) already carried the correct OOM root cause.
+
+**Live re-verification 2026-09-07 (all first-hand):**
+
+- bf-1s6c3: **Closed**; notes carry the 2026-09-07 dated correction from
+  domchk-b79733ba (its original note's cited doc does not exist — superseded corpus).
+- Repository: `.git` **103 MB**, 130 loose objects / 1.45 MiB, one pack 11360
+  objects, `git ls-files .beads` → **0**, `git fsck --full` exit 0 (dangling-only),
+  `HEAD...origin/main` → **0/0**.
+- bf-5cfqn history: closed five times (2026-08-16, 2026-08-17, 3× on 2026-08-26),
+  each auto-reopened within seconds (failure-count cycling; label now
+  `failure-count:4`). This determination bead (domchk-9c040403) does **not** hold
+  bf-5cfqn's closure — that is gated on its blocker **domchk-06c4e978**
+  (documentation bead). Recommended close reason, corrected: "Duplicate alert for
+  resolved crash bf-1s6c3 — memcg-OOM repository-bloat era; instant maps to attempt
+  58's kill; canonical analysis docs/crash-analysis-bf-1s6c3-2026-09-06.md."
