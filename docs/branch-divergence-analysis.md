@@ -341,6 +341,66 @@ message, and both remotes answer `ls-remote`.
 
 ---
 
+## Divergence Point and Time Metrics — 2026-09-07 (domchk-82a54a7c)
+
+**Step 2 of the `bf-y24az` divergence chain: the common ancestor of each
+compared pair, the time metrics around it, and per-branch commit totals —
+no unique-commit enumeration, no author analysis (steps 3–4 own those).**
+Computed per step 1's instruction: the extractor was **re-run fresh at this
+dispatch** (`.beads/state/domchk-82a54a7c/`, 9/9 checks pass), not cited from
+step 1's counts — and that discipline mattered again, since `main` moved
+1,859 → 1,864 in the hours between the two runs.
+
+### State at compute time
+
+Both remotes were fetched immediately before computing. `main`,
+`origin/main`, and `github-mirror/main` all sat at **`8d326cc`** — step 1's
+1-ahead/0-behind snapshot (co-tenant `a4c8ffa` unpushed) had already resolved
+itself: that commit and `8d326cc` itself landed, and the GitHub mirror caught
+up during this run's fetch (`3ae946f..8d326cc`). All three live refs are
+**0/0 against each other**. `pre-squash-history-20260816` is unchanged at
+`7e4edf6c` (722 commits, frozen since 2026-08-16).
+
+### Divergence point (merge-base) and commit counts
+
+| Pair | Merge-base | Ahead / behind | main | other |
+|---|---|---|---|---|
+| `main` \| `origin/main` | `8d326cc` (the shared tip itself) | **0 / 0** | 1,864 | 1,864 |
+| `main` \| `github-mirror/main` | `8d326cc` (the shared tip itself) | **0 / 0** | 1,864 | 1,864 |
+| `main` \| `pre-squash-history-20260816` | `8373e5d96610` | **1,862 / 720** | 1,864 | 722 |
+
+The only pair that is genuinely **diverged** (both sides ahead) is `main`
+vs the frozen pre-squash branch. The Forgejo/GitHub pair is not diverged at
+all — its common ancestor *is* its tip, so there is no split to date.
+
+### Time-based metrics
+
+| Metric | Value |
+|---|---|
+| Divergence point of the real split | `8373e5d9` "migrate: rehydrate the bead workspace from bead-forge to bead-rs" |
+| Its commit date | **2026-08-15T13:56:53Z** (09:56:53−04:00) |
+| **Time since divergence** (`main` vs pre-squash) | **23d 2h 40m** at compute time = **23.11 days** = **554.67 hours** |
+| Pre-squash branch's own lifetime after the split | 1d 8h 22m (merge-base → its tip `7e4edf6c`, 2026-08-16T22:18:49Z) |
+| Time the pre-squash branch has been frozen | 21d 18h 18m (age of its tip at compute time) |
+| `main` vs both mirrors | no divergence — "time since divergence" is degenerate; the value reported is the age of the shared tip `8d326cc` (27m 51s at compute, committed 2026-09-07T16:09:11Z) |
+
+Raw numbers live in `.beads/state/domchk-82a54a7c/metrics.json`
+(`since_divergence_seconds` / `_days` / `_hours` per pair, alongside the
+formatted values) with the extraction in the same directory; the script is
+`compute_divergence_metrics.py`, re-runnable the same way as step 1's.
+
+### Correction confirmed — `bf-y24az`'s divergence time
+
+`bf-y24az` recorded the split as "2026-09-02T04:10:53−04:00 (today — very
+recent split)". That was the earlier analysis' wall clock. The divergence
+point's own commit date is **2026-08-15**, so the real split age at
+2026-09-02 was already ~18 days, and at this writing **23 days** — there was
+never a recent split. Step 3 (`domchk-ca6412a0`, unique commits + authors)
+and step 4 (`domchk-884dd8ae`, compilation) should take every figure from
+this section's tables or a fresh re-run, not from `bf-y24az`'s notes.
+
+---
+
 *Everything below this section is the 2026-09-02 analysis. Its specific
 figures (`debd24f`, `73ff9ab`) are superseded by the dated sections above; its
 method and conclusions still hold.*
