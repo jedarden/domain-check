@@ -783,8 +783,68 @@ Repository bloat (18GB with 17GB loose objects) caused 9 OOM crashes over 2.5 ho
 
 ---
 
-**Document Version:** 2.0  
+## Implementation Status — bf-1s6c3 Crash Type (repository-bloat infrastructure event)
+
+**Added:** 2026-09-06 (bead domchk-d9117f42)  
+**Basis:** [`docs/crashes/bf-1s6c3-root-cause-analysis-domchk-1c03aacb-2026-09-06.md`](crashes/bf-1s6c3-root-cause-analysis-domchk-1c03aacb-2026-09-06.md) —
+classification **infrastructure, repository-bloat sub-type** (Pattern 3), the same crash type as
+bf-4yjq that motivated Priority 3 below. This section records what is actually implemented and
+live-verified, superseding the "Immediate Actions" checklist above (every item on it is now done
+or explicitly out of scope). Every figure below was re-measured on 2026-09-06, not carried
+forward from earlier documents.
+
+### Mitigation stack, live-verified 2026-09-06
+
+| Layer | Preventive measure | Live verification (2026-09-06) |
+|---|---|---|
+| Repo size (item 1) | Object store packed; daily bounded gc keeps it packed | `.git` **101 MB**, 43 loose objects / 300 KiB, pack 99.13 MiB, garbage 0, `git fsck --full` exit 0 (loose churn between runs is normal; the pre-commit gate and the 02:00 gc timer keep it bounded) |
+| Re-entry block (item 2) | `.beads/` gitignored repo-wide (`.gitignore:66`) | `git ls-files .beads` → **0 tracked files**. The 4 tracked `*.jsonl` files are deliberate force-added crash-evidence extracts (24–289 KB, under `docs/crash*/`) — bounded, intentional, not bead state |
+| Commit gate (item 3) | Pre-commit backstop + **reproducible installer** — shipped 2026-09-06, was the last open gap in this layer | `scripts/setup-git-hooks.sh` (install / `--check` / `--uninstall`); installed hook byte-identical to tracked source, executable; self-test `scripts/test-setup-git-hooks.sh` 22/22 passing |
+| Bare-gc & push bounds (item 4) | `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` | `./scripts/setup-git-gc-config.sh --verify` → exit 0, worst case ≈3 GiB per pack run, within the dispatch scope |
+| Scheduled enforcement (item 5) | systemd user timers (not cron — this box is NixOS) | all 6 `domain-check-*` timers present and firing (service 2 min, resource 5 min, crash-pattern 10 min, repo-health daily 02:00, gc daily 03:00, full gc Sun 04:00) |
+| `./scripts/check-repo-health.sh` | Repo's own gate | exit 0 |
+
+### What the item-3 closure changed (this commit)
+
+The pre-commit hook existed since the bf-4yjq cleanup, but only as a hand-installed per-clone
+copy that had drifted from the tracked source — a fresh clone had **no** bloat protection, and
+no way to detect that. Three files close G-1 of
+`docs/crash-prevention-requirements.md`:
+
+- **`scripts/setup-git-hooks.sh`** — installer: `install` (idempotent), `--check` (exit 1 on
+  missing / non-executable / drifted), `--uninstall`. Installs from the tracked source, so the
+  installed copy can no longer silently diverge.
+- **`scripts/pre-commit-repo-size-hook`** — rewritten source: NUL-delimited path handling
+  (spaces/newlines safe), a 50 MB total-per-commit cap in addition to the 10 MB per-file cap
+  (catches many just-under-limit files), and a hard block on anything staged under `.beads/` —
+  **every** path under it, not only the `.jsonl` shapes bf-4yjq actually leaked, because the
+  whole directory is gitignored and any staged path there is by definition a `git add -f`.
+- **`scripts/test-setup-git-hooks.sh`** — end-to-end self-test in a throwaway repo: proves the
+  11 MB, 54 MB-total, and forced-add `.beads/` classes are blocked (jsonl and non-jsonl), that
+  normal/rename/deletion commits pass, and that `--check` detects and the installer repairs
+  drift. 22 assertions; seconds to run; never touches this repo's index.
+
+### Residual gap — out of this repository's control (item 6)
+
+The **re-dispatch stop-condition** remains the one lever this repo cannot pull: bf-1s6c3's
+single kill became 71 because NEEDLE re-claimed the bead ~10 s after every death for 265
+minutes, and nothing in the loop checked whether the work was already satisfied. That is
+NEEDLE-fleet behavior, not a domain-check setting. It is recorded as the systemic finding in
+the RCA addendum; until it exists, the practical mitigation stays what this workspace already
+does — verify the target bead's actual state before investigating an alert.
+
+### Why the host-memory pre-flight is not the operative check for this crash type
+
+The `free -g` pre-task abort (< 10 GB available) prescribed elsewhere in this workspace would
+**not** have caught bf-1s6c3: host memory was not the binding constraint — the 12 GiB dispatch
+scope against an ~18 GB object store was. The operative pre-flight for Pattern 3 is the
+repository-size table (the 02:00 `domain-check-repo-health.timer` runs it daily), which is why
+the repo-size row leads the stack above.
+
+---
+
+**Document Version:** 2.1  
 **Created:** 2026-09-01  
-**Updated:** 2026-09-01 (Added Priority 3: Repository Bloat Prevention based on bf-4yjq incident)  
+**Updated:** 2026-09-06 (Added Implementation Status section for the bf-1s6c3 crash type — repository-bloat mitigation stack live-verified, G-1 pre-commit installer shipped)  
 **Author:** Claude Code Agent  
-**Review Status:** Ready for implementation
+**Review Status:** Priorities 1–4 implemented; Priority 3 fully closed as of 2026-09-06
