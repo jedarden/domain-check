@@ -1,0 +1,19 @@
+[Unit]
+Description=Domain Check Alert Triage Sweep (hourly)
+Documentation=https://git.ardenone.com/jedarden/domain-check
+
+[Timer]
+# Hourly — the open-alert pool drifts slowly (closures by closure-bead
+# blockers, new kills by the upstream harness), so an hourly re-triage keeps
+# the drain plan current without measurable cost (a full sweep is ~2s).
+# OnBootSec catches the just-booted box quickly; Persistent=true catches up a
+# missed run at the next boot. Inactive-cache note: the timer stays active
+# even when the sweep finds nothing, because "nothing new to close" is itself
+# the signal that the upstream dedup gate is holding.
+OnBootSec=10min
+OnUnitActiveSec=1h
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

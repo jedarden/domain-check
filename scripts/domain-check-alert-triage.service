@@ -1,0 +1,38 @@
+[Unit]
+Description=Domain Check Alert Triage Sweep (hourly, report-only)
+Documentation=https://git.ardenone.com/jedarden/domain-check
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/coding/domain-check
+# The automated half of duplicate-alert prevention (crash-prevention
+# gap analysis §5 P1(a)/P4): walks every open alert bead, resolves each crash
+# target through crash-resolution-tracker.sh, and rewrites the triage queue
+# (.beads/state/alert-triage/queue.jsonl) that closure-bead blockers drain.
+# Strictly report-only — the sweep closes, updates, and creates no beads;
+# closure stays with each alert's closure-bead blocker.
+ExecStart=/home/coding/domain-check/scripts/alert-triage-sweep.sh
+StandardOutput=append:/home/coding/domain-check/.beads/logs/alert-triage.log
+StandardError=append:/home/coding/domain-check/.beads/logs/alert-triage.log
+
+# NixOS: the systemd --user manager PATH holds only the systemd store path,
+# so `#!/usr/bin/env bash` resolves to 127 and every run fails before the
+# script starts (seen 2026-09-02 03:00:10 on domain-check-git-gc.service).
+# Pin the system profile bin dir explicitly, plus ~/.local/bin for the `bead`
+# CLI the sweep (and crash-resolution-tracker.sh under it) shell out to —
+# without it the sweep runs and correctly fails open with exit 3 forever,
+# having swept nothing (caught live 2026-09-07 on the first `systemctl start`).
+Environment="PATH=/home/coding/.local/bin:/run/current-system/sw/bin:/usr/bin:/bin"
+
+# The sweep is seconds of bash/jq/python plus one `bead list` and one
+# `bead show` per distinct crash target. Bounds are about containment, not
+# need: a runaway run must be killed inside its own cgroup, never allowed to
+# press the box and let the global OOM killer take an unrelated agent process
+# (root cause of the 2026-08-13 bf-65lsdu signal -1 crash). Do not add User=:
+# this is a systemd --user unit and User= is invalid in it.
+MemoryMax=512M
+MemorySwapMax=0
+CPUQuota=100%
+Nice=10
+IOSchedulingClass=idle
+OOMScoreAdjust=500
