@@ -251,6 +251,7 @@ Wired into `check-repo-health.sh` (§9) and the daily 02:00
 422-commit backlog (→ CRITICAL) plus threshold boundaries, WIP false-positive
 cases, and the fails-open paths. Details:
 [Repository Maintenance Guide](../docs/maintenance/repository-maintenance-guide.md).
+
 ## Crash Prevention
 
 ### Crash Pattern Detection (`crash-pattern-detection.sh`)
@@ -300,6 +301,51 @@ fi
 ```
 
 **Documentation:** See `docs/crash-mitigation-strategies.md` (Proposal 4.3)
+
+### Crash Classifier (`crash-classifier.sh`)
+
+Classifies a crash alert as `FALSE_POSITIVE`, `SERVICE_FAILURE`, `INFRASTRUCTURE`, `CODE_DEFECT`, or `UNKNOWN` so investigations stop targeting work another bead already finished.
+
+**Quick Start:**
+```bash
+./scripts/crash-classifier.sh <bead-id>
+```
+
+**Trace-slot provenance gate (read before quoting a trace):**
+`.beads/traces/<id>/` is a **single slot** — it holds only the most recent run of a bead
+id, so after an auto-retry success it no longer describes the crash. For bf-3561g the slot
+held the 2026-08-17 success run (`exit_code: 0`) while the crash was 2026-08-16T17:21Z;
+quoting it inverted the classification. The classifier therefore derives the incident
+window from the bead's `crash` records in `.beads/events.jsonl` and checks
+`metadata.json.captured_at` against it before using any trace content:
+
+- `ok` — trace captured inside the incident window; used as evidence
+- `mismatch` — slot holds a different run; trace strings are excluded and the crash's
+  exit code is read from `.beads/events.jsonl` instead
+- `unverified` — no metadata or no derivable window; same exclusion applies
+
+**Exit Codes:**
+- `0` - Classified (check stdout for the classification token and provenance verdict)
+- `1` - Usage error
+- `2` - Missing trace artifacts
+
+**Environment Variables:**
+```bash
+# Override the incident window instead of deriving it from events.jsonl (ISO8601)
+export CRASH_WINDOW_START=2026-08-16T17:00:00Z
+export CRASH_WINDOW_END=2026-08-16T18:00:00Z
+
+# Alternative event-stream location (default: .beads/events.jsonl)
+export BEADS_EVENTS=/path/to/events.jsonl
+```
+
+**Integration:** invoked by `crash-alert-manager.sh` during alert processing; the
+provenance verdict and any mismatch warning are written to
+`.beads/logs/crash-alert-manager.log`.
+
+**Documentation:** See `docs/crash-root-cause-bf-3561g.md` §6 recommendation 7 (the
+bf-3561g trace-slot trap that motivated the gate) and
+`scripts/test-trace-slot-provenance.sh` (regression tests).
 
 ### Resource Monitor (`resource-monitor.sh`)
 

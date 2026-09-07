@@ -275,8 +275,15 @@ if [[ "$EXIT_CODE" == "0" ]]; then
     exit 0
 fi
 
-# Extract classification type
-CLASSIFICATION=$(echo "$CLASSIFICATION_OUTPUT" | head -1)
+# Extract classification type. Anchored token match, NOT head -1: the
+# classifier prints the bare token as line 1, but taking the first line blind
+# is how the '====' banner became CLASSIFICATION and left the FALSE_POSITIVE
+# branch below dead (domchk-f6fff20f). The grep keeps this correct even if the
+# classifier's preamble changes again. Falls back to head -1 only when no
+# token is present at all, so an unparseable output still surfaces verbatim
+# rather than silently becoming empty.
+CLASSIFICATION=$(printf '%s\n' "$CLASSIFICATION_OUTPUT" | grep -m1 -E '^(FALSE_POSITIVE|SERVICE_FAILURE|INFRASTRUCTURE|CODE_DEFECT|UNKNOWN)[[:space:]]*$' || true)
+CLASSIFICATION="${CLASSIFICATION:-$(printf '%s\n' "$CLASSIFICATION_OUTPUT" | head -1)}"
 log_alert "INFO" "Classification: $CLASSIFICATION"
 
 # Handle false positives - no alert needed
