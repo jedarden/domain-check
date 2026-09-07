@@ -251,7 +251,7 @@ fi
 
 ### Repository Bloat Prevention and Detection
 
-**Critical:** Repository bloat caused the worst infrastructure crashes in this workspace: bf-1s6c3 and bf-4yjq (2026-08-12) ran an ~18GB repository with ~17GB of loose objects — **17+ identical 237MB `.beads/*.jsonl` snapshots had been committed** — so every significant git operation memcg-OOM'd (9 crashes in 2.5 hours, all exit -1). It is repaired as of 2026-09-06 (see Current Repository Health above); this section is what keeps it from coming back.
+**Critical:** Repository bloat caused the worst infrastructure crashes in this workspace: bf-1s6c3 and bf-4yjq (2026-08-12) ran an ~18GB repository with ~17GB of loose objects — **17+ identical 237MB `.beads/*.jsonl` snapshots had been committed** — so every significant git operation memcg-OOM'd (76 dispatches / 71 kills for bf-1s6c3 alone over ~4.5 h, plus 50 kills in bf-4yjq the same evening — all exit -1). It is repaired as of 2026-09-06 (see Current Repository Health above); this section is what keeps it from coming back.
 
 **Quick Reference:** See [Repository Maintenance Guide](docs/maintenance/repository-maintenance-guide.md) for daily maintenance procedures and emergency cleanup steps.
 
@@ -340,9 +340,10 @@ git fsck --full
 - Repository: 18GB (should be <500MB) - 36x larger than normal
 - Loose objects: 17.16GB (should be packed) - 99% of repository
 - Root cause: 17+ identical 237MB `.beads/*.jsonl` snapshots committed to git
-- 9 OOM crashes over 2.5 hours, all exit code -1
+- 76 dispatches / 71 memcg-OOM kills for bf-1s6c3 (Aug-12 21:31Z → Aug-13 02:01Z), all exit code -1; bf-4yjq added 50 kills the same evening
 - Resolution: packed down to 93MB (99.5% reduction), re-verified 2026-09-06
 - No code defects found - purely infrastructure issue
+- Full record: [crash analysis bf-1s6c3 (2026-09-06)](docs/crash-analysis-bf-1s6c3-2026-09-06.md) — supersedes the 2026-09-01 corpus's "9 crashes in 2.5 hours" count
 
 ### Monitoring and Alerting
 
