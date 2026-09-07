@@ -188,7 +188,7 @@ if git -C "$PWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # 2. Git: uncommitted changes (warn by default — shared workspace)
     DIRTY_COUNT="$(git -C "$GITDIR" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
     if [[ "$DIRTY_COUNT" -gt 0 ]]; then
-        SAMPLES="$(git -C "$GITDIR" status --porcelain 2>/dev/null | head -5 | tr '\n' ' ')"
+        SAMPLES="$(git -C "$GITDIR" status --porcelain 2>/dev/null | sed -n '1,5p' | tr '\n' ' ')"
         if [[ "$STRICT_CLEAN" == "true" ]]; then
             record "FAIL" "git_clean" "$DIRTY_COUNT uncommitted change(s): $SAMPLES"
         else
