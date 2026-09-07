@@ -97,6 +97,14 @@ ever be attempted to remove.
 3. **`.git-repository-state.txt`** at the repo root is an untracked leftover of
    the 2026-09-02 verification (bead domchk-66ae89db), left for the record.
 
+## Post-push re-verification (same hour, 20:19 UTC)
+
+The push of this very record re-ran the whole cycle and confirmed it end to
+end: commit `644b454` pushed to Forgejo → local `HEAD` == Forgejo `main` ==
+GitHub `refs/heads/main` at `644b454` → `0  0` divergence after fetch → mirror
+`last_update: 2026-09-07T20:18:42Z` (≈30 s after the push), `last_error` still
+empty. Second consecutive zero-error sync on the same configuration.
+
 ## Verdict
 
 The remote configuration that bf-4yjq exposed is correct and stable: Forgejo
