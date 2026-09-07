@@ -120,13 +120,17 @@ for kv in "pack.windowMemory 2g" "pack.deltaCacheSize 1g" "pack.threads 1"; do
 done
 verify_in "$r" && ok "--verify passes in a bounded repo" || fail "--verify rejects a bounded repo"
 
-echo "=== unit: safety core overrides, gc policy does not clobber ==="
+echo "=== unit: safety core overrides stale values (incl. gc.auto), advisory keys untouched ==="
 r2=$(newrepo) || exit 1
 git -C "$r2" config gc.auto 7
+git -C "$r2" config gc.autoPackLimit 42
 git -C "$r2" config pack.windowMemory 128m
 setup_in "$r2" >/dev/null 2>&1 || fail "setup exited nonzero in pre-tuned repo"
-[[ "$(git -C "$r2" config gc.auto)" == "7" ]] \
-  && ok "existing gc.auto=7 preserved" || fail "gc.auto clobbered: $(git -C "$r2" config gc.auto)"
+[[ "$(git -C "$r2" config gc.auto)" == "0" ]] \
+  && ok "stale gc.auto=7 overridden to 0 (GAP-2: background auto-gc path closed)" \
+  || fail "gc.auto = '$(git -C "$r2" config gc.auto)', want 0"
+[[ "$(git -C "$r2" config gc.autoPackLimit)" == "42" ]] \
+  && ok "advisory gc.autoPackLimit=42 preserved" || fail "advisory gc.autoPackLimit clobbered"
 [[ "$(git -C "$r2" config pack.windowMemory)" == "2g" ]] \
   && ok "safety core overrode stale pack.windowMemory=128m" || fail "safety core did not override"
 

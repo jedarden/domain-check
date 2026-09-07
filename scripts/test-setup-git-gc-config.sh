@@ -8,8 +8,13 @@
 # the real ~/.gitconfig is never read, clobbered, or removed. Assertions:
 #   - fresh sandbox verifies UNSAFE (exit 1) at both scopes
 #   - install applies the three pack.* keys and --verify passes
-#   - install is idempotent and never clobbers a hand-tuned gc.auto
-#   - --uninstall removes only the pack.* keys it owns (advisory keys stay)
+#   - repo-local install forces gc.auto=0 even over a hand-tuned value (GAP-2
+#     of the bf-65lsdu proposal: the unserialized background auto-gc path must
+#     stay closed); --global only fills gc.auto when absent, and repo-local 0
+#     wins over the global fill
+#   - GC_AUTO is the deliberate re-enable escape hatch
+#   - --uninstall removes the pack.* keys plus repo-local gc.auto (advisory
+#     keys stay)
 #   - --uninstall (local) exits 0 while the global scope still supplies the
 #     effective bound, and exits 1 when it removed the LAST bound
 #   - --verify cannot be combined with --uninstall (exit 2)
@@ -79,7 +84,7 @@ check "--verify rejects --uninstall combination" 2 "$SCRIPT" --verify --uninstal
 
 # ---------------------------------------------------------------- install
 section "Install (repo-local)"
-git config --local gc.auto 100   # hand-tuned value the installer must not clobber
+git config --local gc.auto 100   # stale hand-tuned value the safety core must override (GAP-2)
 check "install applies the local bound" 0 "$SCRIPT"
 [ "$(cfg_local pack.windowMemory)" = "2g" ] &&
   pass "pack.windowMemory = 2g" || fail "pack.windowMemory = '$(cfg_local pack.windowMemory)'"
@@ -87,15 +92,27 @@ check "install applies the local bound" 0 "$SCRIPT"
   pass "pack.deltaCacheSize = 1g" || fail "pack.deltaCacheSize = '$(cfg_local pack.deltaCacheSize)'"
 [ "$(cfg_local pack.threads)" = "1" ] &&
   pass "pack.threads = 1" || fail "pack.threads = '$(cfg_local pack.threads)'"
-[ "$(cfg_local gc.auto)" = "100" ] &&
-  pass "hand-tuned gc.auto=100 not clobbered" || fail "gc.auto was overwritten: $(cfg_local gc.auto)"
+[ "$(cfg_local gc.auto)" = "0" ] &&
+  pass "gc.auto forced to 0 — background auto-gc path closed" || fail "gc.auto = '$(cfg_local gc.auto)', want 0"
 check "--verify passes after install" 0 "$SCRIPT" --verify
 check "reinstall is idempotent" 0 "$SCRIPT"
+
+section "GC_AUTO override (deliberate re-enable)"
+check "GC_AUTO=100 install exits 0" 0 env GC_AUTO=100 "$SCRIPT"
+[ "$(cfg_local gc.auto)" = "100" ] &&
+  pass "GC_AUTO=100 honored over the default 0" || fail "GC_AUTO ignored: $(cfg_local gc.auto)"
+check "reinstall restores gc.auto=0" 0 "$SCRIPT"
+[ "$(cfg_local gc.auto)" = "0" ] &&
+  pass "gc.auto back to 0 after plain reinstall" || fail "gc.auto = '$(cfg_local gc.auto)', want 0"
 
 section "Install --global (sandboxed ~/.gitconfig)"
 check "global install applies" 0 "$SCRIPT" --global
 [ "$(cfg_global pack.windowMemory)" = "2g" ] &&
   pass "global pack.windowMemory = 2g" || fail "global pack.windowMemory = '$(cfg_global pack.windowMemory)'"
+[ "$(cfg_global gc.auto)" = "256" ] &&
+  pass "global gc.auto filled advisory 256 when absent" || fail "global gc.auto = '$(cfg_global gc.auto)', want 256"
+[ "$(cfg_local gc.auto)" = "0" ] &&
+  pass "repo-local gc.auto=0 still wins over the global fill" || fail "local gc.auto = '$(cfg_local gc.auto)', want 0"
 check "--verify --global passes" 0 "$SCRIPT" --verify --global
 check "local --verify still passes" 0 "$SCRIPT" --verify
 
@@ -109,8 +126,10 @@ expect_output "still holds" "uninstall reported the global scope still supplies 
   pass "local pack.threads removed" || fail "local pack.threads survived"
 [ "$(cfg_global pack.windowMemory)" = "2g" ] &&
   pass "global bound untouched by local uninstall" || fail "global bound lost"
-[ "$(cfg_local gc.auto)" = "100" ] &&
-  pass "advisory gc.auto survived uninstall" || fail "advisory gc.auto was removed"
+[ -z "$(cfg_local gc.auto)" ] &&
+  pass "repo-local gc.auto removed by uninstall" || fail "repo-local gc.auto survived: $(cfg_local gc.auto)"
+[ "$(cfg_global gc.auto)" = "256" ] &&
+  pass "global advisory gc.auto untouched by local uninstall" || fail "global advisory gc.auto lost"
 check "--verify still passes (global supplies the chain)" 0 "$SCRIPT" --verify
 check "second local uninstall is a clean no-op" 0 "$SCRIPT" --uninstall
 expect_output "nothing to remove" "no-op uninstall reported nothing to remove"

@@ -18,6 +18,18 @@
 # closing. With the defaults below the ceiling is 2g*1 + 1g = 3GiB — a
 # quarter of the dispatch scope, with the object roster on top.
 #
+# Auto-gc concurrency bound (GAP-2 of the bf-65lsdu mitigation proposal,
+# docs/fix-proposal-bf-65lsdu-oom-git-gc-2026-09-02.md): bf-65lsdu was not one
+# runaway gc but SEVERAL concurrent ones — memory-bounded individually, yet
+# unserialized, which is what amplified a single OOM into 7 crashes. A nonzero
+# gc.auto re-opens that path: every routine git command spawns a background
+# auto-gc that the box-wide safe-git-gc lock never sees. Repo-local mode
+# therefore sets gc.auto=0 in the safety core; packing is the nightly
+# safe-git-gc timer's job (24h loose-object latency, far under the 500MB
+# warning threshold). Global mode deliberately leaves gc.auto advisory
+# (fill-when-absent below): the other repos on this box have no maintenance
+# timer that would compensate.
+#
 # Usage:
 #   ./setup-git-gc-config.sh              # apply bounds to this repo (local)
 #   ./setup-git-gc-config.sh --global     # apply bounds to ~/.gitconfig (all repos for this user)
@@ -37,12 +49,15 @@
 #   PACK_WINDOW_MEMORY     (default 2g)
 #   PACK_DELTA_CACHE_SIZE  (default 1g)
 #   PACK_THREADS           (default 1)
+#   GC_AUTO                (default 0; repo-local mode only — the deliberate
+#                          re-enable escape hatch for the auto-gc policy)
 
 set -euo pipefail
 
 WINDOW_MEMORY="${PACK_WINDOW_MEMORY:-2g}"
 DELTA_CACHE="${PACK_DELTA_CACHE_SIZE:-1g}"
 THREADS="${PACK_THREADS:-1}"
+GC_AUTO="${GC_AUTO:-0}"
 
 # Total anonymous memory a pack run may reach; must stay well under the
 # 12GiB dispatch scope. 6GiB leaves headroom for the object roster and git
@@ -165,8 +180,21 @@ if [[ "$UNINSTALL" == "1" ]]; then
       echo "·  ${key} not set in ${label} (nothing to remove)"
     fi
   done
+  if [[ "$MODE" == "local" ]]; then
+    # gc.auto is safety-core in repo-local mode, so the rollback removes it
+    # too; the effective policy falls back to global/default (auto-gc on).
+    if [[ -n "$(git config --local --get gc.auto 2>/dev/null || true)" ]]; then
+      git config --local --unset-all gc.auto
+      echo "🗑  removed gc.auto (repo-local) — background auto-gc falls back to the global/default policy"
+    else
+      echo "·  gc.auto not set in repo-local (nothing to remove)"
+    fi
+    advisory="gc.autoPackLimit, gc.pruneExpire"
+  else
+    advisory="gc.auto, gc.autoPackLimit, gc.pruneExpire"
+  fi
   echo ""
-  echo "Advisory keys (gc.auto, gc.autoPackLimit, gc.pruneExpire) are left in place —"
+  echo "Advisory keys (${advisory}) are left in place —"
   echo "this script only fills them when absent, so they may hold hand-tuned values."
   echo ""
   verify_args=(--verify)
@@ -210,8 +238,19 @@ th_old=$(git config "${scope_flags[@]}" --get pack.threads || true)
 git config "${scope_flags[@]}" pack.threads "$THREADS"
 echo "✅ pack.threads = $THREADS (was: ${th_old:-unset}) stops the per-thread window multiplication"
 
-# --- Auto-gc policy: advisory, only filled in when absent so rerunning here
-# does not clobber this repo's hand-tuned values (gc.auto=100).
+# gc.auto is safety-core in repo-local mode only (GAP-2): a nonzero value
+# re-opens the unserialized background auto-gc path, so here it wins over any
+# earlier value. Global mode skips this — see the advisory block below.
+if [[ "$MODE" == "local" ]]; then
+  ga_old=$(git config --local --get gc.auto || true)
+  git config --local gc.auto "$GC_AUTO"
+  echo "✅ gc.auto = $GC_AUTO (was: ${ga_old:-unset}) closes the unserialized background auto-gc path; packing is the nightly safe-git-gc timer's job"
+fi
+
+# --- Auto-gc policy: advisory, only filled in when absent so rerunning does
+# not clobber hand-tuned values. Repo-local gc.auto never reaches this block
+# (the safety core owns it above); global mode still fills it because the
+# other repos on this box have no maintenance timer to compensate.
 git config "${scope_flags[@]}" gc.auto >/dev/null 2>&1 || \
   { git config "${scope_flags[@]}" gc.auto 256; echo "✅ gc.auto = 256 (auto GC when >256 loose objects)"; }
 git config "${scope_flags[@]}" gc.autoPackLimit >/dev/null 2>&1 || \
