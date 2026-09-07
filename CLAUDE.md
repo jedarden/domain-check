@@ -388,7 +388,13 @@ systemctl --user list-timers 'domain-check-*' --all
 - `.beads/logs/crash-monitor.log` - Crash pattern alerts
 - `.beads/logs/resource-monitor.log` - Resource threshold alerts
 - `.beads/logs/service-monitor.log` - Service availability alerts
-- `.beads/logs/repo-health.log` - Repository size and object alerts
+- `.beads/logs/git-gc-check.log` - Daily 02:00 repo-size/object report (`auto-gc-trigger.sh --dry-run`, the repo-health timer's output)
+- `.beads/logs/git-gc.log` / `git-gc-full.log` - Nightly / weekly bounded gc runs
+
+(`repo-health.log` is dormant — it holds only setup-day manual runs. Neither
+`check-repo-health.sh` nor `auto-gc-trigger.sh` self-appends anywhere; the timer's
+output lands in `git-gc-check.log` via its `StandardOutput=append:`. Redirect
+manually if you want a record of a manual health check. Verified live 2026-09-07.)
 
 **Recommended Alerts:**
 - **Memory Pressure:** Alert at 70% pressure (before 80% OOM threshold)
