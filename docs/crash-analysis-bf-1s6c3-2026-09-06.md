@@ -1915,3 +1915,44 @@ through host exhaustion.** Three legs:
 **Disposition:** determination unchanged from §6, now grounded in the only contemporaneous
 telemetry that exists. Deliverable = this subsection; the chain's report-compiler
 (`domchk-762caf4b`) should cite it here rather than expect the dispatch-named file.
+
+### Split-refusal, dedup close 2026-09-07 (domchk-536fb6e7 — the Sep-2 split chain's documentation step; deliverable already committed)
+
+domchk-536fb6e7 ("Document crash fix verification results") is the doc step of the chain
+created 2026-09-02 03:12Z: domchk-62969516 (regression run — closed 2026-09-07 08:03Z, one
+co-tenant red test attributed, not a regression) → **domchk-536fb6e7 (this bead)** → parent
+domchk-46d4b8d5, whose own Notes already record the verification as complete ("all 20 tests
+passed … Updated docs/verification/crash-fix-verification-report-bf-1s6c3-2026-09-01.md").
+An auto-split dispatch reached this bead asserting it "failed 3 times in a row and needs to
+be broken down."
+
+**The premise is failure-count cycling, not three failed attempts.** forensic.jsonl shows
+three releases on 2026-09-07 — 08:37:26Z (roam-8), 08:57:43Z (roam-5), 09:36:49Z (roam-8) —
+each tagged `failure-count:N`, while the bead's blocker domchk-62969516 was only closed at
+08:03:00Z that morning: the first two attempts claimed a still-blocked bead. No attempt left
+a note, no docs/ file changed, and the task itself is one documentation pass — already done
+(see the domchk-4e8821ca subsection above for the same finding on the sibling chain).
+
+**The dispatch-named deliverable is committed and pushed.**
+`docs/verification/crash-fix-verification-report-bf-1s6c3-2026-09-01.md` (on `origin/main`
+via 0205a5b, superseded-bannered by domchk-a18b2c06 per the entry above) renders all four
+acceptance criteria: the test case and what it reproduces (`scripts/test-crash-fix-bf-1s6c3.sh`,
+20 tests across repo-health / git-operation / loose-object / bloat-prevention / monitoring /
+memory-intensive categories), the no-OOM verification figures (91 MB vs 18 GB; 1020 KB loose
+vs 17 GB), the regression-test results, the before/after comparison the bead's Notes ask
+for, and the `docs/verification/` report itself. Splitting would have created 3–5 child
+beads re-doing a pushed deliverable; the split was refused and no `SPLIT_COMPLETE` was
+emitted.
+
+**Live re-verification (this bead's own runs, 2026-09-07):** the 20-test suite re-run gives
+**20/20** — up from the **19/20** domchk-4e8821ca recorded above. The single failure there
+was `TestServerStartsAndStopsResourceMonitor`; the one-line wiring fix its sibling chain
+prescribed (`srv.monitor = monitor.ResourceMonitor` → `srv.monitor = monitor`, now at
+`server_safeguards_test.go:226`) has since been applied in-tree by the owning beads, so the
+suite's `go test ./... -short` step passes. Repository: `.git` 102 MB · 102 loose objects /
+1.00 MiB · size-pack 99.11 MiB · in-pack 11,360 · garbage 0 · `fsck --connectivity-only`
+clean (all inside the suite's own assertions).
+
+**Disposition:** split refused; bead closed complete with **no new document** — this dated
+subsection is its only change. Closing unblocks domchk-46d4b8d5, whose Notes already carry
+the verification outcome; its worker can close it on the same evidence.
