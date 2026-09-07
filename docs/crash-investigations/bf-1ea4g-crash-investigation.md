@@ -1,5 +1,41 @@
 # Crash Investigation: Bead bf-1ea4g
 
+> **CORRECTED 2026-09-07 (domchk-3c8eaafc) — superseded in part; body below kept as written.**
+> This 2026-08-17 investigation predates the evidence bundle and the 2026-09-07
+> root-cause re-determination. Its era-level mechanism (the repository-bloat-era
+> memcg-OOM family) stands, and its agent attribution is right — the worker log
+> records `worker_id: claude-code-glm-4.7-lab-domain-check` claiming the bead at
+> 07:17:49.928Z. Four specifics do not stand:
+>
+> 1. **Exit code.** `-1` is needle's died-without-exit-code sentinel; it carries
+>    **no signal number**. "Signal -1 = SIGKILL" is a reading the corpus retired.
+> 2. **Crash instant.** 07:42:34Z is a single-attempt figure inherited from the
+>    2026-09-01 corpus (it originates in
+>    `docs/investigations/final-investigation-report-2026-09-01.md`) and
+>    unverified. There were **56 kills across 57 attempts**, 07:17:49Z →
+>    09:08:30Z; the alert-named instant resolves to **08:23:44.918Z** (attempt 30).
+> 3. **Post-completion framing.** "Task completed 8 min before the crash" is
+>    refuted for attempt 30 by its own session transcript: deliverable written
+>    08:23:13Z, `git push` issued 08:23:31Z, killed **13.8 s inside the push** —
+>    mid-task — with the bead still open 47 minutes more. The bead then
+>    self-recovered on attempt 57, which is why a real kill and a
+>    false-positive-shaped alert coexist.
+> 4. **Root-cause scope.** "Repository bloat triggering the OOM killer" is right
+>    at era level; the pinned mechanism is narrower — **unbounded `git push`
+>    pack-objects over the unpacked 422-commit backlog inside the 12 GiB
+>    per-dispatch `MemoryMax`**. The 18 GB / 17.16 GB-loose figures are era
+>    readings; no Aug-13 measurement survives.
+>
+> Authoritative record:
+> `docs/investigations/bf-1ea4g-root-cause-determination-2026-09-02.md` (§8
+> re-determination) and `docs/crash-inventory-bf-1ea4g-summary.md` (§7
+> claim-conflict matrix). Evidence: `docs/crashes/bf-1ea4g/` (attempt index,
+> attempt-30 transcript, raw worker log). The "PREVENTION MEASURES (PENDING)"
+> list near the end has since landed: `.beads/` fully gitignored, persistent
+> pack-memory bounds (`scripts/setup-git-gc-config.sh --verify` exit 0) replayed
+> by `scripts/test-gc-memory-bounds.sh` (16/16), under systemd-user maintenance
+> timers.
+
 **Investigation Date:** 2026-08-17  
 **Crash Date:** 2026-08-13  
 **Bead ID:** bf-1ea4g  
