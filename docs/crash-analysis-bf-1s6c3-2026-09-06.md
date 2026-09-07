@@ -1,0 +1,398 @@
+# Crash Analysis: Bead bf-1s6c3 (2026-08-12 → 08-13 kill storm)
+
+**Analysis Date:** 2026-09-06
+**Subject Bead:** bf-1s6c3 — "Create merge commit reconciling Forgejo and GitHub histories"
+**Documentation Bead:** domchk-ed3ed12b
+**Status:** ✅ RESOLVED — subject bead closed 2026-08-16, repository repaired and verified holding
+**Classification:** Infrastructure — repository-bloat sub-type (crash-response-guide Pattern 3)
+**Confidence:** High (~95% class; ~90% sub-type, epistemic caveat in §5)
+**Format template:** `docs/crashes/bf-173o7e-report.md`, `docs/crash-analysis-domchk-c9641ac5-2026-09-01.md`
+
+> **Authority note.** This report is the write-up layer of an investigation chain that worked
+> from raw artifacts. Where earlier bf-1s6c3 docs (the 2026-08-26 / 2026-09-01 corpus)
+> contradict it, the earlier docs are wrong — §11 lists each correction. Every load-bearing
+> figure here was re-verified first-hand on 2026-09-06, both by the predecessor beads in the
+> chain and again by this bead (§12).
+
+---
+
+## 1. Executive Summary
+
+**CRITICAL FINDING:** This was an **infrastructure event** — a kernel memcg-OOM SIGKILL of
+`git push`'s pack-objects on an ≈18 GB repository, **re-executed 71 times by an automated
+re-dispatch loop over 4 hours 30 minutes**. It was NOT a code defect, NOT a single crash, and
+NOT the "post-completion false positive" the 2026-09-01 docs classified it as.
+
+### Key Facts
+
+| Attribute | Value |
+|---|---|
+| Exit codes | **−1 × 71** (signal death, code unrecorded) · 124 × 4 (600 s timeout) · **0 × 1** (success) |
+| Storm span | 2026-08-12T21:31:27Z → 2026-08-13T02:01:27Z (265 min, 76 dispatch attempts) |
+| Death cadence | median inter-completion gap 177 s; ~10 s claim→dispatch re-dispatch cycle |
+| Kill density | 2.68 kills / 10 min (16.1/hour) |
+| Agent / model | `claude-code-glm-4.7` / glm-4.7, worker slot `claude-code-glm-4.7-lab-domain-check`, session `8446529e` |
+| Repository at crash time | ≈18 GB `.git`, ≈17 GB loose objects (canon-sourced; not re-measurable — see §4) |
+| Mechanism | memcg OOM SIGKILL of pack-objects inside the 12 GiB dispatch scope (`MemoryMax`) |
+| Deliverable | merge `42a7b07` landed mid-storm (attempt 4, 21:47:07Z) and survived on disk |
+| Work lost | **None** — remotes reconciled by the later merge `46293c5`; zero divergence today |
+
+### Resolution Status
+
+| Aspect | Status | Notes |
+|---|---|---|
+| Root cause identified | ✅ Complete | Repository bloat → memcg OOM at the push step (§6) |
+| Code defects found | ✅ None | Task was a git history reconciliation; domain-check code never touched |
+| Work loss | ✅ None | Deliverable on `main` via `46293c5`; remotes converged (verified 2026-09-06) |
+| Repository repaired | ✅ Holding | 18 GB → ~100 MB on 2026-09-01; re-verified 2026-09-06 (§12) |
+| Prevention layers | ✅ 5 of 6 in force | One in-repo gap (§8 item 3); one NEEDLE-side lever (§8 item 6) |
+
+---
+
+## 2. What Bead bf-1s6c3 Was Trying to Accomplish
+
+- **Title:** Create merge commit reconciling Forgejo and GitHub histories
+- **Created:** 2026-08-12T21:12:09Z · **Priority:** P2 · **Type:** task
+- **Origin:** follow-up execution bead to bf-2xygo (divergence analysis), which exited 0 at
+  21:31:21.362Z — bf-1s6c3's first claim followed six seconds later
+- **Task:** merge the diverged Forgejo (`origin`) and GitHub (`github`) histories locally and
+  push the reconciled result, per the workspace's "merge, never force-push" rule
+
+### Task Outcome: ✅ DELIVERED, ❌ DELIVERY BLOCKED — by the repository, not the agent
+
+| Acceptance criterion | Outcome |
+|---|---|
+| A merge commit combining both histories | ✅ `42a7b07` (attempt 4, 21:47:07Z, parents `47e7758` + `00117cb`) |
+| Merge message explains what was merged | ✅ "Merge reconciliation: Forgejo and GitHub remote histories" |
+| Local main contains the reconciled history | ✅ today — via the **later** merge `46293c5` (2026-08-17); `42a7b07` itself was orphaned onto `pre-squash-history-20260816` by the 2026-08-16 history squash and is **not** an ancestor of `main` |
+| Both remote histories reconciled | ✅ today — Forgejo and GitHub both at the same commit as local (`c8dc3cf`, verified live 2026-09-06) |
+| Push of the merge (implicit) | ❌ never achieved during the storm — **71 of 76 attempts died at the push step**; the remotes were reconciled afterwards by other work |
+
+---
+
+## 3. Crash Timeline
+
+All timestamps UTC. Sources: committed raw needle-event extracts
+(`docs/crashes/bf-1s6c3/needle-events-2026-08-1{2,3}-bf-1s6c3.jsonl`), session transcripts
+(`bf-1s6c3-crash-sessions-2026-08-12_13.tar.gz`, indexed in `sessions-index.tsv`), live `git`.
+
+| Time (UTC) | Event |
+|---|---|
+| 08-12 21:12:09 | Bead bf-1s6c3 created |
+| 08-12 21:31:21.362 | Prerequisite bf-2xygo's 5th attempt succeeds (exit 0) |
+| 08-12 21:31:27.663 | **First claim** (`bead.claim.succeeded`, seq 4641) — 6 s later |
+| 08-12 21:31:27.674 | First `agent.dispatched` (template `pluck-default`, `prompt_len=70670`) |
+| 08-12 21:36:44.519 | **Attempt 1 dies** — `exit_code=-1`, duration 316,572 ms; classified `crash`, handled `alerted`. Last tool call: `git push origin main` at 21:36:29.421, transcript ends with no result |
+| 08-12 21:43:21.712 | Attempt 4 dispatched (session `217a276f`) |
+| 08-12 21:47:07 | **Attempt 4 creates the deliverable** — merge `42a7b07` |
+| 08-12 21:48:06.650 | **Attempt 4 killed** — `exit_code=-1`, duration 285,151 ms, **59.6 s after committing**. Commit survives on disk; the agent did not |
+| 08-12 21:48:16.519 | `bead.released` — crash handler re-queues the bead |
+| 08-12 21:48:18.804 | `bead.claim.succeeded` — re-claimed 2.3 s later |
+| 08-12 21:48:18.815 | `agent.dispatched` — **~10 s re-dispatch cycle, no backoff, no resource gate** |
+| 08-12 21:48 → 08-13 02:01 | **72 further dispatches** against an already-satisfied task. 49 attempts on Aug-12 (all exit −1), 27 on Aug-13 (22 × −1, 4 × 124, 1 × 0) |
+| 08-13 01:11:08 → 01:54:45 | The four 600 s timeouts (durations 600,018–600,024 ms — exactly the cap) |
+| 08-13 ~01:55–02:00 | Attempts 74–75 issue **no tool calls at all** inside the 600 s window; attempt 75 is the first **auto-split** dispatch (`prompt_len=2868`, transcript opens `## Auto-Split: Decompose This…`) — the task shape changes |
+| 08-13 02:01:22.561 | **Attempt 76 exits 0** (384,204 ms) — an auto-split that decomposed the bead into four child beads using only `bf` commands, never touching git. `verification.passed` → `bead.orphaned` 02:01:27.732 |
+| 08-16 14:00:13 | Bead **closed** (actor `system`); close reason cites the merge as `7dd79eb` — a dead pre-squash SHA of `42a7b07` (§11) |
+
+The "crash timestamp" carried by the 2026-09-01 docs (`2026-08-12T21:36:51.240Z`) is a real
+instant but not "the" crash — it falls inside attempt 1's post-crash handling window and is
+merely the first of 71 identical deaths.
+
+---
+
+## 4. Artifact Analysis
+
+### 4.1 Artifacts examined
+
+| Artifact | Path | Contents |
+|---|---|---|
+| Needle event extracts | `docs/crashes/bf-1s6c3/needle-events-2026-08-12-bf-1s6c3.jsonl` (945 events), `…-2026-08-13-bf-1s6c3.jsonl` (513) | Byte-exact `grep` lines from the worker logs; `MANIFEST.sha256` covers all files |
+| Session transcripts | `docs/crashes/bf-1s6c3/bf-1s6c3-crash-sessions-2026-08-12_13.tar.gz` | All 76 crash-window Claude Code transcripts (5.0 MB compressed) |
+| Attempt index | `docs/crashes/bf-1s6c3/sessions-index.tsv` | One row per attempt: session start, UUID, bytes, **last-issued command** |
+| Bead close record | `.beads/checkpoint/forensic.jsonl` | The 2026-08-16 `closed` event and its close reason |
+| Collection bead | domchk-fcac734a (`docs/crashes/bf-1s6c3/README.md`) | Provenance for everything above |
+
+The location named in the original dispatch (`.beads/crashes/`) **does not exist**; the real
+primary sources are `~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-1{2,3}.jsonl`
+(still on disk — fabric-prune has been broken since 2026-08-17, so Aug-12 logs were never
+deleted).
+
+### 4.2 What the raw log shows (recounted first-hand from the committed extracts, 2026-09-06)
+
+- `agent.completed` × 76: **exit −1 × 71, exit 124 × 4, exit 0 × 1** — matches the committed
+  timeline exactly
+- `outcome.classified`: `crash` × 71, `timeout` × 4, `success` × 1. Every attempt produced an
+  explicit classification — **no silent-death gaps**, so no log bracketing was needed
+- `outcome.handled`: **`alerted` × 71** — one alert per kill, 71 alerts for one undrainable cause
+- `transform.completed` succeeded on all 76 attempts — template rendering was never the
+  failure point
+
+**Where the 71 signal deaths happened.** `sessions-index.tsv` records the last tool call each
+session issued before its transcript ends mid-flight:
+
+| Last-issued command | Attempts |
+|---|---|
+| `git push origin main` | 60 |
+| `git push github main` | 10 |
+| `git push` | 1 |
+| `git fetch origin && git fetch github` | 1 |
+| `git commit -m "chore: update bead tracking state before merge reconciliation…"` | 1 |
+| `bf show bf-4k2ws && …` (the successful auto-split) | 1 |
+| (no tool use recorded) | 2 |
+
+**71 of 76 attempts died with a `git push` as their last issued command.** Attempts 69–70 show
+the agent switching remotes trying to get through. This is the signature of the mechanism:
+the kill lands inside `git push`'s pack-objects, not inside the merge itself.
+
+### 4.3 What the artifacts *cannot* show
+
+- **No kernel records exist for Aug-12.** System journald on this box starts
+  2026-08-15 19:46 EDT — three days after this crash. There are no memcg `oom-kill` lines, load
+  averages, or disk readings for the storm. Any document quoting host memory/CPU figures *at
+  crash time* (the 2026-09-01 docs' "<2 GB available" claim) is **reconstruction, not
+  measurement**.
+- **The bloat is canon-sourced, not re-measurable.** The offending blobs (17+ identical
+  ~237 MB `.beads/*.jsonl` snapshots) were packed away on 2026-09-01; the largest blob
+  surviving in the object store today is 14,970,288 bytes (a Mach-O executable, 6 identical
+  copies). The ≈18 GB figure rests on the cleanup-verification docs
+  (`docs/crashes/bf-4yjq-cleanup-verification.md:74-84`), which measured it during the
+  verified cleanup.
+- **The kill mechanism is kernel-proven only for the later siblings** — bf-4x12ec (gc variant)
+  and bf-198ne (push variant) have recovered kernel `oom-kill` records
+  (`docs/crashes/bf-198ne-crash-report.md`). For bf-1s6c3 itself the classification rests on
+  the Pattern-3 signature (§5), which is fully present.
+
+### 4.4 Live verification (this bead, 2026-09-06)
+
+| Check | Result |
+|---|---|
+| `git cat-file -t 42a7b07` | commit — "Merge reconciliation: Forgejo and GitHub remote histories", 21:47:07Z, parents `47e7758` + `00117cb` |
+| `git merge-base --is-ancestor 42a7b07 main` | **not** an ancestor; contained only by `pre-squash-history-20260816` |
+| `git merge-base --is-ancestor 46293c5 main` | **is** an ancestor — "Merge Forgejo and GitHub histories" (2026-08-17) |
+| `git cat-file -t 2832106` / `7dd79eb` | **"Not a valid object name"** — both are dead SHAs (§11) |
+| Repository | `.git` 101 MB · 5 loose objects / 36 KiB · 3 packs totaling 99.13 MiB · **0 garbage** |
+| Bead-state re-entry | `git ls-files .beads` → **0**; `.gitignore:66` `.beads/` |
+| Divergence | local `HEAD` == Forgejo `origin/main` == GitHub mirror == `c8dc3cf` (`rev-list --left-right --count` → 0 / 0; `git ls-remote` on the mirror) |
+
+---
+
+## 5. Classification Rationale
+
+Classified per `docs/crash-response-guide.md`: Quick Reference exit-code table (row 2) and
+note 2, False-Positive Detection rules 1–3, and Common Crash Patterns **Pattern 3
+(Infrastructure — Repository Bloat)**.
+
+### 5.1 Exit-code mapping → infrastructure
+
+71 of 76 completions are `exit -1` with **zero exit-code variation among the deaths**. Per the
+guide's note 2, `-1` is needle's `wait()` sentinel for *died by signal, code unrecorded* — it
+is not a signal number (a SIGKILL death would encode as 137, a SIGHUP death as 129). The mapped
+class is **Infrastructure event**.
+
+### 5.2 Pattern 3 signature — every criterion present
+
+| Pattern 3 criterion | bf-1s6c3 | Status |
+|---|---|---|
+| Fixed-cadence re-dispatch deaths, minutes apart, for hours | 71 deaths at median 177 s over 265 min; re-claimed within ~10 s of each kill | ✅ verified from raw log |
+| Repository > 5 GB | ≈18 GB `.git`, ≈17 GB loose objects at crash time | ✅ canon-sourced |
+| Routine git operations trigger the kill | The task *was* a git operation; each attempt redid expensive git work and died at its push | ✅ by task definition + last-command table |
+| Zero exit-code variation | All 71 deaths exit −1 | ✅ recounted |
+| Sits inside a same-mechanism same-evening storm | Between bf-4yjq's 50 kills (17:54–20:30Z) and this storm (from 21:31Z), same evening, same repo condition | ✅ per committed timeline |
+
+**Epistemic caveat (why ~90%, not 100%, on the sub-type):** two legs rest on contemporaneous
+documentation rather than re-measurable state — the 18 GB size survives only in cleanup-era
+docs, and the specific kill (memcg `CONSTRAINT_MEMCG` SIGKILL) has no Aug-12 kernel record
+because journald did not yet exist on this box. The classification rests on the Pattern-3
+signature, which is fully present, not on a kernel record that cannot exist.
+
+### 5.3 False-positive rules — applied, with the nuance recorded
+
+| Rule | Threshold | bf-1s6c3 | Verdict |
+|---|---|---|---|
+| 1. Work committed < 30 s before crash | < 30 s | Attempt 4 committed at 21:47:07Z, killed 21:48:06.650Z — **59.6 s**, and deaths were mid-attempt (median run ~161 s) | **Not triggered** |
+| 2. Crash → retry → success → self-healed transient | final retry exits 0 | Attempt 76 did exit 0 — surface match, but the cause was **persistent** (18 GB repo), not healed; the retry loop merely outlasted the kills | **Surface match only — does not downgrade** |
+| 3. 10+ crashes / 10 min → system-wide event | ≥ 10 / 10 min | 2.68 kills / 10 min (bounded by each attempt's 62–431 s runtime) | **Not triggered** — recorded because its absence is part of the signature: bloat is *per-repository and persistent*, not system-wide and instantaneous |
+
+**The two-layer reading.** Earlier docs labeled this event "FALSE POSITIVE — post-completion
+infrastructure event". That premise does not hold: workers died **mid-task** for the entire
+storm. There is nevertheless a genuine false-positive *component* — the deliverable had landed
+at 21:47:07Z, so 72 of 76 dispatches ran against an already-satisfied task. The two questions
+have different answers:
+
+- **What killed the workers:** Infrastructure — repository bloat (Pattern 3). Not a workflow
+  artifact, not a service outage, not a code defect.
+- **What the alert warrants:** nothing further. The bead is closed, the deliverable is
+  represented on `main`, and the repository condition is repaired and verified holding.
+
+### 5.4 Excluded alternates
+
+- **Workflow failure** — requires exit 1 + `error_max_turns`. None: every death is a signal
+  death; `transform.completed` succeeded on all 76 attempts.
+- **Service failure** — requires HTTP 503/502 to the inference gateway. No 5xx in any of the
+  76 attempts; no gateway-failure signature in the day log.
+- **Code defect** — no application error in any attempt; the task never touched domain-check
+  code. Consistent with the standing finding that no domain-check code defect has ever been
+  confirmed in this workspace's crash record.
+
+---
+
+## 6. Root Cause Analysis
+
+### Immediate cause — pack-objects vs. the dispatch scope
+
+Every dispatch executed significant git work against an ≈18 GB repository whose object store
+exceeded the dispatch scope's memory budget (`MemoryMax=12GiB`,
+`docs/maintenance/repository-maintenance-guide.md:158`). Pushing an 18 GB repository forces
+pack-objects to materialize a pack far past that bound; the kernel killed the worker
+mid-attempt each time, and needle recorded the unrecorded-code deaths as `exit -1`. The 71
+deaths clustering at the push step (§4.2) — rather than at the merge — identify the specific
+operation. The mechanism is kernel-proven for the better-instrumented siblings: bf-4x12ec
+(`git gc` variant) and bf-198ne (`git push` variant, re-verified resolved 2026-09-06).
+
+### Amplifying cause — why it ran for 4.5 hours
+
+Needle's crash handler released and immediately re-claimed the bead on a ~10 s cycle with no
+backoff and no resource gate. The deliverable had already landed at 21:47:07Z, but **no
+stop-condition existed for "deliverable present, bead still open"** — the completion path still
+required the push, and the push was memory-doomed. So 72 further dispatches re-ran an
+unboundedly expensive operation against satisfied work until one attempt happened to survive —
+and it survived by *changing the task shape* (auto-split into bead-only children), not because
+any resource improved. The repo stayed bloated until 2026-09-01.
+
+The same loop multiplied the alert load 1:1: each of the 71 kills emitted
+`outcome.handled action=alerted`.
+
+### Underlying cause — bead state committed to git
+
+17+ identical ~237 MB `.beads/*.jsonl` bead-state snapshots had been committed to the
+repository, bloating the object store — the same underlying cause as bf-31mno (350 kills that
+day, largest single storm in the record), bf-4yjq (50), and bf-2xygo (4), all earlier the same
+evening. Across all needle slots on 2026-08-12 the event recorded **460 `exit_code=-1`
+completions** (455 in the domain-check slot), concentrated in five beads.
+
+---
+
+## 7. Impact Assessment
+
+| Dimension | Impact |
+|---|---|
+| **Work loss** | **None.** The deliverable survived on disk; the on-`main` reconciliation is `46293c5`; both remotes carry identical history today (`c8dc3cf`, verified live 2026-09-06) |
+| **Data integrity** | None at risk — `git fsck --full` clean; 0 garbage objects; nothing corrupted by the kills |
+| **Compute** | 71 dead attempts × 62.5–431 s ≈ **5.5 hours of agent compute** producing zero pushed bytes |
+| **Alert load** | **71 crash alerts** for one undrainable cause — the alert-storm shape of bf-173o7e (131 duplicate alerts) and bf-31mno (350) |
+| **Workflow debt** | The auto-split left four children; the merge+push never flowed through them. bf-4k2ws closed; **bf-31p3g InProgress, bf-7d8l5 Open, bf-6b0fl Open** — now verify-then-close debt, since the remotes were reconciled by other work |
+| **Record integrity** | The bead's own close reason cites a dead SHA (`7dd79eb`), and the same error propagates through the Aug-16 close wave of the alert pool — future readers must use `46293c5` for acceptance checks (§11) |
+
+---
+
+## 8. Prevention Recommendations
+
+Ordered as in the classification's remediation path; every in-repo layer re-verified live on
+2026-09-06.
+
+| # | Layer | Status |
+|---|---|---|
+| 1 | Pack down the bloated object store — `scripts/safe-git-gc.sh`, **never** bare `git gc --aggressive` | ✅ Done 2026-09-01; verified holding: ~100 MB, `fsck` clean, 0 garbage |
+| 2 | Bead state cannot re-enter git — `.gitignore` covers `.beads/`, `*.db`, `*.jsonl`; 0 tracked files | ✅ In force |
+| 3 | Pre-commit backstop blocking staged files > 10 MB | ⚠️ **Gap** — installed at `.git/hooks/pre-commit` but per-clone and drifted from the tracked `scripts/pre-commit-repo-size-hook`; no installer committed (§9, action 1) |
+| 4 | Bound the pack-objects path for bare gc **and** push — `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` (threads pinned: the window limit is per-thread) | ✅ Applied repo-local + global; `./scripts/setup-git-gc-config.sh --verify` resolves the effective bound and passes |
+| 5 | Scheduled repo-health checks + bounded gc — six systemd **user timers** (NixOS: no crontab) | ✅ Installed and firing (re-verified 2026-09-06); edit units → `systemctl --user daemon-reload` |
+| 6 | Re-dispatch stop-condition for satisfied work — the amplifier | ❌ NEEDLE-fleet-side, outside this repository. Recorded as the systemic finding: it is what converted one kill into 71 |
+
+Detection is cheap and should precede any significant git operation
+(`docs/crash-response-guide.md`, Pattern 3 heuristics):
+
+```bash
+du -sh .git                      # <1GB healthy · 1–5GB warning · >5GB critical
+du -sh .git/objects              # >10GB = HIGH RISK → preemptive cleanup
+./scripts/check-repo-health.sh   # full diagnostic pass
+```
+
+---
+
+## 9. Follow-up Actions
+
+| # | Action | Owner | Status |
+|---|---|---|---|
+| 1 | Commit a **pre-commit hook installer** (`scripts/setup-git-hooks.sh` exists untracked; the installed hook has drifted from `scripts/pre-commit-repo-size-hook`) so fresh clones are protected — the one open in-repo gap | domain-check repo maintainers | Open — deserves a bead |
+| 2 | **Re-dispatch stop-condition** for satisfied work (deliverable present, bead still open) plus dispatch-time resource gating and backoff | NEEDLE fleet (outside this repo) | Open — systemic finding |
+| 3 | Verify-then-close the split children **bf-31p3g / bf-7d8l5 / bf-6b0fl** against current history — the remotes are already reconciled, so a retry would manufacture duplicate work | Next workflow-debt pass | Open |
+| 4 | Close parent alert **bf-5cd2d** via its dedicated closure bead (analysis children do not close their parent alert) | Alert-closure bead owner | Open |
+| 5 | Treat the 2026-09-01 bf-1s6c3 doc corpus as **superseded** (§11); cite this report and the chain below instead | Future investigators | Closed by this report |
+
+---
+
+## 10. References
+
+**Guide and canon**
+- Crash response guide — `docs/crash-response-guide.md` (Quick Reference exit-code rows 1–2 and note 2; False-Positive Detection rules 1–3; Pattern 3)
+- Repository maintenance guide — `docs/maintenance/repository-maintenance-guide.md` (dispatch scope `MemoryMax`, safe-gc safeguards, bf-198ne push-side mechanism)
+- Monitoring design canon — `docs/crash-prevention-requirements.md` and the two design docs it maps
+
+**This investigation chain (in order)**
+- Raw artifact bundle — `docs/crashes/bf-1s6c3/` (collection bead domchk-fcac734a)
+- Primary-source timeline — `docs/crashes/bf-1s6c3-crash-storm-timeline-2026-09-06.md` (domchk-1fb4ad35)
+- Classification — `docs/crashes/bf-1s6c3-crash-classification-2026-09-06.md` (domchk-56b5ba67)
+- RCA addendum + precedent contrast — `docs/crashes/bf-1s6c3-root-cause-analysis-domchk-1c03aacb-2026-09-06.md` (domchk-1c03aacb)
+- Remediation record — `docs/crashes/bf-1s6c3-remediation-2026-09-06.md` (domchk-9822e378)
+- Divergence half — `docs/branch-divergence-analysis.md` (0/0 today)
+- **This report** — the write-up layer
+
+**Similar past crashes**
+- **bf-4yjq** (2026-08-12, same evening, same cause, 50 kills) — `docs/crashes/bf-4yjq-cleanup-verification.md`
+- **bf-4x12ec** (2026-08-14) — the `git gc` variant of the same memcg-OOM mechanism, kernel-proven
+- **bf-198ne** (2026-08-16) — the `git push` variant, kernel-proven and re-verified resolved 2026-09-06 — `docs/crashes/bf-198ne-crash-report.md`
+- **bf-31mno** (2026-08-12) — largest single storm (350 kills), same underlying cause
+- **domchk-c9641ac5** (2026-09-01) — the canonical *service-failure* case, used in §5 as the contrast class: `docs/crash-analysis-domchk-c9641ac5-2026-09-01.md`
+
+**Memory entries (workspace crash patterns)**
+- `bf-1s6c3-crash-record-corrections` — '9 crashes' is really 76 dispatches/71 kills; the real merge is `42a7b07`, orphaned to `pre-squash-history-20260816`; Aug-12 logs carry explicit `outcome.classified` exit codes
+- `agent-crash-bf-4x12ec-investigation` — `exit -1` is a sentinel, not a signal number; Aug-14 alert timestamps ≠ death timestamps
+- `fleet-crash-signature-2026-09` — steady-state exit-−1 events come from synthetic scopes; the live dominant signal is synchronized exit-1 service-class waves
+- `bead-rs-verification-gotchas` / `needle-autosplit-alert-loop` — verify the target bead's actual state before investigating; near-identical artifact titles are the main false-positive source
+- `sibling-owned-artifact-bundles` — leave sibling bundles untracked when their collection bead is still in flight
+
+---
+
+## 11. Corrections to Prior bf-1s6c3 Documentation
+
+Listed so nobody cites them forward. The raw artifacts in `docs/crashes/bf-1s6c3/` are the
+authority; the 2026-09-01 corpus predates raw-log extraction and is wrong on all five points.
+
+| Prior claim | Verified reality |
+|---|---|
+| "9+ OOM crashes over 2.5 hours" (also inherited into CLAUDE.md's evidence note) | **76 dispatches in 4h30m: 71 × exit −1, 4 × exit 124, 1 × exit 0.** Understates by ~8×. bf-1s6c3 alone recorded 49 crashes on Aug-12; the slot 455; the event 460 |
+| Crash date `2026-08-12T21:36:51Z` (and `2026-08-13T00:38:41Z` elsewhere) | Attempt **1** and one mid-storm attempt of a continuous retry storm — neither is "the" crash |
+| "FALSE POSITIVE — post-completion infrastructure event; task was already done" | Contradicted: all deaths were **mid-task**, 71 of 76 at the push step. The false-positive *component* (72 dispatches against satisfied work) is real, but the classification premise is not |
+| Merge commit `2832106`; close reason's `7dd79eb` | **Both are dead SHAs** (`git cat-file` fails on each). The real merge is **`42a7b07`**, which after the 2026-08-16 squash survives only on `pre-squash-history-20260816` and is **not** an ancestor of `main`; the on-`main` reconciliation is **`46293c5`** (2026-08-17) |
+| "Task completed successfully after repository cleanup (18 GB → 138 MB)" (bead note, 2026-09-01 fix-implementation report's "SIGHUP cascade / no OOM events") | The cleanup is real; the claim that *this bead's* task completed through it is not — the split children show the merge child InProgress and the push child Open. The SIGHUP mechanism is superseded by memcg OOM; the correct remediation conclusion (nothing to retry) is stated in `docs/crashes/bf-1s6c3-remediation-2026-09-06.md` |
+
+---
+
+## 12. Verification Appendix — this bead's own measurements (2026-09-06)
+
+Ran directly, not copied from the chain:
+
+- **Census recounted** from the committed extracts: `agent.completed` × 76 → exit −1 × 71,
+  124 × 4, 0 × 1; `outcome.classified` crash/timeout/success = 71/4/1; `outcome.handled`
+  alerted × 71; first claim 21:31:27.663Z; first crash 21:36:44.519Z (316,572 ms); final
+  attempt exit 0 at 02:01:22.561Z (384,204 ms)
+- **Attempt 4** read from the extract: completed 21:48:06.650826225Z, exit −1, duration
+  285,151 ms → **59.6 s** after merge `42a7b07` (git: 2026-08-12T17:47:07-04:00 = 21:47:07Z,
+  parents `47e7758` + `00117cb`)
+- **Ancestry:** `42a7b07` not an ancestor of `main` (contained by `pre-squash-history-20260816` only);
+  `46293c5` is an ancestor of `main`
+- **Dead SHAs:** `2832106` and `7dd79eb` both fail `git cat-file`; `7dd79eb` present in the
+  bead's own close record in `.beads/checkpoint/forensic.jsonl`
+- **Repository:** `.git` 101 MB; 5 loose objects / 36 KiB; 3 packs 99.13 MiB; garbage 0;
+  `git ls-files .beads` → 0; `.gitignore:66` `.beads/`
+- **Convergence:** `git rev-list --left-right --count HEAD...origin/main` → 0 / 0;
+  GitHub mirror `ls-remote refs/heads/main` → `c8dc3cf` = local HEAD
+
+---
+
+**Analysis Status:** ✅ COMPLETE
+**Classification:** Infrastructure — repository bloat (Pattern 3); alert disposition: no further action
+**No domain-check code defects:** confirmed — the task never touched application code
+**Report completed:** 2026-09-06 · domchk-ed3ed12b
