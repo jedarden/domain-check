@@ -587,6 +587,80 @@ Correction, `docs/crash-prevention-requirements.md` (G-1..G-13 with the
 verification line in §10.1 and steps 1–11 of §10.4 were executed live this
 session at HEAD `7587471`; step 12 cites the committed self-tests unexecuted.*
 
+## 11. RCA verification — bead `domchk-e02032f2`, 2026-09-07
+
+Dispatched to "verify root cause analysis and findings" against the
+`docs/crash-investigations/bf-4k2ws/root-cause-analysis-*.md` pair, with
+acceptance criteria covering root cause + evidence, the code-vs-infrastructure
+/ transient-vs-systemic / crash-vs-false-positive distinctions, repository
+health, system resource state at crash time, and crash-response-guide
+cross-references. Appended here per §6. **Verdict: the determination holds —
+every load-bearing figure re-derived byte-exact this session; one actionable
+delta (11.3).**
+
+### 11.1 §2 census reproduced byte-exact from the primary log
+
+Same log (3,111,314 bytes, mtime 2026-08-13 19:59 local — untouched). All
+figures re-derived independently with a fresh `json.loads` pass:
+
+- 62 `bf-4k2ws` completions; exit histogram **{−1: 55, 124: 5, 0: 2}**;
+  `outcome.classified` **55 crash / 5 timeout / 2 success**.
+- Kills **123,571–528,854 ms** (123.6–528.9 s), median **252,874 ms**
+  (252.9 s), bucket histogram **[0, 15, 22, 15, 2, 1, 0]**, **0** kills within
+  70 s of the 600 s cap.
+- Timeouts **600,018 / 600,020 / 600,020 / 600,029 / 600,041 ms** — exact.
+- Successes **04:48:09.546532879Z** (378,983 ms) and **07:17:41.039398822Z**
+  (193,380 ms); `verification.passed` **+17 ms / +19 ms**; `bead.orphaned`
+  **04:48:15.306452783Z / 07:17:47.390472518Z** (+5.74 s / +6.33 s) — exact.
+- **0** `max_turns`/`max-turns` mentions in the whole day's **395**
+  `agent.completed` events.
+- **59** `fleet.cpu_saturated` samples in 02:01–07:18Z, load **7.63–18.51**
+  on **9** cores, first 02:03:45Z, last 07:17:49Z — exact.
+- **55** `outcome.handled {action: alerted}` events, first **02:03:43.020Z**,
+  last **07:04:03.300Z**; **60** `heartbeat.emitted` HANDLING_RELEASE_DONE
+  rows, death deltas **5.10–9.80 s median 6.10 s**; the seed-alert chain
+  reproduces (kill 02:33:41.384776124Z → heartbeat 02:33:47.409670765Z,
+  **6.025 s** after death) — exact.
+
+### 11.2 Repo, bead store, remote — live re-verified
+
+- `.git` **103 MB**; loose **171 objects / 1.81 MiB**; one pack **99.11 MiB**
+  (11,360 in-pack); `git fsck --full` exit 0 (dangling-only); `.beads/` **0**
+  tracked files; `check-repo-health.sh` and `setup-git-gc-config.sh --verify`
+  both exit 0. Loose count/size is the third same-day snapshot in the creep
+  series §2 already flags (88/102 → 110/1.18 MiB → 171/1.81 MiB) — the
+  binding order of magnitude (~1–2 MiB vs ≈17 GB) is unaffected.
+- Bead store: **exactly 55** ALERT-titled beads, **17 closed / 36 open /
+  2 in_progress** — §8.2's census unchanged. The wider pool naming `bf-4k2ws`
+  is now **189 (124c / 58o / 7ip)** vs §8.2's 183 (118c / 59o / 6ip) — pure
+  same-day growth from ongoing dispatches, no bearing on the determination.
+- All four deliverable docs present on `origin/main`; storm window
+  01:00–09:00Z holds **0** commits on `main` and `origin/main`; divergence
+  **0/0**; squash `c27899f` present. `scripts/crash-classifier.sh bf-4k2ws`
+  exits **2** (no trace survives; oldest `.beads/traces/` dirs are 2026-08-16,
+  re-checked by mtime).
+- Acceptance criteria: root cause + evidence (§1–§2 ✓), code-vs-infra and
+  transient-vs-systemic (§3.5–§3.6 ✓), crash-vs-false-positive three-layer
+  split (§8.3 ✓), repo health (§2 table + above ✓), resource state at crash
+  time (§2 CPU + §3.3's verified-unrecoverable memory/disk — single journald
+  boot confirmed 2026-08-15 19:56:33 EDT ✓), crash-response-guide
+  cross-reference (`docs/crash-response-guide.md` present, exit −1 patterns
+  §"Exit Code -1" ✓; mitigation scripts `crash-alert-manager.sh`,
+  `alert-deduplication.sh`, `safe-git-gc.sh` all present ✓).
+
+### 11.3 Delta: `root-cause-analysis-signal-minus1.md` still carries no superseded banner
+
+§7 supersedes it in the map, but the file itself redirects nobody — unlike
+its sibling `root-cause-analysis-final-bf-4k2ws.md`, which carries the
+2026-09-07 SUPERSEDED header. A reader landing on it cold still gets the
+retired SIGHUP-cascade premise stated as current, plus three stale figures
+the rest of the corpus has corrected: exit −1 equated with "SIGHUP/SIGKILL"
+(−1 is the unrecorded-signal sentinel, §8.4), the invented
+40/30/15/15 % SIGHUP-era cause distribution, and bf-1s6c3 as "9 crashes over
+2.5 hours, 18 GB → 138 MB, 99.2 %" (76 dispatches / 71 kills, 93 MB, 99.5 %
+per its canonical report). No content of this document changes; the fix is a
+banner on that one file, as was already done for its sibling.
+
 ---
 
 *Determination by `domchk-7f838f36`, 2026-09-07; §8 appended by
@@ -598,4 +672,7 @@ independent reproduction. §8's counts were likewise re-derived from the same
 primary log, the live bead store, and `origin/main`. §9's counts were
 re-derived from the same primary log, the live bead store, `origin/main`, and
 live `scripts/crash-alert-manager.sh`. §10's verification lines were executed
-live by `domchk-9bd1f524` as itemized in its footer.*
+live by `domchk-9bd1f524` as itemized in its footer. §11's census and repo/
+bead-store/remote figures were re-derived live by `domchk-e02032f2`; its only
+delta is the missing superseded banner on
+`docs/crash-investigations/bf-4k2ws/root-cause-analysis-signal-minus1.md`.*
