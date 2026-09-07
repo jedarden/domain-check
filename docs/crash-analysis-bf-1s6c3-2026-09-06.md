@@ -1007,6 +1007,140 @@ remains §8 item 6 / §9 action 2 (the NEEDLE-fleet-side re-dispatch stop-condit
 this repository; nothing in-repo can close it. **Alert disposition: no further action for
 this event.**
 
+### Re-verification 2026-09-07 (domchk-827a2661 — the §481/§685 chain's lessons-learned step, the chain's final link)
+
+This bead is the "Document lessons learned and verify crash resolution" child that closes
+the chain: `domchk-6be24808` (classification, §12 above) → `domchk-c3955b52` (root cause,
+§12 above) → `domchk-29311899` (fix, §12 above) → **this bead**. Its dispatched template
+(compile children 1–3 into a new `docs/crash-analysis-bf-1s6c3-<date>.md`) predates this
+report: §§ 1–11 **are** the compiled classification / root-cause / fix deliverables, and the
+§12 appends above are the parallel chains' dated contributions. Per the dedup rule this
+bead shipped **no new document**; its deliverable is the acceptance-criteria disposition
+below plus its own first-hand re-verification.
+
+**Acceptance-criteria disposition (all five, decided 2026-09-07):**
+
+- **Investigation document created** — rendered by this report (§§ 1–11 + thirteen §12
+  appends from parallel chains). No new file warranted; a second
+  `crash-analysis-bf-1s6c3-2026-09-07.md` would fork the canonical record.
+- **Lessons learned in CLAUDE.md** — already carried by the repo CLAUDE.md's *Crash
+  Prevention and Investigation* / *Key Learnings* sections (bloat mechanism, layered
+  prevention, live fleet crash signature, "what does NOT cause crashes"; last touched by
+  `fde9925` and `64e1461a`) and by
+  `docs/notes/repository-bloat-crash-lessons-learned-bf-1s6c3-2026-09-01.md`. This bead's
+  verification discovered **no new pattern** — every layer it checked was found in force —
+  so no CLAUDE.md edit was warranted; an edit made only to have touched the file would be
+  manufactured.
+- **Fix effectiveness verified** — see the first-hand checks below; all healthy.
+- **Monitoring configured** — verified live below. One correction to the dispatch text: it
+  names `./scripts/monitoring-setup.sh` as the verification command, but that script is
+  cron-based and does not work on this NixOS box (no `crontab`; documented in CLAUDE.md).
+  The sanctioned check is `systemctl --user list-timers 'domain-check-*' --all`, which is
+  what was run.
+- **bf-1s6c3 status updated** — not needed: the bead is **Closed** (2026-09-02, with its
+  investigation note), and reopening a closed bead to edit notes would re-enter it in the
+  alert-cycling pool. One stale citation is recorded here instead: that note points at the
+  superseded `docs/crash-investigation-summary-bf-1s6c3-2026-09-01.md` (the 2026-09-01
+  corpus; see §11 for what it gets wrong), and the target bead's own record describes the
+  *task* it carried (the merge reconciliation), not the crash mechanism.
+
+**First-hand re-verification (all re-run 2026-09-07 by this bead):**
+
+- **Object store:** `.git` 103 MB · 157 loose objects / 1.20 MiB · in-pack 11,182 /
+  99.13 MiB · 3 packs · garbage 0 · `git fsck --full` exit 0 (dangling trees only) ·
+  `git ls-files .beads` → 0 · `git log --all -- .beads/` → 0 commits on every ref
+- **`check-repo-health.sh`** exit 0 — incl. the effective pack-memory bound
+  (windowMemory=2g / threads=1 / deltaCacheSize=1g, worst case ≈3072 MiB within the 6 GiB
+  ceiling for a 12 GiB dispatch scope) and no unmanaged aggressive gc running
+- **`preflight-health-check.sh`** 4/4 — no system event active, inference gateway
+  available, repository 0.100 GB, dispatch-scope memory headroom healthy
+- **Monitoring:** all seven `domain-check-*` timers hold future triggers
+  (resource-monitor / service-monitor / monitoring every few minutes, repo-health 02:00,
+  auto-gc 02:30, nightly gc 03:00, weekly full gc Sun 04:00); journalctl shows
+  `domain-check-git-gc.service` Starting→Finished in ≈7 s on Sep 4, 5 and 6 — the
+  nightly bounded gc operating, not merely scheduled
+- **Convergence:** `HEAD...origin/main` → 0/0 at dispatch time
+
+**Disposition:** the chain's documentation step is complete — classification, root cause
+and fix were each rendered by the sibling appends above, and this bead's verification found
+the repaired state holding (the 2026-08-12 bloat cannot recur through `.beads/`, which is
+gitignored and untracked, and the pack-memory bound that killed the original `git gc` is
+proven effective). The parent alert umbrella (`bf-488nr`, in_progress) stays with its own
+closure chain — this close releases one of its two blockers
+(`domchk-da274741` holds the other). **Alert disposition: no further action for this event.**
+
+### Re-verification 2026-09-07 (domchk-904abc88 — collection bead for attempt 58's kill, instant 00:28:36.425389752+00:00)
+
+domchk-904abc88 ("Collect crash logs and system events for bf-1s6c3") names
+`2026-08-13T00:28:36.425389752+00:00`. This bead mapped that instant first-hand from the
+committed extracts — it is **attempt 58 of 76** (9th of the 27 Aug-13 attempts), and the
+named instant is the `HANDLING_RELEASE_DONE` heartbeat **6.229 s after** the real kill, the
+same heartbeat-vs-kill offset documented for attempt 17 / bf-1atrl above. The ~9.5 µs drift
+between the alert's timestamp and the event-log heartbeat (…425389752 vs …425380287) is
+clock provenance, not a second event:
+
+| Event | Timestamp (Z) | Source |
+|---|---|---|
+| Attempt 57 released (`release_success`) + alerted | 00:23:41.623940977 / .624580958 | seqs 6243–6244 (extract L148–L149) |
+| Attempt 58 claimed + dispatched | 00:23:44.047163899 / 00:23:44.059808202 | seqs 6249, 6258 (L151, L155) |
+| Attempt 58 session first record | 00:23:44.949 | `sessions-index.tsv` row 58 |
+| **Real kill — `agent.completed`, `exit_code=-1`, `duration_ms=285898`** | **00:28:30.196295497** | seq 6261 (L158) |
+| `outcome.classified` → `crash` | 00:28:30.204702034 | seq 6264 (L160) |
+| heartbeat `HANDLING_RELEASE_DONE` | 00:28:36.425380287 | seq 6270 (L166) |
+| **Named timestamp (domchk-904abc88 description)** | **00:28:36.425389752** | kill + **6.229094255 s** |
+| Attempt 58 released (`release_success`) + alerted | 00:28:38.648722216 / .648766444 | seqs 6271–6272 (L167–L168) |
+| Attempt 59 claimed + dispatched (same prompt) | 00:28:40.881312950 / 00:28:40.892446323 | seqs 6277, 6286 (L170, L174) |
+
+So this is **not a distinct crash**: attempt 58 is one of the 71 identical memcg-OOM
+deaths, ~285.9 s into the attempt (not a 600 s timeout). The dispatch's premise that logs
+needed gathering was already satisfied by the committed collection bundle
+(`docs/crashes/bf-1s6c3/`, collection bead domchk-fcac734a); what was missing was the
+attempt-58 mapping, which this subsection supplies.
+
+**What attempt 58 was doing** (first-hand from its transcript, `sessions-index.tsv` row 58:
+`9a709a38-09b4-42ff-8213-9be744ffb7ef`, 324,203 B — in the committed tarball and still live
+at `~/.claude/projects/-home-coding-domain-check/9a709a38-09b4-42ff-8213-9be744ffb7ef.jsonl`):
+19 Bash calls spanning 00:23:44.949 → 00:28:15.495, ending mid-flight with no result
+recorded for the final call — divergence inspection (`git log --oneline
+origin/main..github/main`, `git rev-parse HEAD origin/main github/main`), then `git add
+.beads/ .needle-predispatch-sha` → `git commit -m "chore: update needle predispatch SHA"`
+→ `git push origin main`, and the kill lands during that push. The `.beads/` add is the
+bloat mechanism itself in one line — on 2026-08-13 `.beads/` was not yet gitignored, so
+each attempt re-staged bead state for a push whose pack-objects then ran against the
+dispatch scope's memory cap (§4); no per-kill kernel record survives to prove it for this
+attempt specifically (below).
+
+**System events around the instant — none retrievable, and why:** the system journal's
+earliest entry is 2026-08-15 19:56:33 local (verified live 2026-09-07), i.e. retention
+begins after the storm, and the pre-journal kernel records for Aug-12/13 were lost to the
+Aug-14 16:39 EDT reboot. The memcg-OOM attribution for the 71 deaths therefore rests on the
+corpus-level evidence in §4 (the recovered push-side kernel records for bf-198ne and the
+bounded-replay tests), not on a per-kill record for attempt 58. No SIGHUP/OOM/other system
+event can be recovered for 00:28:36Z on 2026-08-13.
+
+**Records for this instant and where they live (collection acceptance criteria):**
+
+- `needle-events-2026-08-13-bf-1s6c3.jsonl` (committed extract, manifest-verified) lines
+  L148–L177 hold the entire window above: attempt 57's release through attempt 59's
+  dispatch and kill; attempt 58's own window is L151 → L168.
+- Bead context: bf-1s6c3 is **Closed** (2026-09-02T03:26:02Z, rev 4) — the
+  merge-reconciliation task; every attempt ran the same fixed retry prompt
+  (`prompt_len=70670`, `prompt_hash=aaa143d4…`, template `pluck-default`).
+- The analysis this collection feeds already exists as §§1–11; nothing new to analyze.
+
+Live re-verification (this bead's own runs, 2026-09-07):
+
+- **Census recounted from both committed extracts** (945 + 513 lines): `agent.completed`
+  × 76 → exit −1 × 71, 124 × 4, 0 × 1; the kill above is the 58th of those 76.
+- **Bundle integrity:** `sha256sum -c MANIFEST.sha256` → 5/5 OK.
+- **Repository:** `.git` 103 MB · 162 loose objects · in-pack 11,182 · garbage 0 ·
+  `git fsck --full` exit 0 · `git ls-files .beads` → 0.
+- **Convergence:** `HEAD...origin/main` → 0/0.
+
+**Dispatch note:** collection-only bead — the records it asked for were already collected
+and committed (domchk-fcac734a's bundle), the target bead is closed, and the storm is fully
+analyzed. This dated subsection is the bead's only change.
+
 ---
 
 **Analysis Status:** ✅ COMPLETE
