@@ -312,6 +312,41 @@ systemctl --user list-timers --all | grep domain-check
 
 ---
 
+## Addendum — 2026-09-07 verification pass (bead `domchk-5b993b1d`)
+
+The body above is the 2026-09-01 snapshot (its "timers broken" finding was
+already stale — fixed 2026-09-02). The living source of truth for prevention
+status is `docs/crash-prevention-requirements.md`. Every layer relevant to the
+bf-1s6c3 crash class (repository bloat → memcg OOM, the class this document's
+Priority 1 addresses) was re-verified **live on 2026-09-07**, not carried
+forward:
+
+| Layer | Live result (2026-09-07) |
+|---|---|
+| Pre-commit hook installer (G-1) | `scripts/setup-git-hooks.sh --check` → "✅ Pre-commit hook installed and byte-identical to tracked source" |
+| Pack memory bounds | `./scripts/setup-git-gc-config.sh --verify` → exit 0; effective (system→global→local) windowMemory=2g / deltaCache=1g / threads=1, worst case ≈ 3072 MiB per pack run, inside the 12 GiB dispatch scope |
+| `.beads/` exclusion | `git ls-files .beads` → 0 tracked files; the beads/`*.db`/`*.jsonl` ignore rules present |
+| Repository size | 62 loose objects (408 KiB), pack 99.13 MiB — deep in the healthy band |
+| Scheduled remediation | `domain-check-git-gc.service` (03:00 daily, `safe-git-gc.sh`, `MemoryMax=4G`): `Result=success`, exit 0 at 2026-09-06 03:00:07 EDT, "Safe Git GC Completed Successfully", repo 92M; weekly Sun 04:00 `--full` unit under the same ceiling; installed unit byte-identical to the tracked copy |
+| Monitoring timers | all 6 `domain-check-*` systemd user timers enabled with future trigger times |
+
+**New prevention needed? No.** No crash class in this workspace's population
+lacks existing mitigation, and the one canon gap that still named this class
+(G-2, "no automatic remediation of repo bloat") rests on a stale premise —
+nightly bounded remediation was already scheduled and succeeding. The
+recommended `--auto-when-needed` flag was deliberately **not** implemented:
+gating the unconditional nightly gc on the loose-object/pack-count thresholds
+would blind it to bloat accumulating inside a pack (the bf-198ne shape), and
+an unconditional bounded gc dominates any conditional variant for prevention.
+Rationale recorded at G-2 in `docs/crash-prevention-requirements.md`.
+
+The open items for this crash class remain the NEEDLE-side requirements
+(G-9…G-13 — alert-source work-completion detection, dispatch-scope sizing,
+retry/backoff, turn budgets, load throttling), which this repository cannot
+implement.
+
+---
+
 **Implementation Status:** ✅ **COMPLETE**
 **Key Success:** Pre-commit hook actively preventing repository bloat crashes
-**Date:** 2026-09-01
+**Date:** 2026-09-01 (addendum 2026-09-07)

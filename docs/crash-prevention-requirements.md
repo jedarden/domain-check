@@ -109,7 +109,7 @@ the doc that claims it.
 | Pack memory bounds | `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` | ✅ Present in **both** local and global config (checked effective chain). Worst case ≈ 3 GiB per pack run vs the 12 GiB scope that killed bf-198ne. |
 | Bound verification | `scripts/setup-git-gc-config.sh --verify` | ✅ Present; resolves system→global→local and fails when no effective bound exists. |
 | Safe gc wrapper | `scripts/safe-git-gc.sh` (+ `--check-only`, `--full`, `--resume`) | ✅ Present, with `safe-git-gc-monitor.sh` and cgroup-bounded test in `scripts/test-gc-memory-bounds.sh` (pack-objects peak RSS ≈ 312 MiB under a 768 MiB limit). |
-| Large-file pre-commit hook | `.git/hooks/pre-commit`, `MAX_SIZE_MB=10` | ✅ Installed and executable (since 2026-09-01). ⚠️ but see gap G-1. |
+| Large-file pre-commit hook | `.git/hooks/pre-commit`, `MAX_SIZE_MB=10` | ✅ Installed and executable (since 2026-09-01). Gap G-1 below **closed 2026-09-06** — installer committed and self-test passing. |
 | `.gitignore` protection | `.beads/`, `*.db`, `*.db.backup.*`, `*.jsonl` | ✅ Present; `git ls-files .beads/` empty. |
 | Repo health checks | `scripts/check-repo-health.sh`, `check-repo-size.sh`, `auto-gc-trigger.sh`, `repo-health-monitor.sh` | ✅ All present. |
 
@@ -155,6 +155,13 @@ not exist**. The hook works today only because it was installed by hand on
 *Requirement:* restore an installer that writes `.git/hooks/pre-commit` (or
 move the check to a tracked `core.hooksPath` directory), with a self-test.
 
+> **CLOSED 2026-09-06** (commit `dfa60a9`, bead `domchk-d9117f42`;
+> re-verified live by `domchk-5b993b1d`): `scripts/setup-git-hooks.sh` is now
+> tracked, writes `.git/hooks/pre-commit`, and `scripts/setup-git-hooks.sh
+> --check` self-tests byte-identity between the installed hook and the tracked
+> source — passes live: "✅ Pre-commit hook installed and byte-identical to
+> tracked source".
+
 **G-2 — No automatic remediation of repo bloat.**
 `auto-gc-trigger.sh` exists and thresholds are defined (10 GB trigger), but
 `safe-git-gc.sh --auto-when-needed` (recommendation #1.3 of the 2026-09-02
@@ -162,6 +169,26 @@ systemic doc) was never implemented, and nothing schedules the trigger.
 Detection exists; the closing action is manual.
 *Requirement:* wire `auto-gc-trigger.sh` into the daily repo-health timer and
 implement the `--auto-when-needed` flag (or drop the flag from the docs).
+
+> **CORRECTED 2026-09-07** (live verification, bead `domchk-5b993b1d`) — the
+> premise is stale, and the requirement as written would *weaken* prevention.
+> Automatic bounded remediation **is** scheduled and proven: the daily 03:00
+> `domain-check-git-gc.service` runs `scripts/safe-git-gc.sh` unconditionally
+> under `MemoryMax=4G` (last run 2026-09-06 03:00:07 EDT — `Result=success`,
+> exit 0, "Safe Git GC Completed Successfully", repo 92M), and the weekly Sun
+> 04:00 unit runs `--full` under the same ceiling. The installed unit is
+> byte-identical to the tracked copy. The 02:00 repo-health unit is a
+> *report* (`auto-gc-trigger.sh --dry-run`), not the remediation path; wiring
+> it for real remediation would only duplicate the 03:00 unit.
+> `--auto-when-needed` is therefore **deliberately not implemented**: gating
+> the unconditional nightly gc on the `check_gc_needed` thresholds (loose
+> objects >1000, pack files >5) would leave remediation blind to bloat
+> accumulating *inside* a pack — exactly the bf-198ne shape (5.6 GB of retired
+> packed state that those thresholds never see). An unconditional bounded gc
+> dominates any conditional variant for prevention purposes, and re-tuning
+> thresholds on this box is how the 18 GB bloat happened in the first place.
+> The #1.3 citation in `docs/systemic-crash-prevention-recommendations-2026-09-02.md`
+> should be read as withdrawn.
 
 **G-3 — No system-event response.**
 Surge **detection** was tightened to 3-in-5-minutes, but the recommended
@@ -250,7 +277,7 @@ Phase 1 is entirely inside this repo.
 | # | Item | Addresses | Est. effort |
 |---|------|-----------|-------------|
 | 1 | **G-1** — restore `setup-git-hooks.sh` (or tracked `core.hooksPath`) + self-test | P5 — keeps the one fully-owned cause fixed | 1 h |
-| 2 | **G-2** — implement `--auto-when-needed`; schedule `auto-gc-trigger.sh` in the daily timer | P2/P5 — bloat remediation closes the loop detection already has | 2 h |
+| 2 | ~~**G-2** — implement `--auto-when-needed`; schedule `auto-gc-trigger.sh` in the daily timer~~ **withdrawn 2026-09-07** — see the correction at G-2: the 03:00 timer already runs bounded remediation nightly, and conditional gating would weaken it | P2/P5 | — |
 | 3 | **G-7** — retire/replace cron-based `monitoring-setup.sh` | Removes a documented-but-broken install path | 0.5 h |
 | 4 | **G-3** — `system-event-mode.sh` surge gate + documented deferral convention | P4 — system-wide events | 3 h |
 | 5 | **G-5** — `crash-prevention-feedback.sh` weekly threshold review | Keeps prevention matched to data | 3 h |
