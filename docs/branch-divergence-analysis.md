@@ -58,9 +58,95 @@ The figure is real but stale — it describes a pre-squash state, not today's:
   in current state. This section confirms the same: 0 / 0, no divergence,
   nothing to reconcile.
 
+---
+
+## Synthesis — what "divergence to reconcile" meant in the bf-1s6c3 alert (2026-09-06, domchk-864e2c21)
+
+**There was never a divergence to reconcile.** The phrase is a category error
+inherited from bf-1s6c3's task premise, and every bead that has gone looking
+for it — from bf-qzvan on 2026-08-12 through domchk-accde0a5 on 2026-09-06 —
+has found the same thing: remotes identical to each other, local merely ahead.
+Live state at this analysis: local main = `origin/main` = `github-mirror/main`
+= `63c3125`, 0 ahead / 0 behind on all three comparisons. Drafted against
+`e299c48` earlier the same day, re-verified at ship time after main had
+advanced three commits (`af5ea6b` → `c334946` → `63c3125`): the tip moved,
+the divergence counts did not — still 0/0 everywhere.
+
+### Acceptance-criteria answers
+
+| Question | Answer |
+|---|---|
+| **Real divergence requiring reconciliation?** | **No.** 0/0 local↔Forgejo, local↔GitHub, Forgejo↔GitHub (re-verified twice on 2026-09-06 — at `e299c48` and again at `63c3125` after three more commits landed; domchk-accde0a5 verified the same three times the same day across a live-committing window). GitHub has never held a commit Forgejo lacks. |
+| **Is "660 commits ahead" accurate?** | **Historically true, now moot and unrecomputable.** bf-qzvan measured local main 660 ahead of both remotes at `61d27ac` on 2026-08-12; a plain push resolved it and the count decayed to zero (660 → 422 on 08-13 → 0). `61d27ac` is not an object in this clone (the 2026-08-16 squash rewrote that line), so 660 can no longer be recomputed — and describes nothing current. |
+| **Actual git state** | One local branch (`main`) at `63c3125`, identical to both remotes; one local-only backup branch (`pre-squash-history-20260816`) deliberately retained from the 2026-08-16 history squash; nothing to push, nothing to merge. |
+
+### Provenance — where the premise came from
+
+| Bead | What it recorded |
+|---|---|
+| `bf-2xygo` (2026-08-12 21:12:00Z) | "Fetch and analyze divergence between Forgejo and GitHub remotes" — closed 18 minutes later with **empty notes**. The divergence was never demonstrated anywhere in the bead store; bf-1s6c3 cites "the analysis from bead bf-2xygo", which the record does not contain. |
+| `bf-1s6c3` (21:12:09Z) | "Create merge commit reconciling Forgejo and GitHub histories … the divergent Forgejo and GitHub branches." Its acceptance criteria invoke the workspace rule ("reconcile with a merge commit, never force-push") — a rule governing what to do *if* remotes diverge, misread as an assertion that they had. |
+| `bf-qzvan` (21:39:16Z, alert investigation) | First refutation on the record: "NO DIVERGENCE EXISTS … both at commit 61d27ac … Local main branch is 660 commits AHEAD of both remotes … The original task (bf-1s6c3) assumed there was divergence to reconcile, but there isn't." ← **origin of the phrase.** |
+| `42a7b07` (merge commit, dated 2026-08-12 17:47:07 −0400) | "Merge reconciliation: Forgejo and GitHub remote histories" — a reconciliation merge *was* created during the storm window. It never entered main's history; it survives only as an ancestor of the `pre-squash-history-20260816` backup branch. Physical evidence the premise was acted on. |
+| `bf-4k2ws` → `domchk-bc734e55` (08-13 → 09-02) | Read-only pre-merge analysis chain plus its verification bead: analysis complete, **zero commits unique to either remote**. |
+| `bf-31p3g` (08-17) | Tasked "Create merge commit reconciling both histories"; concluded "**No merge operation required** — the two 'histories' are actually the same history." **Still InProgress** (assigned 2026-08-17, never closed) despite its own conclusion. |
+| 2026-09-02 auto-split family | `domchk-f774f440` (umbrella): all three refs identical, 0/0. `bf-y24az`: the only genuine divergence is main vs `pre-squash-history-20260816` (1591/720 at merge-base `8373e5d`; re-measured 2026-09-06 as 1757/720 and
+again as 1760/720 by day's end — main simply kept growing). `domchk-a1792331`: remotes synchronized, mirror operational. |
+| `domchk-accde0a5` (09-06) | Re-verified 0/0 three times; section above. |
+| `domchk-864e2c21` (this bead) | This synthesis. |
+
+### The three git states the word "divergence" conflated
+
+1. **Unpushed local commits — the real 2026-08-12 situation.** Local main 660
+   ahead, 0 behind both remotes. In git terms that is *not* divergence:
+   divergence means both sides hold unique commits. 0 behind means there is
+   nothing to merge against; a plain push resolves it. "Reconcile" was
+   reaching for a push all along — the word "divergence" was a misnomer for
+   "unpushed backlog."
+2. **Forgejo → GitHub mirror lag — by design.** Transient Forgejo-ahead states
+   of 0–1 commits for seconds-to-minutes (13 commits / 12 minutes at the
+   historical max, 2026-08-26). One-way and self-healing; never a
+   reconciliation problem.
+3. **main ↔ `pre-squash-history-20260816` — the only genuine divergence, and
+   it must stay.** 1760 commits on main / 720 on the backup branch either side
+   of merge-base `8373e5d` ("migrate: rehydrate the bead workspace…"). That
+   branch is the intentional archival backup retained by the 2026-08-16
+   history squash and is local-only (pushed to neither remote). Reconciling it
+   — merging 720 commits of retired bead-forge-era state back into main —
+   would recreate exactly the bloat shape behind bf-1s6c3/bf-4yjq (2026-08-12)
+   and bf-198ne's push-side memcg OOM (2026-08-16, a 720-commit backlog of
+   retired state). Contraindicated, not pending.
+
+### Two contradictions in the family record, resolved
+
+- **"Merge was legitimate reconciliation of Forgejo/GitHub divergence"**
+  (`domchk-a5ef6496`): asserted with commit `2832106`, which is **not an
+  object in this clone** (`7dd79eb` and `61d27ac` likewise). Corrected record:
+  the only real reconciliation merge is `42a7b07`, orphaned to the pre-squash
+  backup line, reconciling remotes that were identical. bf-qzvan's refutation
+  is the finding that reproduces.
+- **Crash mechanism**: `domchk-fb86a21e` records "agent timeout (600s) during
+  git reconciliation"; `domchk-a5ef6496` and the corrected canon record
+  exit −1 = memcg-OOM SIGKILL on the 18 GB repo (76 dispatches / 71 kernel
+  kills across the bf-1s6c3 storm, all memcg — see
+  `docs/crashes/` for the corrected census). Both contradictions share a
+  source: beads written mid-storm against an 18 GB repo where every git
+  operation was dying, then fossilized and re-quoted by later dispatches.
+
+### Standing conclusion
+
+Nothing about the bf-1s6c3 divergence premise has been actionable since
+2026-08-12: no divergence (0/0 everywhere), no pending reconciliation, no
+unpushed backlog. The one genuine divergence in this repository — main vs
+`pre-squash-history-20260816` — is deliberate and must not be reconciled. Do
+not re-dispatch on this premise; future auto-splits of this family should
+resolve to this section.
+
+---
+
 *Everything below this section is the 2026-09-02 analysis. Its specific
-figures (`debd24f`, `73ff9ab`) are superseded by the section above; its method
-and conclusions still hold.*
+figures (`debd24f`, `73ff9ab`) are superseded by the two sections above; its
+method and conclusions still hold.*
 
 ---
 
