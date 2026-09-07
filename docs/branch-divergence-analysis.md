@@ -144,6 +144,76 @@ resolve to this section.
 
 ---
 
+## Verification — 2026-09-07 (domchk-59478499)
+
+**bf-4k2ws's divergence analysis is COMPLETE — all eight acceptance criteria
+satisfied, deliverables on `origin/main`, and the conclusion re-verified live
+today.** Read-only completeness check of the existing record; no new analysis
+was performed, per the bead's scope.
+
+### Completion status
+
+`bead show bf-4k2ws`: **Closed** 2026-08-16T15:35:42Z — close reason: "All
+acceptance criteria completed successfully - comprehensive branch divergence
+analysis documented with local/remote states identified, unique commits
+catalogued, divergence point determined. Agent crash occurred after work
+completion during post-analysis cleanup." The 2026-08-13 exit −1 crash that
+spawned the alert family happened **after** the work was done (forensic
+`closed` event, origin_event_sequence 789). Its blocker `bf-574w1` is
+likewise Closed (2026-08-26T17:03:31Z).
+
+### Deliverable inventory (criteria → artifact)
+
+| bf-4k2ws acceptance criterion | Where satisfied |
+|---|---|
+| Local main state documented | `4b74d78` (2026-08-13) in the final analysis file |
+| Forgejo origin state documented | `63ba0247…` (2026-08-09) |
+| GitHub mirror state documented | `63ba0247…` — identical to Forgejo |
+| Commits unique to Forgejo | zero, stated in the analysis |
+| Commits unique to GitHub | zero, stated in the analysis |
+| Point of divergence | `63ba0247…` = common ancestor of all three; the remotes never diverged from each other — local was merely ahead (the analysis' own finding) |
+| Analysis written to a file | `docs/divergence-analysis-bf-4k2ws-final-2026-08-13.md` at the time; **now at `docs/archive/crash-investigations/divergence-analysis-bf-4k2ws-final-2026-08-13.md`** (moved to archive — the bare `docs/` path quoted in `domchk-bc734e55`'s notes is stale) |
+| No merge performed | read-only scope respected; the storm-window reconciliation merge `42a7b07` never entered main (see Synthesis above) |
+
+All twelve checked bf-4k2ws-named documents are pushed to `origin/main`
+(`git cat-file -e origin/main:<path>` for each) — the canonical living
+analysis (this file), the archived 2026-08-13 final snapshot, and the ten
+historical snapshot docs under `docs/`, `docs/notes/`, and `docs/plan/`.
+
+### Live re-verification (2026-09-07)
+
+`git fetch origin && git fetch github-mirror`, then `git rev-list
+--left-right --count` (behind / ahead):
+
+| Comparison | behind / ahead |
+|---|---|
+| local main vs `origin/main` | 0 / 0 |
+| local main vs `github-mirror/main` | 0 / 0 |
+| `origin/main` vs `github-mirror/main` | 0 / 0 |
+
+All three tips identical at `003af27` (2026-09-07 03:27:35 −0400) — the same
+conclusion as the 2026-09-06 re-verifications above.
+
+### Verdict and remaining loose ends (administrative, not analytical)
+
+**Analysis: complete, no gaps.** What remains open is bead hygiene, all
+outside this bead's scope:
+
+- **`domchk-bc734e55`** (bf-4k2ws's verification sibling, "Recover incomplete
+  work if needed") is **still Open** at revision 12, although its own notes
+  conclude "Status: CLOSED - NOT APPLICABLE - Original work was complete."
+  The notes were written; the close never happened. Its precondition ("if the
+  bf-4k2ws analysis was incomplete, complete it") is vacuously satisfied.
+  Recommend closing it as not-applicable — a task for whoever holds that
+  bead, not this one.
+- **`bf-31p3g`** (downstream "create merge commit" child) is still
+  InProgress with notes saying "COMPLETED - No merge operation required" —
+  already flagged in the Synthesis section above; unchanged as of today.
+- Ten bf-4k2ws-named divergence snapshot docs coexist with this canonical
+  file (all pushed). This file is the living record; the rest are history.
+
+---
+
 *Everything below this section is the 2026-09-02 analysis. Its specific
 figures (`debd24f`, `73ff9ab`) are superseded by the two sections above; its
 method and conclusions still hold.*
