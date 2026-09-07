@@ -21,6 +21,7 @@ consolidates:
 | [crashes/bf-mje3pd-crash-classification-domchk-bf8c4fd3-2026-09-07.md](../crashes/bf-mje3pd-crash-classification-domchk-bf8c4fd3-2026-09-07.md) | bf-mje3pd classification = INFRASTRUCTURE, heartbeat-instant correction |
 | [../verification/bf-mje3pd-crash-analysis.md](../verification/bf-mje3pd-crash-analysis.md) | Fix-verification report (domchk-9bc6579f) |
 | [../notes/incident-resolution-bf-1y1d0g-bf-mje3pd-crash-2026-09-02.md](../notes/incident-resolution-bf-1y1d0g-bf-mje3pd-crash-2026-09-02.md) | Alert bf-1y1d0g incident resolution |
+| [../investigations/bf-mje3pd-evidence-compilation-domchk-916a1e66-2026-09-07.md](../investigations/bf-mje3pd-evidence-compilation-domchk-916a1e66-2026-09-07.md) | bf-mje3pd evidence compilation (sibling, same evening) |
 
 ---
 
@@ -236,3 +237,10 @@ time):
   their script filenames present at HEAD.
 - **Every cited path** checked to exist at HEAD before citation; archived documents are
   cited at their `docs/archive/` locations.
+
+**Addendum (same attempt, post-push):** HEAD advanced `63ca904` → `bfef974` between the
+verification above and the commit — a sibling's docs-only addition
+(domchk-916a1e66's bf-mje3pd evidence compilation, added to the companion table above). It
+touches no claim in this report. The commit was re-parented onto the new HEAD via the
+private-index recipe with a one-added-path tree gate (2770 → 2771 entries), pushed as
+`f5e6377`, and confirmed contained in `origin/main` with 0/0 divergence.
