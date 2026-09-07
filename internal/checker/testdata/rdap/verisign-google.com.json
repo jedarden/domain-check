@@ -1,0 +1,65 @@
+{
+  "rdapConformance": [
+    "rdap_level_0",
+    "icann_rdap_response_profile_0",
+    "icann_rdap_technical_implementation_guide_0"
+  ],
+  "objectClassName": "domain",
+  "handle": "2138514_DOMAIN_COM-VRSN",
+  "ldhName": "GOOGLE.COM",
+  "unicodeName": "google.com",
+  "status": [
+    "client delete prohibited",
+    "client transfer prohibited",
+    "client update prohibited"
+  ],
+  "entities": [
+    {
+      "handle": "292",
+      "ldhName": "MARKMONITOR INC.",
+      "roles": ["registrar"],
+      "publicIds": [
+        {
+          "type": "IANA Registrar ID",
+          "identifier": "292"
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "eventAction": "registration",
+      "eventDate": "1997-09-15T04:00:00Z"
+    },
+    {
+      "eventAction": "expiration",
+      "eventDate": "2028-09-14T04:00:00Z"
+    },
+    {
+      "eventAction": "last changed",
+      "eventDate": "2024-08-14T09:15:03Z"
+    }
+  ],
+  "nameservers": [
+    {
+      "handle": "NS1.GOOGLE.COM",
+      "ldhName": "NS1.GOOGLE.COM."
+    },
+    {
+      "handle": "NS2.GOOGLE.COM",
+      "ldhName": "NS2.GOOGLE.COM."
+    },
+    {
+      "handle": "NS3.GOOGLE.COM",
+      "ldhName": "NS3.GOOGLE.COM."
+    },
+    {
+      "handle": "NS4.GOOGLE.COM",
+      "ldhName": "NS4.GOOGLE.COM."
+    }
+  ],
+  "secureDNS": {
+    "delegationSigned": false
+  },
+  "port43": "whois.verisign-grs.com"
+}

@@ -1,0 +1,36 @@
+{
+  "snapshot_type": "forgejo_remote_origin_state",
+  "captured_at": "2026-08-13T09:10:00Z",
+  "remote": {
+    "name": "origin",
+    "fetch_url": "https://git.ardenone.com/jedarden/domain-check.git",
+    "push_url": "https://git.ardenone.com/jedarden/domain-check.git"
+  },
+  "branch": "main",
+  "commit": {
+    "sha": "63ba02474c9b6bc339388adb3a44542e10755a10",
+    "short_sha": "63ba024",
+    "message": "fix: remove unused time import and update bootstrap test initialization",
+    "author": {
+      "name": "jedarden",
+      "email": "github@jedarden.com"
+    },
+    "timestamp": "2026-08-09T13:00:56-04:00",
+    "timestamp_unix": 1786317656
+  },
+  "repository": {
+    "name": "domain-check",
+    "local_path": "/home/coding/domain-check"
+  },
+  "context": {
+    "purpose": "Branch divergence analysis - remote Forgejo origin baseline",
+    "bead_id": "bf-2vtzg",
+    "depends_on": "bf-1ea4g",
+    "next_steps": [
+      "Document GitHub mirror state",
+      "Compare local vs Forgejo remote commits",
+      "Compare Forgejo vs GitHub mirror states",
+      "Identify divergent commits and remediation strategy"
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Domain Check Crash Alert Manager Timer
+Documentation=file:///home/coding/domain-check/docs/crash-response-guide.md
+Requires=domain-check-monitoring.service
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

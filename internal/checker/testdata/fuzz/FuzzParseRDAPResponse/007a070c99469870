@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"nAmeservers\":[{\"\xff\":\"\"}],\"seCureDNS\":{\"\xb5\":true}}")

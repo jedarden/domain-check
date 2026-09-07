@@ -1,0 +1,94 @@
+# Git Repository Baseline Metrics (Before git gc)
+
+Repository: domain-check (/home/coding/domain-check)
+Timestamp: 2026-09-06T14:24:00Z (2026-09-06 10:24 EDT)
+
+## Headline Metrics
+
+Repository .git Size: 94M
+Loose Objects: 150
+Loose Objects Size: 1.17 MiB
+Packed Objects: 10712
+Pack Files: 1
+Pack Files Total Size: 90.14 MiB (94521738 bytes)
+
+## Source Measurements
+
+Each metric was read from its collector's output file under /tmp. The three
+collectors ran several minutes apart in a live shared worktree, so the loose
+object figures differ between them (see "Loose Object Count Drift" below). The
+pack and total-size figures are identical across all three files.
+
+### /tmp/git-repo-size.txt — collected 2026-09-06T13:59:31Z
+- Repository .git size: 94M
+- Loose objects: 136 (1.04 MiB)
+
+### /tmp/git-loose-objects.txt — collected 2026-09-06T14:11:04Z (10:11 EDT)
+- Loose objects: 150
+- Loose objects size: 1.17 MiB
+- Prune-packable: 0
+- Note: this git (2.50.1) `count-objects -v` does not emit `pack-redundant`;
+  `prune-packable: 0` is the nearest signal (no loose object is also in a pack).
+
+### /tmp/git-pack-files.txt — collected 2026-09-06T14:19:38Z (10:19 EDT)
+- Pack count: 1
+- In-pack objects: 10712
+- Pack size: 90.14 MiB (94521738 bytes)
+- Total pack directory (incl. .idx/.bitmap/.rev): 91M
+- Total .git: 94M
+- Loose objects at time of collection: 169 (1.27 MiB)
+
+## Pack File Details
+
+- Primary pack: pack-15fe19cbab48c82c72db9b85cbcc0678502736df.pack (90.14 MiB, dated Sep 6 04:00 UTC)
+  - Index size: 294K (301008 bytes)
+  - Bitmap size: 62K (63172 bytes)
+  - Reverse index size: 42K (42900 bytes)
+
+## Loose Object Count Drift
+
+The loose object count rose monotonically across the collection window because
+this worktree is shared and fleet workers were committing throughout:
+
+| Observed at (UTC)  | Loose objects | Loose size |
+|--------------------|---------------|------------|
+| 2026-09-06T13:59:31Z | 136           | 1.04 MiB   |
+| 2026-09-06T14:11:04Z | 150           | 1.17 MiB   |
+| 2026-09-06T14:19:38Z | 169           | 1.27 MiB   |
+| 2026-09-06T14:24:09Z (compile-time recheck) | 176 | 1.32 MiB |
+
+Loose object count and size are therefore **point-in-time values, not stable
+baselines**. The stable figures for this baseline are: total `.git` size (94M),
+pack file count (1), in-pack object count (10712) and pack size (90.14 MiB).
+Any future comparison should treat loose-object deltas smaller than the
+commit rate of the intervening period as noise rather than as a trend.
+
+## Garbage
+
+- Garbage count: 0
+- Garbage size: 0 bytes
+
+## Comparison with Previous Baseline (2026-09-01)
+
+- Repository size: 94M (up from 91M = +3.3%)
+- Pack files: 1 (down from 2 = consolidated)
+- In-pack objects: 10712 (up from 9,404 = +13.9%)
+- Pack size: 90.14 MiB (up from 89.04 MiB = +1.2%)
+- Loose objects: 150-176 over the collection window; the 2026-09-01 baseline
+  recorded 17, but that reading was taken in a quiet worktree and is not
+  comparable to a reading taken during active fleet commits.
+
+## Health Assessment
+
+Repository is HEALTHY: 1 pack file at 90.14 MiB, 0 garbage, and all loose
+objects are recent commits not yet packed (prune-packable: 0). All sizes are
+well under the 500MB warning / 1GB critical thresholds documented in CLAUDE.md
+(Repository Size Limits).
+
+## Next Steps
+
+After git gc is run, compare against this baseline to measure improvement in:
+- Total repository size
+- Pack file organization and compression
+- Loose object count (compare against a compile-time recheck, not the
+  per-collector snapshot, if the worktree is still active)

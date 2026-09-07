@@ -1,0 +1,56 @@
+{
+  "snapshot_type": "github_mirror_remote_state",
+  "captured_at": "2026-09-06T22:14:44Z",
+  "remote": {
+    "name": "github-mirror",
+    "fetch_url": "https://github.com/jedarden/domain-check.git",
+    "push_url": "https://github.com/jedarden/domain-check.git",
+    "note": "Read-only mirror populated by Forgejo's server-side push mirror; never push here directly (CLAUDE.md rule)"
+  },
+  "branch": "main",
+  "commit": {
+    "sha": "72f782f32047497e8dc31e8cd469bdfe0ad4ff12",
+    "short_sha": "72f782f",
+    "message": "docs: re-verify Forgejo origin/main — tip advanced to fb7bedd, zero divergence holds (domchk-2a4e7801)",
+    "author": {
+      "name": "jedarden",
+      "email": "github@jedarden.com"
+    },
+    "committer": {
+      "name": "jedarden",
+      "email": "github@jedarden.com"
+    },
+    "timestamp": "2026-09-06T18:09:58-04:00",
+    "timestamp_unix": 1788732598,
+    "parent_sha": "fb7beddb74599da29173f0d41f76d03a87fa7a2c"
+  },
+  "repository": {
+    "name": "domain-check",
+    "local_path": "/home/coding/domain-check"
+  },
+  "verification": {
+    "method": "git fetch github-mirror main, then git ls-remote against both remotes",
+    "fetched_at": "2026-09-06T22:10:44Z",
+    "fetch_result": "fb7bedd..72f782f  main -> github-mirror/main",
+    "comparison": [
+      {"ref": "github-mirror/main (GitHub, live ls-remote)", "sha": "72f782f32047497e8dc31e8cd469bdfe0ad4ff12"},
+      {"ref": "origin/main (Forgejo, live ls-remote)", "sha": "72f782f32047497e8dc31e8cd469bdfe0ad4ff12"},
+      {"ref": "local main (HEAD)", "sha": "72f782f32047497e8dc31e8cd469bdfe0ad4ff12"}
+    ],
+    "divergence": "zero — GitHub = Forgejo = local HEAD (rev-list left-right 0 0 on both comparisons)"
+  },
+  "context": {
+    "purpose": "Branch divergence analysis - GitHub mirror baseline",
+    "bead_id": "domchk-0dcecbe7",
+    "completes": "next_steps of docs/forgejo-remote-state.json: 'Document GitHub mirror state'",
+    "related_docs": [
+      "docs/forgejo-remote-state.json",
+      "docs/local-main-state.json",
+      "docs/git-remote-configuration-2026-09-06.md"
+    ],
+    "next_steps": [
+      "Re-run git fetch github-mirror main and diff against this snapshot to detect drift",
+      "If GitHub ever diverges from Forgejo, reconcile with a merge commit (never force-push)"
+    ]
+  }
+}

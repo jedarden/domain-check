@@ -1,0 +1,2 @@
+go test fuzz v1
+string("辧\x89\xabɀ\xe3\xbe")

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("琉罹紐留罹留留罹")

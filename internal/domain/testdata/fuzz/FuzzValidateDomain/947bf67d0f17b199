@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\x90\x90\x90\x90\u2000\u2000\u2000\u2000\u2000")

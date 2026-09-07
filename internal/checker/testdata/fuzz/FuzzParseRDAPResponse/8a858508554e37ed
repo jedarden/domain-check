@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\n  \"rdapConform\xa7nce\": [\n    \"rdap_level_0\"\n  ],\n  \"objectClassName\": \"error\",\n  \"errorCode\": 429,\n  \"title\": \"Rate Limit Exceeded\",\n  \"description\": [\n    \"You have exceeded the rate limit for this service.\",\n    \"Please wait before making additional requests.\"\n  ]\n}\n")

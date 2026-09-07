@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"ldhN~me\": \"EXAMPLE.COM\", \"status\": [\"active\"]}")

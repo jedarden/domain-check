@@ -1,0 +1,26 @@
+Rate Limiter Verification Test - 200 req/s
+Date: 2026-04-25
+Target: Verify that 200 req/s triggers 429 responses
+
+Test Configuration:
+- Rate: 200 requests/second
+- Duration: 10 seconds
+- Total requests: 2000
+- IP: 10.100.1.1 (single IP to stress rate limiter)
+
+Results:
+Requests      [total, rate, throughput]         2000, 200.11, 6.90
+Duration      [total, attack, wait]             9.996s, 9.995s, 1.843ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  204.117µs, 812.705µs, 475.612µs, 1.419ms, 3.084ms, 5.857ms, 17.182ms
+Bytes In      [total, mean]                     119530, 59.77
+Bytes Out     [total, mean]                     0, 0.00
+Success       [ratio]                           3.45%
+Status Codes  [code:count]                      200:69  429:1931  
+
+Analysis:
+- 96.55% of requests (1931/2000) returned 429 (rate limited)
+- Only 3.45% of requests (69/2000) returned 200
+- Rate limiter correctly enforces 60 req/min (1 req/sec) limit per IP
+- At 200 req/s, the bucket is exhausted almost immediately
+
+Conclusion: ✓ PASS - Rate limiter correctly triggers 429s at high request rates

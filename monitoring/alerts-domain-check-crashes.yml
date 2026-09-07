@@ -1,0 +1,133 @@
+# Prometheus alert rules for domain-check crash monitoring.
+#
+# These rules own the crash-loop decision that /health deliberately does not
+# make: a crash-looping process reports status "degraded" but stays 200, so a
+# health probe never restarts it and multiplies the problem. Alerting on
+# domcheck_crash_loop_detected is what turns that signal into action.
+#
+# Metric sources: internal/server/metrics.go. Event semantics:
+# internal/server/crashrecorder.go. Response procedures for every alert below:
+# docs/crash-monitoring-alerts.md.
+#
+# Load with: rule_files: [monitoring/alerts-domain-check-crashes.yml]
+# The scrape/deployment wiring lives in jedarden/declarative-config — keep
+# manifest changes there, not in this repo.
+groups:
+  - name: domain-check-crashes
+    rules:
+      # The recorder's own verdict: >= crash-loop-threshold (default 3) crashes
+      # of kind panic or shutdown_error inside crash-loop-window (default 5m).
+      # Signal receptions are excluded — a deploy sends SIGTERM routinely.
+      - alert: DomcheckCrashLoop
+        expr: domcheck_crash_loop_detected == 1
+        for: 1m
+        labels:
+          severity: critical
+          service: domain-check
+        annotations:
+          summary: "domain-check is in a crash loop ({{ $labels.instance }})"
+          description: >-
+            {{ $value }} crash events of kind panic or shutdown_error occurred
+            within the crash-loop window. The process reports degraded on
+            /health but keeps serving; it will not restart itself.
+          runbook_url: docs/crash-monitoring-alerts.md#domcheckcrashloop
+
+      # One recovered panic means a request path hit an unexpected condition
+      # and the client got a 500. Rare by design — investigate each one.
+      - alert: DomcheckPanicRecovered
+        expr: increase(domcheck_crashes_total{kind="panic"}[10m]) > 0
+        labels:
+          severity: warning
+          service: domain-check
+        annotations:
+          summary: "domain-check recovered a panic ({{ $labels.instance }})"
+          description: >-
+            {{ $value }} panic(s) recovered in the last 10m. The stack trace is
+            on /api/v1/crashes and in the on-dump ring (data/crash-dumps).
+          runbook_url: docs/crash-monitoring-alerts.md#domcheckpanicrecovered
+
+      # A panic storm is the panic counter moving fast enough that requests
+      # are failing at rate — usually one bad code path under load, or a
+      # dependency returning garbage at scale.
+      - alert: DomcheckPanicStorm
+        expr: increase(domcheck_panics_recovered_total[5m]) > 5
+        labels:
+          severity: critical
+          service: domain-check
+        annotations:
+          summary: "domain-check panic storm ({{ $labels.instance }})"
+          description: >-
+            {{ $value }} panics recovered in 5m. Requests are failing at rate;
+            consider shedding traffic or rolling back while the stack traces
+            are collected.
+          runbook_url: docs/crash-monitoring-alerts.md#domcheckpanicstorm
+
+      # Shutdown() itself failed — connections were neither drained nor cut
+      # cleanly. This is recorded as a crash event and counts toward the loop
+      # verdict, because the process is going away in a bad state.
+      - alert: DomcheckShutdownError
+        expr: increase(domcheck_graceful_shutdowns_total{outcome="error"}[10m]) > 0
+        labels:
+          severity: critical
+          service: domain-check
+        annotations:
+          summary: "domain-check graceful shutdown failed ({{ $labels.instance }})"
+          description: >-
+            {{ $value }} shutdown error(s) in 10m. Shutdown() returned an error
+            other than the drain timeout; in-flight requests were abandoned.
+          runbook_url: docs/crash-monitoring-alerts.md#domcheckshutdownerror
+
+      # The 15s drain budget was exhausted and remaining connections were
+      # closed forcibly. Ordinary on a hard stop, a smell when it repeats.
+      - alert: DomcheckShutdownForced
+        expr: increase(domcheck_graceful_shutdowns_total{outcome="forced"}[30m]) > 2
+        labels:
+          severity: warning
+          service: domain-check
+        annotations:
+          summary: "domain-check drain timeout, connections cut ({{ $labels.instance }})"
+          description: >-
+            {{ $value }} forced shutdown(s) in 30m. Shutdown exceeded the 15s
+            drain budget; slow in-flight requests (RDAP upstreams?) were cut
+            off mid-response. Check domcheck_shutdown_duration_seconds and the
+            request-duration histograms.
+          runbook_url: docs/crash-monitoring-alerts.md#domcheckshutdownforced
+
+      # The recurring fleet failure mode: a SIGHUP cascade. One SIGHUP is
+      # survived (it shares the graceful-shutdown path with SIGINT/SIGTERM and
+      # is observable on /metrics); a burst of them is infrastructure, not the
+      # application. See docs/crash-safeguards-and-monitoring.md.
+      - alert: DomcheckSighupCascade
+        expr: increase(domcheck_signal_receptions_total{signal="SIGHUP"}[15m]) > 3
+        labels:
+          severity: warning
+          service: domain-check
+        annotations:
+          summary: "SIGHUP cascade hitting domain-check ({{ $labels.instance }})"
+          description: >-
+            {{ $value }} SIGHUP receptions in 15m — the signature of an
+            infrastructure signal cascade (needle dispatch scopes, systemd
+            unit reloads), not of application behaviour. Investigate the host,
+            not the code.
+          runbook_url: docs/crash-monitoring-alerts.md#domchecksighupcascade
+
+      # Guard the attribution path itself: a signal whose handler never
+      # publishes an execution means the signal-to-drain instrumentation broke
+      # and the signal metrics above can no longer be trusted.
+      - alert: DomcheckSignalHandlerGap
+        expr: |
+          sum by (signal) (increase(domcheck_signal_receptions_total[30m]))
+            >
+          sum by (signal) (increase(domcheck_signal_handler_executions_total[30m]))
+        labels:
+          severity: warning
+          service: domain-check
+        annotations:
+          summary: "signal receptions exceed completed handler runs ({{ $labels.instance }})"
+          description: >-
+            More signals were received in 30m than signal handlers completed,
+            compared aggregate-to-aggregate per signal (receptions carry
+            {signal}, executions carry {signal,outcome}). A reception whose
+            handler never ran means shutdown was interrupted before the drain
+            finished.
+          runbook_url: docs/crash-monitoring-alerts.md#domchecksignalhandlergap

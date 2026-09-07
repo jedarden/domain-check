@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"ldhName\": \"MPLE.COM\", \"status\": [\"active\"]}")
