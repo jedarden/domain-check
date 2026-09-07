@@ -150,6 +150,10 @@ First-hand re-verification, this session (2026-09-07):
 
 One deliverable-shaped gap this dispatch did surface: the doc sitting at the dispatch-named path — `docs/crash-investigations/bf-1ea4g-crash-investigation.md` (2026-08-17) — is outside the §6 census's reviewed scopes and still argued the pre-re-determination record. It now carries a dated correction banner pointing here; see §6.4.
 
+### 5.4 Resolution record + re-verification (domchk-e2c1e79e, 2026-09-07 ~16:45 UTC)
+
+The "verify crash prevention improvements and document learnings" dispatch closed with a resolution ledger at [`docs/crash-resolution-bf-1ea4g-final.md`](crash-resolution-bf-1ea4g-final.md) — a pointer-and-verification record, cross-registered here rather than replacing this document. Its independent passes on the same day as §5.1–§5.3: `test-closed-bead-filter.sh` **7/7**; `test-gc-memory-bounds.sh` **16/16** (push replay peak RSS **232,504KB**, byte-identical to §5.1's run — deterministic workload, measured live from GNU `time -v`); `test-crash-alert-fixes.sh` **13/13** (worktree copy carrying a co-tenant's uncommitted +38-line test, disclosed); `check-repo-health.sh` exit 0 (106 MB, 372 loose / 3.50 MiB, 0 garbage); preflight 4/4; 8/8 timers; 0/0 divergence; **zero** alert beads created during the runs. Status deltas since this document was compiled: **M-1 has landed** (8d326cc, `check-repo-health.sh` now reports unpushed-backlog counts — §5.3's "uncommitted, not attributed" no longer holds), the bf-titled alert pool drained 12 → **10 unresolved** (7 open / 3 in_progress; 24 unresolved if the domchk-* title-mentions are included, the last open split child domchk-cb9eb4de in flight), and the ALERT-shaped count is **56** under this session's `^ALERT` shape rule.
+
 ---
 
 ## 6. Document inventory — what was reviewed
