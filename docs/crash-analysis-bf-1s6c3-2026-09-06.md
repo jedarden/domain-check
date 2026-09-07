@@ -2025,3 +2025,78 @@ edit.
 its only change, and it supersedes the stale note-citation as the investigation's record.
 Closing it unblocks `domchk-9c040403` (duplicate-detection for alert bf-5cfqn), which has
 waited on this bead since 2026-08-26.
+
+### Split-refusal + verification close 2026-09-07 (domchk-46d4b8d5 — "Test and verify crash fix works", the original fix chain's verify step and the Sep-2 split's umbrella)
+
+domchk-46d4b8d5 was created 2026-08-26T06:54:15Z as the verify step of the original fix chain —
+domchk-cca8a731 ("Implement fix for agent crash prevention", closed) blocks it and it blocks
+alert bf-3laof. The auto-split dispatch reaching it asserts it "has failed 5 times in a row and
+needs to be broken down" into 3–5 children.
+
+**The premise is failure-count cycling, not five failed attempts — the forensic record holds two
+successful closes and no failed work.** On 2026-09-02 the bead closed at 02:45:40Z ("✅ Crash fix
+verification completed successfully. All 20 tests passed, confirming the fix prevents the crash
+under the same conditions that caused bf-1s6c3 to fail. Repository is healthy (91MB vs 18GB)…")
+and again at 03:00:34Z ("Crash fix verification completed successfully. All 20 tests passed.
+Repository health maintained at 91MB (99.5% reduction from 18GB crash state)…"); each close was
+auto-reopened within ~2 minutes (02:46:27Z, 03:02:12Z) and tagged `failure-count:1`→`5` plus a
+`verification-failed` label that contradicts the pass reasons it cycled over. Three releases
+(02:28:16Z roam-10, 03:09:09Z roam-11, 03:14:32Z roam-8) complete the Sep-2 churn — the same
+worker-release cycling the §1919 subsection documented on this bead's own child. At 03:13:08Z a
+prior dispatch response had already converted the bead into an umbrella (label `umbrella`; one
+child, domchk-536fb6e7, blocking it), so this dispatch additionally asks to split a bead that
+had already been split.
+
+**The chain closed beneath it.** domchk-536fb6e7 closed 2026-09-07T10:07:48Z (§ above, commit
+67a601c) with the explicit handoff: "Closing unblocks domchk-46d4b8d5, whose Notes already carry
+the verification outcome; its worker can close it on the same evidence." The other blocker,
+domchk-cca8a731, has been closed since the fix landed. With both blockers closed, this close
+cannot bounce.
+
+**All four acceptance criteria re-verified first-hand (this bead's own run, 2026-09-07):**
+
+| Criterion | First-hand evidence |
+|---|---|
+| Test case reproducing the original crash scenario | `scripts/test-crash-fix-bf-1s6c3.sh` (tracked, on `origin/main`) asserts the crash's preconditions inverted — `.git` < 1 GB (**102 MB** vs 18 GB), loose objects < 100 MB (1.20 MiB / 112 objects vs 17 GB), git status/log/count-objects/fsck healthy — and re-runs the memory-intensive operations that triggered the OOM (`git rev-list --count`, `git verify-pack -v`) |
+| Agent no longer crashes under those conditions | **20/20, exit 0** — matching both of the bead's own Sep-2 closes and this morning's domchk-536fb6e7 re-run; the 19/20 an earlier sibling chain saw was the resource-monitor wiring test, since fixed in-tree (`server_safeguards_test.go:226`) |
+| Standard test suite, no regressions | the suite's step 7 `go test ./… -short` passes inside the same run |
+| Verification results documented | `docs/verification/crash-fix-verification-report-bf-1s6c3-2026-09-01.md` on `origin/main` (0205a5b; superseded-bannered 635bb21) renders the criteria; this subsection is the bead's own record |
+
+Splitting would have created 3–5 child beads re-doing a pushed deliverable that two closes
+already accepted; the split was refused and no `SPLIT_COMPLETE` was emitted.
+
+**Disposition:** split refused; bead closed complete with **no new document** — this dated
+subsection is its only change. Stale labels `failure-count:5`, `verification-failed` and the
+co-resident `split-child` (the completed-umbrella re-split trigger) were removed; `umbrella`
+kept. Closing it, with domchk-3bf425da already closed, leaves alert bf-3laof with no open
+blocker (§ next).
+
+### Alert closure 2026-09-07 (bf-3laof — the original alert bead for the bf-1s6c3 crash, 2026-08-12T22:08:37Z)
+
+bf-3laof is the alert that started this whole record: "ALERT: Agent crash on bead bf-1s6c3",
+created 2026-08-12T22:08:37.515Z — 37 minutes into the storm's kill window (21:31Z→02:01Z,
+76 dispatches / 71 memcg-OOM kills, §1) — and the parent bead the §-above closure unblocks. Its
+exploration-era Notes are a pre-repair snapshot: "Local main branch: 663 commits ahead of
+origin/main … the original task (bf-1s6c3) appears based on incorrect premises", with a
+three-cause speculation ("agent confusion / resource exhaustion / manual intervention") that
+predates every root-cause determination since. The divergence point is settled in
+`docs/branch-divergence-analysis.md`: the 663-ahead figure described the resolved pre-squash
+state, GitHub lagged Forgejo but never diverged, and the 61d27ac baseline it cites no longer
+exists.
+
+**First-hand re-checks (this bead's own run, 2026-09-07):** `origin/main..HEAD` = 0 and
+`HEAD..origin/main` = 0 (both at eb717df) — the divergence the alert's Notes investigated no
+longer exists in either direction. Repository: `.git` 102 MB · 112 loose objects / 1.20 MiB ·
+1 pack 99.11 MiB / 11,360 in-pack · garbage 0 · `git fsck --connectivity-only` exit 0
+(dangling-only). The crash it alerts is classified INFRASTRUCTURE, repo-bloat era (ef39024,
+superseding the corpus's earlier no-crash claim), root-caused through §§1–11, and its fix is
+re-verified 20/20 today (§ above). Its resolution chain is fully closed — domchk-cca8a731
+(implement fix) → domchk-46d4b8d5 (test and verify, § above), alongside domchk-3bf425da
+("Verify crash fix and repository stability", closed) — and its investigation umbrella
+domchk-b79733ba closed at § above. No open blocker remains on the alert.
+
+**Disposition:** alert closed **resolved** — the crash it names is investigated, classified,
+fixed, and re-verified, with this report as the canonical record; no new document, this dated
+subsection is its only change. Stale labels `failure-count:5`, `verification-failed` and the
+co-resident `split-child` were removed; `alert` / `crash` / `signal--1` / `umbrella` kept as
+accurate descriptors of what the alert reported and what it became.
