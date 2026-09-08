@@ -25,7 +25,10 @@ exit-code -1 events across 6 beads from 05:36 to 23:57 UTC (~18.5 hours)**.
 
 **Classification: INFRASTRUCTURE — resource exhaustion (OOM) during git operations on an
 18 GB bloated repository. Not a code defect.** No investigation of this workspace has ever
-found a domain-check code defect.
+found a domain-check code defect. The formal classification record — the
+[crash response guide](../crash-response-guide.md) framework mapping, the indicator
+inventory split available/missing, and the confidence basis — is **§11** (added 2026-09-08,
+domchk-8055c332).
 
 **Reproducibility: transient environmental failure.** The kill was deterministic *while the
 trigger existed* (50/50 deaths, zero exit-code variation), and the trigger — the bloated
@@ -309,7 +312,113 @@ including most of bf-4yjq's 50, remain open — the known alert-hygiene debt (§
 | `docs/crashes/bf-4yjq-crash-report.md` | Superseded on crash count/cadence; retained for signal analysis and prevention-stack validation (now banner-linked here). Its "1.7 GB" post-cleanup figure is an intermediate state — 91–92 MB matches the gc evidence and today's verification |
 | `docs/remediation-strategy-bf-4yjq.md`, `docs/crash-pattern-analysis-bf-4yjq.md`, `docs/crash-data-extraction-bf-4yjq.md`, `docs/crash-artifacts-bf-4yjq*.md`, `docs/crash-context*bf-4yjq*.md`, and the various bf-4yjq summaries | Facet documents from the earlier investigation waves; superseded where they repeat the 9-crash count, otherwise consistent with this report |
 | `.beads/crash-bf-4yjq-summary.txt` | Contemporaneous metrics; superseded on crash count |
+| `docs/crash-investigations/bf-4yjq-crash-classification-domchk-48e02d6f-2026-09-06.md` | **Consistent** — the guide's four-way taxonomy verdict (INFRASTRUCTURE) with false-positive rules applied; verdict identical to §11 |
+| `docs/crash-investigations/bf-4yjq-crash-pattern-analysis-domchk-b9513e0b-2026-09-06.md` | **Consistent** — exit-code −1 semantics, workspace-wide pattern analysis from raw worker logs, and the last-`exit_code=-1`-anywhere date (2026-08-17); adds the cross-date incident-family comparison |
+| `docs/crash-investigations/bf-4yjq-root-cause-determination-domchk-54bc57df-2026-09-06.md` | **Consistent** — renders §6 as a standalone causal chain with per-step confidence, contributing factors, and the evidence chain (also resolves the SIGHUP question against the archived framing) |
+| `docs/crash-investigations/bf-4yjq-evidence-reconciliation-domchk-7a34eb37-2026-09-07.md` | **Consistent** — raw-log re-verification of §3/§5/§6 (count, window, 191.9 s interval, recovered transcripts); see its banner in §3 |
 
 **Related investigations:** bf-1s6c3 (repository bloat, `docs/crashes/repository-bloat-crash-bf-1s6c3-2026-08-12.md`),
 bf-173o7e (gc execution, `docs/crash-investigations/bf-173o7e-crash-investigation.md`),
 bf-2ildm (bloat source, `docs/crash-context-bf-2ildm-complete.md`).
+
+---
+
+## 11. Formal Classification Record (2026-09-08, domchk-8055c332)
+
+Formal application of the [crash response guide](../crash-response-guide.md) classification
+framework to bf-4yjq's exit signals and error indicators. §1 states the verdict; this section
+records how it maps onto the guide, what evidence supports it, and where the evidence stops.
+Figures marked **[re-derived 09-08]** were recomputed first-hand this pass from the raw sources
+(`.beads/checkpoint/forensic.jsonl`, the recovered session transcripts, live host/journal
+state); carried figures keep their §3/§6 citations. This section does not overturn any earlier
+verdict — it consolidates them and links the classification chain (§10).
+
+### Verdict
+
+| Field | Value |
+|-------|-------|
+| **Classification** | **INFRASTRUCTURE — repository bloat** (guide Quick Reference row 2: exit −1 + fixed-cadence re-dispatch deaths + `.git` > 5 GB; guide note 1 makes bloat a distinct infrastructure *sub-type*, not generic memory pressure) |
+| **Not CODE_DEFECT** | No domain-check code was executing or implicated in any of the 50 deaths — every fatal command is a git plumbing operation over the bloated object store. Consistent with every other investigation of this workspace (zero code defects across 157+) |
+| **Not FALSE_POSITIVE** | The deaths are mid-task, not post-completion (see Phase 2A below) |
+| **Confidence — bloat correlation** | **HIGH** |
+| **Confidence — kill mechanism** | **MEDIUM-HIGH** (kernel logs for Aug-12 are not retained — see missing evidence) |
+
+### Phase 1 — automated classification unavailable by construction
+
+`./scripts/crash-classifier.sh bf-4yjq` exits with `ERROR: Bead trace not found` **[re-derived
+09-08]**. Both of its inputs post-date the storm:
+
+- `.beads/traces/bf-4yjq/` does not exist — the trace directory is a single slot and holds
+  nothing for the subject bead (trace capture did not exist on Aug-12).
+- `.beads/events.jsonl` starts 2026-08-16T04:21 — four days *after* the last kill.
+
+The classifier's silence is an input-coverage gap, **not** evidence that no crash occurred:
+a trace-less `outcome: crash` in this era classifies from the corpus, not from the tool. The
+same gap is recorded in the classification chain (domchk-b9513e0b, 2026-09-06). This is a
+manual Phase 2A classification throughout.
+
+### Phase 2A checklist, applied
+
+| Guide checklist item | Result |
+|----------------------|--------|
+| Exit code / outcome | `Exit code: -1 (signal -1)` on **50/50** distinct alert beads, window 2026-08-12 17:54:00.249 → 20:30:43.716 UTC (alert-bead `created_at`, the canonical window) **[re-derived 09-08]** |
+| Work completed before crash? | **No.** Every death is mid-task — a reconciliation `git push` in flight that never delivered (Forgejo `origin/main` at `63ba024` across the whole window; 50 pushes attempted, 0 delivered, §3 addendum). The task completed 2026-08-17 only after the storm ended → **INFRASTRUCTURE, not FALSE_POSITIVE** |
+| System-wide event check | **Unrecoverable.** The journal holds a single boot from 2026-08-15 19:56:33 EDT (the Aug-14 reboot); `journalctl -k` for the crash window returns "No entries" **[re-derived 09-08]** |
+| Cgroup boundary check | Binding limit is the dispatch scope's `MemoryMax` = 12 GiB, not the host — the guide names bf-4yjq as the type case where the kill lands inside the scope on a healthy host. Not directly re-verifiable for Aug-12 (no kernel records) |
+| Pattern 1 — post-completion FP (~40%) | Excluded: work was not complete during the window |
+| Pattern 2 — git gc (~15%) | Excluded: the last fatal command is `git push`, not gc (the gc-side sibling is bf-4x12ec, 2026-08-14) |
+| Pattern 3 — repository bloat | **Every symptom matches**: zero exit-code variation, fixed cadence, `.git` ≈18 GB, 17.2 GiB loose vs 9.6 MiB packed, routine git operations killing agents, multiple deaths in a short period |
+
+**Exit-code semantics (guide note 2).** `-1` is needle's sentinel for a signal death whose
+code was not recorded (`code().unwrap_or(-1)`), **not** a signal number — and the
+`signal -1` wording in the alert descriptions is that sentinel echoed back, not a kernel
+signal reading. The correct SIGKILL encoding (137) never appears anywhere in the record, so
+no specific signal may be asserted from `-1` alone; the OOM-class attribution rests on the
+family inference below, and the defensible restatement is "signal death, OOM-class by family
+inference".
+
+### Indicator inventory
+
+**Available:**
+
+| # | Indicator | Value | Source |
+|---|-----------|-------|--------|
+| 1 | Exit code | `-1` on 50/50 crash alert beads, zero variation | forensic.jsonl **[re-derived 09-08]** |
+| 2 | Alert labels | `signal--1` on all 50; `failure-count` escalators 1→12; `umbrella`/`verification-failed` on 33 | forensic.jsonl **[re-derived 09-08]** |
+| 3 | Cadence | 191.9 s mean interval; 2h37m continuous, then stops | §3 (2026-09-07 correction; the sibling record's median 156 s is consistent) |
+| 4 | Last fatal command | `git push origin main` in **50/50** crash-run transcripts (56 survive; the other 6 are non-crash sessions) | raw-logs tarball **[re-derived 09-08]** |
+| 5 | Repo state at crash | `.git` ≈18 GB; 17.2 GiB loose across ~4,594 objects vs 9.6 MiB packed (≈1,800:1) | §6, corroborated by alert-bead notes written 2026-08-16 ("18GB .git with 17.2GB loose objects") |
+| 6 | Temporal boundary | Kills stop exactly when the repo is packed (Aug 13); zero recurrences in 3+ weeks | §6/§7 — live check today: `.git` 105 MB, 178 loose / 1.16 MiB, 1 pack, health clean **[re-derived 09-08]** |
+| 7 | Storm context | 455 exit −1 events across 6 beads the same day (100% of the day's kills) | §4 |
+
+**Missing (named):**
+
+| # | Missing evidence | Why it matters / why it is gone |
+|---|------------------|--------------------------------|
+| 1 | Kernel memcg OOM records for Aug-12 | The only *direct* proof of the mechanism (`oom-kill`, `CONSTRAINT_MEMCG`, scope/task/rss lines). Lost to the Aug-14 reboot — the journal's first entry is 2026-08-15 |
+| 2 | Exit code 137 records | The direct OOM encoding; never captured for any of the 50 |
+| 3 | Core dumps | None — consistent with SIGKILL, but not probative of it |
+| 4 | Stack traces | None exist and none can exist: a SIGKILL leaves none. Their absence is therefore not evidence of an application fault |
+| 5 | Monitor logs reaching Aug-12 | `.beads/logs/` resource-monitor floor is 2026-09-02; the monitor timers were installed long after the storm |
+| 6 | Needle event records for Aug-12 | `.beads/events.jsonl` and the forensic event log both start 2026-08-16 |
+| 7 | Automated classifier input | Trace slot empty (Phase 1 above) |
+| 8 | Crash-era commits | Removed from the DAG by the Aug-16 squash commit |
+
+### Confidence basis
+
+- **Bloat correlation — HIGH.** Independent of any kernel telemetry: the contemporaneous repo
+  size is recorded (item 5), the crash window ends exactly at the cleanup (item 6), the crash
+  never returned once the repo stayed small, and the same regime killed 455 attempts across 6
+  beads in one day (item 7).
+- **Kill mechanism (memcg-OOM SIGKILL inside the 12 GiB dispatch scope during `git push`) —
+  MEDIUM-HIGH.** For Aug-12 itself the mechanism is inferred, not observed: sentinel −1 plus a
+  uniform push-side death plus an inverted loose:packed ratio plus a multi-hundred-commit pack
+  per attempt. It is *directly kernel-verified* only for the later members of the same death
+  class — bf-4x12ec (gc-side, 2026-08-14) and bf-198ne (push-side, 2026-08-16), whose
+  `CONSTRAINT_MEMCG` records inside the same `MemoryMax=12 GiB` scopes established the
+  mechanism (bf-1ea4g belongs to the same push-side class by its RCA). That is why this is not
+  HIGH: the Aug-12 kills are attributed by class membership, not by their own kernel records.
+
+**Nothing above changes §1/§6. What it adds is the guide-mapping, the automated tooling's
+coverage boundary, an explicit statement of which evidence is present and which is missing,
+and the reason each confidence level is what it is.**
