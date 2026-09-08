@@ -267,8 +267,8 @@ this report are preserved as of their original 2026-08-17 investigation date.
 **System Status:** ✅ HEALTHY — All safeguards operational and effective.
 
 **Investigation Date:** August 17, 2026
-**Last Reviewed:** September 8, 2026 (body harmonized with the addenda — Summary/Resolution-step "53rd attempt" phrasing, RCA mechanism, Signal framing, System-State sources — per the section inventory, bead domchk-8c78ae8b; concurrent: Addendum 8, crash-window resource timeline + safe-operating-limits verdict, bead domchk-5f3ec6e1, appended at e0b70dab while these v1.10 edits were still uncommitted; prior: Addendum 7, parent acceptance-criteria mapping + live completion verification, bead domchk-fe10456e; no-code-defect finding made explicit for domain-check, bead domchk-e48b5e1b, 2026-09-07; metric provenance re-check, bead domchk-791bfb2e)
-**Report Version:** 1.10 (Addenda 2–8 below; Addendum 4 re-verified by second dispatch; v1.7 corrects Addendum 4's attribution of the 753 MB final metrics from bf-173o7e to the parent bead bf-4x12ec; v1.8 adds the explicit "no domain-check code defect / environmental-only" finding under Crash Classification and in the Conclusion — a clarification, no prior claim was refuted; v1.9 appends Addendum 7, the consolidation record mapping parent domchk-46a00141's three acceptance criteria to their delivering beads/commits/artifacts and re-verifying bf-4x12ec's completion status live; v1.10 applies the section inventory's gap checklist (bead domchk-f6aba211) in place — dated Correction blocks under Summary, System State, Signal Analysis and Root Cause Analysis harmonizing the body's v1.0-era wording with the addenda's primary-source corrections, with no historical text removed)
+**Last Reviewed:** September 8, 2026 (Addendum 9, workload contribution + reproducibility assessment, bead domchk-78d89c6b, appended on top of origin/main `a00d02bb`; prior this date: body harmonized with the addenda — Summary/Resolution-step "53rd attempt" phrasing, RCA mechanism, Signal framing, System-State sources — per the section inventory, bead domchk-8c78ae8b; concurrent: Addendum 8, crash-window resource timeline + safe-operating-limits verdict, bead domchk-5f3ec6e1, appended at e0b70dab while these v1.10 edits were still uncommitted; prior: Addendum 7, parent acceptance-criteria mapping + live completion verification, bead domchk-fe10456e; no-code-defect finding made explicit for domain-check, bead domchk-e48b5e1b, 2026-09-07; metric provenance re-check, bead domchk-791bfb2e)
+**Report Version:** 1.11 (Addenda 2–9 below; Addendum 4 re-verified by second dispatch; v1.7 corrects Addendum 4's attribution of the 753 MB final metrics from bf-173o7e to the parent bead bf-4x12ec; v1.8 adds the explicit "no domain-check code defect / environmental-only" finding under Crash Classification and in the Conclusion — a clarification, no prior claim was refuted; v1.9 appends Addendum 7, the consolidation record mapping parent domchk-46a00141's three acceptance criteria to their delivering beads/commits/artifacts and re-verifying bf-4x12ec's completion status live; v1.10 applies the section inventory's gap checklist (bead domchk-f6aba211) in place — dated Correction blocks under Summary, System State, Signal Analysis and Root Cause Analysis harmonizing the body's v1.0-era wording with the addenda's primary-source corrections, with no historical text removed; v1.11 appends Addendum 9, the workload-contribution and reproducibility assessment of split child 3 of umbrella domchk-4adc1a55 — deliverable command in progress at all 44 kills, workload contribution = necessary trigger via condition interaction, deterministic-then / non-reproducible-now, live-verified 2026-09-08)
 
 ## Addendum 2 — Primary-Source Retry-Storm Analysis (2026-09-02, bead domchk-661c2dc6)
 
@@ -921,3 +921,120 @@ cadence, and the Aug-16 kernel records of the same mechanism at the same cap.
 
 **Addendum 8 Sources:** `.beads/logs/resource-monitor.log` + `resource-metrics.log` (absence, greps run this dispatch); journalctl (boot list, epoch-bounded window query, `journalctl -k` memcg recount); `docs/crashes/bf-4x12ec/attempt-index.tsv`; `docs/crash-investigations/evidence/bf-4x12ec/crash-logs/transcript-midstorm-9539f3b2.jsonl`; `~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-14.jsonl`; `docs/crash-investigations/evidence/bf-4x12ec/system-state.md` (independent derivation, agreeing); repo CLAUDE.md safe-operating-limits table
 **Addendum 8 version note:** appended at HEAD `e0b70dab` (version line still 1.9/1.10 in flight — the v1.10 body-harmonization of bead domchk-8c78ae8b was uncommitted in the worktree and is intentionally not carried by this addendum); no version bump claimed by this addendum.
+
+---
+
+## Addendum 9 — Workload Contribution and Reproducibility Assessment (2026-09-08, bead domchk-78d89c6b)
+
+Split child 3 of 4 of umbrella `domchk-4adc1a55`; scope: what bf-4x12ec was executing at
+crash time, whether that workload contributed to the crash, and whether the crash is
+reproducible or a one-time event. Depends on child 2's resource verdict (Addendum 8) for
+the resource conclusions used below; nothing here re-opens them. All times UTC.
+
+### What bf-4x12ec was executing at crash time
+
+**The bead's own deliverable command — `git gc --aggressive --prune=now`, mid-flight at
+every kill.** Not bead operations, not post-completion cleanup, not an incidental
+background job: the worker died inside the task it was dispatched to do. Re-verified
+first-hand this dispatch from the retrieved bundles:
+
+- Both surviving crash-era session transcripts end at that exact unanswered `Bash`
+  `tool_use` with no following `tool_result` — attempt 1 (`transcript-attempt1-crash-8b2a5b0d.jsonl`, where the gc is preceded by a `git config --unset gc.aggressivewindow` adjustment) and attempt 15 mid-storm (`transcript-midstorm-9539f3b2.jsonl`, where it is preceded by attempt 15's `df -h / && free -h` host reading). The operation-summary census (`docs/crash-investigations/evidence/bf-4x12ec/operation-summary.md`, bead domchk-dfce2360) extends this to **44/44 exit −1 attempts** dying inside the same command, killed 18.6–80.6 s (mean 30.8 s) after issuing it (per-attempt lifetimes 38.9–115.8 s, `attempt-index.tsv`).
+- **No attempt ever completed the gc.** `git count-objects -vH` re-run at 10:43:49.108Z
+  returned **byte-identical** output to 10:21:23.336Z — 4,649 objects / 17.20 GiB loose
+  (Addendum 8's timeline) — so the store was untouched by everything the storm threw at
+  it. At every kill the work was still to do; that is the opposite of a
+  post-completion kill.
+- The eventual completion belongs to a different bead four days later: auto-split child
+  **bf-173o7e**, closed 2026-08-17T17:12:09Z ("17.20GB loose objects packed into 444MB
+  pack file, repository valid"). bf-4x12ec's own completion notes ("Git cleanup completed
+  successfully despite agent crash") compress this into one sentence and are easy to
+  misread as "the crash came after the work" — the addenda above (2 §3, 4, 7) correct
+  that reading; this one states it plainly: **at all 44 kills, nothing had completed.**
+
+### Comparison against the documented patterns
+
+Against `docs/crash-response-guide.md` and
+`docs/research/root-cause-analysis-signal-minus-one-crashes.md` (with its dated
+correction of 2026-09-07, bead domchk-15999f2c):
+
+| Documented pattern | Match? | Reading for bf-4x12ec |
+|---|---|---|
+| Pattern 1 — Post-completion false positive (~40 %) | **No** | No commit, no deliverable, no completion within 30 s — or at all — before any kill (byte-identical `count-objects` above). The 30-second gap heuristic has nothing to latch onto. |
+| Pattern 2 — Git GC operations (~15 %) | **Exact match** | `git gc --aggressive` in progress, exit −1. Note the pattern's verification step ("repository valid and compressed → gc succeeded, termination was cleanup") mis-leads if applied across the storm: the repository became valid and compressed only via bf-173o7e four days later. No in-storm attempt got there. |
+| Pattern 3 — Infrastructure: repository bloat (~15 %) | **Exact match** | 17.20 GiB loose objects; fixed ~90–100 s re-dispatch cadence; zero exit-code variation across 44 deaths; routine git operation OOM. |
+| FP Rule 1 (commit < 30 s before crash) | No | No commit existed anywhere in the storm window. |
+| FP Rule 2 (crash → retry → success = self-healed transient) | **Surface match only** | The guide's own bf-1s6c3 caveat predicts this case: attempt 53's exit 0 was needle's **auto-split** (`SPLIT_COMPLETE`, Addendum 4 §3) changing the task shape, not the gc completing, and the environment did not change on Aug-14 — the gc child bf-173o7e's own attempts died the same way before its eventual success. A persistent cause outlasting the retry loop is Infrastructure, not transient. |
+| Research doc: exit −1 semantics | Consistent | −1 is needle's writer-side sentinel for a worker dead with no wait status; it identifies no signal number, and the doc's "SIGHUP cascade" rank has zero log support (its own dated correction). Classification: memory-pressure/OOM (Type 1) over repository bloat (Type 5) — infrastructure, not code, not workflow, not service. |
+
+**Kill layer vs alert layer.** The 44 kills are real INFRASTRUCTURE events. The 44
+auto-minted one-alert-per-kill beads are the FALSE_POSITIVE layer — the target bead
+closed rev 4 on 2026-08-17, so every alert on it is stale by the guide's classification
+table (44 storm alerts + 16 regeneration beads: `docs/crash-investigations/bf-4x12ec-alert-inventory.md`). A real kill and a false-positive alert are not contradictory
+here; they are different layers of the same storm.
+
+### Verdict: did the workload contribute?
+
+**Yes — it is the proximate trigger and the sole memory consumer, and none of that is a
+defect in the work performed.** Three conditions were jointly necessary; remove any one
+and no crash occurs:
+
+1. **17.20 GiB of loose objects** — the precondition, which is itself the thing the task
+   existed to fix (Phase 1.2 emergency stabilization "to eliminate the OOM risk").
+2. **No pack-memory bound** — `pack.windowMemory` was not set anywhere until 2026-09-02,
+   so `pack-objects` was free to build its delta window and delta cache without limit.
+3. **The 12 GiB dispatch-scope `MemoryMax`** — the kill boundary (Addendum 8; the
+   Aug-16 kernel records show the same `git` deaths at 11.73–11.97 GiB anon-rss against
+   that cap, and the surviving-journal recount in
+   `docs/crash-investigations/evidence/bf-4x12ec/kernel-systemd-messages.md`, bead
+   domchk-ad80e265, finds 375 kills at exactly `usage==limit==12582912kB`).
+
+The workload's contribution is therefore **condition interaction, not workmanship**: a
+legitimate, necessary operation whose unbounded memory profile — over a bloated store,
+inside a capped scope — was the crash mechanism. The classification stays
+INFRASTRUCTURE with no code defect, consistent with this report's standing finding and
+with the repo-wide rule that domain-check code is never in the causal path (this bead
+touches git object storage only).
+
+### Reproducible or one-time?
+
+**Under the 2026-08-14 configuration: deterministically reproducible.** 44 consecutive
+identical kills of the same command, then 8 further attempts at the 600 s timeout cap,
+is a deterministic environmental kill, not a fluke. Nor was it one-time in fleet terms —
+the same regime killed bf-1ea4g's push-side variant (56/57), bf-4k2ws (55 kills), and
+bf-173o7e's own gc storm on this same operation, in the bloat era the guide's Pattern 3
+describes.
+
+**Today: not reproducible.** Both of the crash's own preconditions changed, verified
+live this dispatch (2026-09-08), all first-hand:
+
+| Guard | Live check this dispatch | Result |
+|---|---|---|
+| Precondition removed | `git count-objects -vH`; `du -sh .git` | **252 loose objects / 1.67 MiB** (was 4,649 / 17.20 GiB — a ~10⁴× smaller loose mass), 1 pack / 100.25 MiB, 0 garbage, `.git` 106 MB |
+| Memory bound in place | `./scripts/setup-git-gc-config.sh --verify` | exit 0 — effective chain system → global → local: `windowMemory=2g` / `deltaCacheSize=1g` / `threads=1` → worst case **≈3072 MiB** against the 12 GiB scope |
+| Death-command replay | `./scripts/test-gc-memory-bounds.sh` | **17/17 pass** — the exact crash command `git gc --aggressive --prune=now` exits 0 under `MemoryMax=768M` (1/16 of the dispatch scope), pack-objects peak RSS **320,556 KB** vs the >12 GiB the unbounded run consumed |
+
+Corroboration: bf-5jhvpk's repack at full `--depth=250 --window=250` executed
+2026-09-08T00:28:54Z exited 0 at a 350.4 MB scope peak under its 4G cap (Addendum 7's
+close-time re-verification) — the heavy-pack operation class now completes under bounds
+on this repository.
+
+**Return condition:** the crash comes back only if **both** the bloat precondition
+recurs **and** the pack-memory bound is removed — exactly the two conditions Pattern 3's
+prevention layers (repo-wide `.beads/` gitignore with 0 tracked bead state, the 10 MB
+pre-commit gate, the persistent pack-memory config repo-local and global, the daily
+02:00 health check) exist to block. Retry safety itself is child 4's remit
+(domchk-dba1e0bb); what this addendum contributes to it is that a re-run of the bare
+command is no longer the death operation it was in August.
+
+**Limits:** no per-cgroup telemetry existed on Aug-14 (Addendum 8), so "deterministic
+then" rests on the 44/44 census and the byte-identical `count-objects` readings, not on
+a measured scope watermark. The replay is scaled (8 × 64 MiB blobs, not 17.20 GiB); the
+deployed-config worst case (≈3072 MiB) is bound arithmetic, not a bloat-scale re-run,
+which would be unsafe on the shared repository and is deliberately not attempted. The
+kernel-systemd evidence file cited above is a sibling bead's deliverable in flight
+(domchk-ad80e265) and was unpushed at this dispatch; its figures are corroboration, not
+load-bearing here.
+
+**Addendum 9 Sources:** `docs/crash-investigations/evidence/bf-4x12ec/operation-summary.md` (44/44 census); `docs/crash-investigations/evidence/bf-4x12ec/crash-logs/transcript-attempt1-crash-8b2a5b0d.jsonl` + `transcript-midstorm-9539f3b2.jsonl` (fatal `tool_use`, re-read this dispatch); `docs/crashes/bf-4x12ec/attempt-index.tsv` (53-attempt exit-code census); `docs/crash-response-guide.md` (Patterns 1–3, FP Rules 1–3, bf-1ea4g Pattern 6); `docs/research/root-cause-analysis-signal-minus-one-crashes.md` (+ its 2026-09-07 dated correction); live bead records bf-4x12ec (Closed rev 4) and bf-173o7e (Closed rev 19); live `git count-objects -vH` / `du -sh .git` / `setup-git-gc-config.sh --verify` / `test-gc-memory-bounds.sh` (this dispatch); `docs/crash-investigations/bf-4x12ec-alert-inventory.md`; Addenda 4, 7 and 8 of this report
+**Addendum 9 version note:** appended on top of origin/main `a00d02bb` as v1.11; the pre-edit worktree copy was byte-identical to local HEAD `c3de56b` (file blob `d517ec00`, verified by hash-object), and this file's staged 290-line deletion in the shared index is a co-tenant's in-flight state, not carried by the commit that publishes this addendum.
