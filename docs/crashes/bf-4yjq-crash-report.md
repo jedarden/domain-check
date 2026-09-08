@@ -737,6 +737,84 @@ Bead bf-4yjq experienced systematic crashes caused by severe repository bloat, n
 
 ---
 
+## 15. Crash Prevention Solution — Design, Implementation, Testing (2026-09-08)
+
+**Added:** 2026-09-08 (domchk-a61cc009, child 5 of 5 of the domchk-b1626933 test-and-document
+split). This section is the completion record of the parent bead's "Complete documentation
+package" criterion. §13 above records the first (2026-09-01) implementation wave; its scheduling
+detail — cron-based `setup-monitoring.sh` — is **superseded**: this box is NixOS with no
+`crontab`, and monitoring now runs as six systemd **user timers** (§15.1/§15.3 and the
+[operational runbook](../operations/crash-prevention-runbook.md)). §13's narrative history is
+retained unmodified.
+
+### 15.1 Solution Design
+
+The crash pattern this report documents — an 18 GB repository whose 17 GB of loose objects made
+every significant git operation a memcg-OOM candidate inside the 12 GiB per-dispatch systemd
+scope — drove a two-document design, written 2026-09-06 and unchanged since at their pinned
+revisions (both verified byte-identical to the worktree on 2026-09-08):
+
+- **System architecture — gates, retry, notification:**
+  [`docs/crash-prevention-design.md`](../crash-prevention-design.md) @ `fb4d2f4` (domchk-21fb2ceb).
+  Composes the requirements audit and the monitoring spec into the response half: guard-rail
+  tiers (H/E/P) with four enforcement points, the exit-75 deferred-not-crashed contract, retry
+  policy per error class, checkpoint/resume plus the crash-storm circuit breaker, and
+  notification routing with anti-noise rules.
+- **Monitoring design:** [`docs/crash-prevention-monitoring-design.md`](../crash-prevention-monitoring-design.md)
+  @ `780115e` (domchk-b1068c3a). Layered measure / detect / classify+suppress / respond
+  architecture with the central altitude rule — **per-scope memcg headroom is the memory
+  authority** (100% of the surviving kills were `CONSTRAINT_MEMCG` in `run-*.scope`), host PSI is
+  demoted to advisory — plus the full threshold table (memcg 70/85, PSI 70/80 advisory-only,
+  disk 30/20 GB, load 10/15, surge 3-in-5 m early + 10-in-10 m).
+
+In one sentence: **bound the memory of every git operation, detect repo bloat and resource
+saturation before they reach the cgroup ceiling, suppress alert noise so real signals survive,
+and route response through gates that fail safe.**
+
+### 15.2 Implementation Details
+
+The implementation is specified and recorded elsewhere; this section only maps it:
+
+- **Requirements and gap inventory:**
+  [`docs/crash-prevention-requirements.md`](../crash-prevention-requirements.md) @ `1b21053`
+  (domchk-d7c086d6) — the consolidation of ~460 crash investigation docs into crash-type
+  taxonomy, root-cause patterns P1–P6, the live-verified safeguards inventory, 13 gap
+  requirements (G-1..G-13), and the 3-phase prioritized plan. *Note:* the doc has been amended
+  since `1b21053` (gaps close as implementations land; current text at HEAD `a4c8ffa`) — cite
+  the pinned SHA for the audit-era state and HEAD for live gap status.
+- **Consolidated findings for this crash:**
+  [`docs/crashes/bf-4yjq-consolidated-findings-domchk-4ed0544b-2026-09-06.md`](bf-4yjq-consolidated-findings-domchk-4ed0544b-2026-09-06.md)
+  @ `778e2fd` (domchk-4ed0544b) — the entry point for bf-4yjq's verified 50-crash record, the
+  cgroup-scoped memcg-OOM root cause, both deployed fix layers, and the lessons-learned list,
+  with the superseded-claims citations rather than a restatement.
+- **Operator-facing procedure:** [`docs/operations/crash-prevention-runbook.md`](../operations/crash-prevention-runbook.md)
+  (new, 2026-09-08) — daily preflight, the six timers, safe-gc usage, bound verification, alert
+  triage, escalation thresholds.
+
+Per CLAUDE.md's dependency-of-record note: the repo-level implementation here is scripts +
+git config + timers only (monitoring, gc bounds, alert pipeline); the NEEDLE-side and
+cluster-side requirements (G-10..G-13 class) live outside this repository.
+
+### 15.3 Testing Results
+
+Full per-child detail — every command, date, and observed result — is consolidated in
+[`docs/crash-prevention-testing.md`](../crash-prevention-testing.md). Summary (all runs
+first-hand on this box, 2026-09-08; no `DOMCHECK_RUN_LONG_TESTS` runs):
+
+| Layer | Test | Result | Child / commit |
+|---|---|---|---|
+| Monitoring stack | 4 monitors `--once` + timer audit | exit 0 ×4; all 6 timers future-triggered | domchk-e0e1120e / `dfda388` |
+| GC memory bounds | `setup-git-gc-config.sh --verify` + `test-gc-memory-bounds.sh` | exit 0 (≈3072 MiB worst case); **17/17**, peaks 227 MiB push / 313 MiB gc under a 768M cgroup | domchk-6a227734 / `520c40e`, `5d0c83f` |
+| Alert thresholds | `test-crash-alert-fixes.sh` + threshold crossings + cooldown/dedup driver + classifier | **13/13** ×2; 70.00/80.00 cross exactly, 69.90/79.90 do not; driver **16/16**; FP/SERVICE_FAILURE/INFRASTRUCTURE confirmed | domchk-189d2f80 / `017452a` |
+| Server safeguards | `go build` + `go test ./internal/server/` on a `git archive HEAD` extract | pure HEAD build fails on a *missing untracked co-tenant file* (attributed, the documented F1); with it present: build rc 0, whole package **151/151** | domchk-ea18c7a8 / `0d1d8e1` |
+
+Two disclosed residuals, both pre-existing and documented rather than new: `CODE_DEFECT` is
+unreachable in `crash-classifier.sh` (panic-shaped traces classify UNKNOWN — automated UNKNOWN
+≠ no crash), and pure `main` remains unbuildable in isolation until
+`resource_monitor{,_test}.go` are committed.
+
+---
+
 **Investigation Status:** ✅ COMPLETE  
 **Evidence Quality:** Comprehensive  
 **Root Cause:** Identified and resolved  
