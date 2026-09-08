@@ -4,9 +4,10 @@
 > `domchk-f6757c18` (umbrella: *Document crash findings and
 > create verification report*). This child contributes the **Summary block** and
 > the **incident timeline**, consolidated from investigation work that already
-> exists in this repo. The four placeholder sections at the end — **Root Cause**,
-> **Repository State**, **Resolution**, **Lessons Learned** — are owned by later
-> children in this split and are deliberately left empty here.
+> exists in this repo. Of the placeholder sections left at the end, **Root
+> Cause** and **Impact** are now filled by child 2 (`domchk-08bdde8d`);
+> **Repository State**, **Resolution** and **Lessons Learned** remain
+> placeholders pending children 3–5.
 
 ## Summary
 
