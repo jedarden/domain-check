@@ -841,3 +841,43 @@ memcg-OOM SIGKILLs, each attempt killed inside the bare
 timestamps decoded; no stack traces by mechanism) — so this bead ships the
 verifying pass and the archived summary's superseded deltas, not a duplicate
 report.
+
+## Verification — root cause analysis (re-dispatch bead `domchk-00fec118`, 2026-09-08)
+
+Bead `domchk-00fec118` (created 2026-08-17T15:59Z, worked 2026-09-08) is this
+family's original **root-cause-diagnosis** leg — "Analyze the gathered crash
+information to understand why the agent crashed with signal -1" — chained
+behind the crash-information bead (`domchk-c95117c0`, Closed). Its tasked
+deliverable, a root-cause-analysis document explaining the crash mechanism,
+already exists at HEAD: the canonical report's
+[Root Cause](../crash-reports/bf-4x12ec-git-gc-crash.md) section, this file's
+§"Exit code and signal analysis" and §Consolidation, and
+[`docs/research/root-cause-analysis-signal-minus-one-crashes.md`](../research/root-cause-analysis-signal-minus-one-crashes.md).
+Per the verify-then-close rule for this crash family, this section re-derives
+the diagnosis first-hand at HEAD `0cdd3a5` (2026-09-08) instead of
+manufacturing a duplicate RCA — near-identical report titles across beads are
+this corpus's main false-positive source.
+
+### Acceptance-criteria mapping
+
+| This bead's acceptance criterion | Where the analysis satisfies it | What this pass re-derived first-hand |
+|---|---|---|
+| Review the gathered crash information | §"Exit code and signal analysis"; §Consolidation; the crash-information verification section above | Exit census re-tallied from the primary event log extract `docs/crashes/bf-4x12ec/needle-events-2026-08-14-bf-4x12ec.jsonl.gz`: **53** `agent.completed` = **44 × exit −1** (durations 38,882–115,797 ms) / **8 × 124** / **1 × 0**. Target bead `bf-4x12ec` read live: **Closed, rev 4** (2026-08-17T14:50:41Z close stamp) |
+| Research what signal −1 means in this context | §"What 'exit code −1' and 'signal −1' denote"; `docs/research/root-cause-analysis-signal-minus-one-crashes.md`; `docs/analysis/signal-analysis.md` | Re-verified in live NEEDLE source (HEAD `01ecf05`, 2026-09-07): `status.code().unwrap_or(-1)` at `src/dispatch/mod.rs:1861,1905,2082,2579` — Rust's `ExitStatus::code()` returns `None` exactly when the process died by signal, so needle flattens every signal death to the recorded value −1. **−1 is a harness sentinel, not a signal number.** One drift note: the canonical report cites `:991,996` for this call — those lines now hold unrelated adapter-YAML code; the sentinel moved (mechanism unchanged) |
+| Identify the proximate cause (memory, OOM, segfault, external signal) | §Root Cause | **Memory — cgroup-local OOM.** Surviving same-regime kernel records (journal window 2026-08-15→17) re-queried this pass: **257** `oom-kill:constraint=CONSTRAINT_MEMCG,…,oom_memcg=…run-p<id>-i<id>.scope,task=git` lines with `memory: usage 12582912kB, limit 12582912kB` (usage == limit == 12 GiB) and `oom_score_adj:200` — the *cgroup* hit its cap, not the host (the storm window's own captures show 45–50 Gi available). The cap was re-read live: this pass's own dispatch scope `run-p1161657-i252787659.scope` carries **`MemoryMax=12884901888`** — the same 12 GiB every attempt died against. Aug-14's own kernel lines are gone (current boot began 2026-08-15), so the Aug-14 verdict rests on the retry-storm signature plus regime match (§Evidence limits) — no segfault, no external signal, no application error |
+| Determine if it's reproducible or intermittent | §"Why the kills were deterministic — 44 × in 64 minutes" | **Deterministic, not intermittent.** 44/44 attempts died identically — same lethal command × same 17.20 GiB loose-object state × same 12 GiB cap, 38.9–115.8 s each, zero packing progress between deaths (byte-identical object store before and after). The conjunction no longer exists: this repo now holds **105M `.git` / 126 loose objects (964.00 KiB) / 1 pack (100.49 MiB) / 0 garbage**, the effective pack-memory bound verifies at ≈3,072 MiB worst case (`./scripts/setup-git-gc-config.sh --verify`), and the death operations complete under the bound — `./scripts/test-gc-memory-bounds.sh` re-run this pass at HEAD `0cdd3a5`: **17 passed, 0 failed, rc 0**, pack-objects peak RSS **320,520 KB** where the unbounded crash run exceeded 12 GiB. The specific crash is not reproducible against the workspace's current state; it required its three preconditions simultaneously |
+| Document the root cause analysis | Canonical report §Root Cause + §"Why 'the host had 45 Gi free' does not contradict this" + §Evidence limits; `docs/crash-investigations/bf-4x12ec-root-cause.md` (§4 victim selection); §Consolidation above | The RCA is on record: needle's `unwrap_or(-1)` sentinel ← kernel memcg-OOM SIGKILL (`CONSTRAINT_MEMCG`) of the highest-badness task inside the hitting 12 GiB dispatch scope, with the corrected victim selection (`89c66af`: `memory.oom.group=0` makes *which* task dies nondeterministic while the cause stays constant — the agent task on Aug-14, `git` on Aug-16) and an explicit evidence-limits statement that no Aug-14 kernel line survives |
+
+**The tasked question, in one line:** the agent crashed with recorded exit −1
+because it was killed by signal — the kernel's memcg OOM killer SIGKILLing the
+dispatch task inside the 12 GiB dispatch scope once `git gc --aggressive`'s
+in-memory delta construction against 17.20 GiB of loose objects exhausted the
+cgroup budget — deterministically, 44 times, until the workload was
+decomposed; −1 itself is needle's died-without-exit-code sentinel and carries
+no signal identity.
+
+Supporting live state at this pass: HEAD `0cdd3a5`, `.git` **105M** / 126
+loose objects / 1 pack / **0 garbage** / **0 unpushed**; effective
+pack-memory bound ≈3,072 MiB, within the 12 GiB dispatch-scope ceiling;
+`bf-4x12ec` Closed rev 4. No file under `.beads/` was written; all store
+access was read-only.
