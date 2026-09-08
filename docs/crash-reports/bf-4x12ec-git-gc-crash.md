@@ -110,10 +110,94 @@ its alert, not a separate crash. **There were 44.**
 
 ## Root Cause
 
-> ⏳ **PLACEHOLDER — not filled in by this child.** To be written by a later
-> child in this split from `docs/crash-investigations/bf-4x12ec-final-crash-report.md`
-> ("Root Cause Analysis"), `bf-4x12ec-crash-artifacts-2026-09-02.md` and
-> `bf-4x12ec-log-review-2026-09-02.md`.
+> **memcg OOM inside the agent dispatch scope's 12 GiB `MemoryMax`.**
+> `git gc --aggressive --prune=now`, run against a repository holding 4,649
+> loose objects totalling 17.20 GiB, drove the anonymous memory of needle's
+> transient `run-p*.scope` past `MemoryMax=12884901888` (12 GiB), and the
+> kernel's cgroup OOM killer (`CONSTRAINT_MEMCG`) SIGKILLed the
+> highest-badness task in the hitting memcg. **On Aug-14 that victim was the
+> agent dispatch task itself** (or its `bash -c` parent), at 39–116 s into
+> each attempt — which is why needle recorded `exit_code = -1` for the agent
+> rather than a `git` exit code. Classification: **INFRASTRUCTURE** — no
+> panic, no timeout governor, no domain-check code defect.
+
+**Corrected finding.** The initial determination (commit `7db6a25`) named the
+`git` process as the killed task. Commit **`89c66af`** (bead
+`domchk-9e2aa740`, cross-ref `domchk-2539cf8c`) corrected the victim
+selection: these scopes set `memory.oom.group=0`, so the kernel picks a
+victim per task by OOM badness — *which* task dies is nondeterministic while
+the *cause* stays constant. On Aug-14 the agent dispatch task died first; on
+Aug-16, when `git` processes lived long enough to outgrow the agent's RSS,
+`git` was the usual victim (257 kernel `task=git` memcg kills in that
+window). Same mechanism, different recorded victim. (The opening statement
+block of [`docs/crash-investigations/bf-4x12ec-root-cause.md`](../crash-investigations/bf-4x12ec-root-cause.md)
+still reads "the `git` process"; the corrected victim selection is that
+document's §4 and `89c66af`.)
+
+### Why the kills were deterministic — 44 × in 64 minutes
+
+| Step | Mechanism |
+|---|---|
+| Lethal command | The bead body itself prescribed `git gc --aggressive --prune=now` (plus `repack -a -d --depth=250 --window=250`) — the hazard was in the task text, authored as a mitigation *for* repository bloat |
+| Zero progress | `--aggressive` builds delta chains across the *entire* object set (window/depth 250) **in memory before writing any pack bytes**, so every kill left the repo byte-identical — 4,649 loose objects / 17.20 GiB before and after, 44 times |
+| Scope budget | Each attempt ran in a fresh needle transient `run-p*.scope`, cap **directly verified** at `MemoryMax=12884901888` (12 GiB) for agent dispatches (6 GiB for test-runner scopes), with `oom_score_adj=200` and `memory.oom.group=0` |
+| Kill | Scope anonymous memory reached the cap → kernel memcg OOM killer (`CONSTRAINT_MEMCG`) → SIGKILL of the highest-badness task — on Aug-14, the agent dispatch task itself |
+| Retry | Needle re-claimed and re-ran the same command in a fresh scope against the same repository state — identical death, 38.9–115.8 s each, until auto-split decomposed the workload at 11:59:06Z and the 53rd attempt exited 0 |
+
+### `exit -1` is a harness sentinel, not a signal number
+
+needle (Rust) reads the child's wait status with
+`status.code().unwrap_or(-1)` (`src/dispatch/mod.rs:991,996`). Rust's
+`ExitStatus::code()` returns `None` **exactly when the process died by
+signal**, and the `unwrap_or(-1)` flattens every signal — SIGKILL, SIGHUP,
+SIGTERM alike — to the single recorded value `−1`. A needle `−1` therefore
+means *"the agent terminated without an exit status"* and identifies **no**
+signal number; here the signal source was the kernel OOM killer's SIGKILL.
+The `−1 → SIGHUP` mapping that appears in some 2026-09-02-era documents is
+the Python-subprocess writer convention, not needle's, and is superseded by
+the dated correction atop
+[`docs/research/root-cause-analysis-signal-minus-one-crashes.md`](../research/root-cause-analysis-signal-minus-one-crashes.md).
+
+### Why "the host had 45 Gi free" does not contradict this
+
+A memcg kill needs only the **scope** budget exceeded, not host exhaustion.
+The mid-storm capture (10:43:59 UTC, 8 s before one attempt's kill) shows
+45 Gi available and 0 B swap used — and the next attempt died anyway. All
+257 same-period `git` kills in the journal are `CONSTRAINT_MEMCG` with host
+RAM to spare.
+
+### Evidence limits
+
+No kernel logs survive for 2026-08-14 (the current boot began 2026-08-15).
+The Aug-14 verdict rests on the retry-storm signature from the primary
+needle event log (independently re-derived three times, all concordant),
+direct kernel evidence of the identical mechanism 257 times in the Aug-16
+cleanup window, and host-memory figures that exclude host-wide OOM. High
+confidence — but not an Aug-14 `dmesg` line, and this report does not claim
+one.
+
+**Sources for this section:** [`docs/crash-investigations/bf-4x12ec-root-cause.md`](../crash-investigations/bf-4x12ec-root-cause.md)
+(formal root-cause statement; §4 victim selection) ·
+[`docs/research/root-cause-analysis-signal-minus-one-crashes.md`](../research/root-cause-analysis-signal-minus-one-crashes.md)
++ its dated-correction note ·
+[`docs/analysis/signal-analysis.md`](../analysis/signal-analysis.md) (bead
+`domchk-2539cf8c` — source-level sentinel decode, live scope verification) ·
+commit **`89c66af`** (root-cause correction) · commit **`fc96211`** (signal
+analysis for exit −1) · [`docs/crash-investigations/bf-4x12ec-final-crash-report.md`](../crash-investigations/bf-4x12ec-final-crash-report.md)
+(canonical consolidated companion).
+
+## Impact
+
+| Question | Answer |
+|---|---|
+| **Repository state** | **Healthy — never corrupted.** The kills left the object store byte-identical (4,649 loose objects / 17.20 GiB before and after every attempt; no half-written pack). After the eventual cleanup: 753 MB → 92 MB (2026-09-02) → **105 MB today**, 0 garbage objects. Fresh `count-objects`/`fsck` snapshot: [Repository State](#repository-state) below. |
+| **Git operations** | **Working.** Broken only inside the failing dispatch scopes during the storm — every phase-1 attempt died before writing a pack, and ordinary git use on this workspace was never broken. Post-cleanup, all operations pass: `./scripts/check-repo-health.sh` green (re-run 2026-09-08, exit 0), scheduled bounded gc and pushes running daily. |
+| **Data loss** | **None.** No commits were lost — the repo sat at its 2026-08-09 baseline (`00117cb`) for the whole incident and no commit exists inside the crash window (git-history table above). No working-tree or object-store loss: every kill preceded any pruning, so the 17.20 GiB of loose objects was intact after each death, and the later size reduction was a verified consolidation into a single pack, not deletion. |
+
+The casualty was the *agent's time*, not the repository: 44 crashes + 8
+timeouts bought zero packing progress, and the completed bead was released
+orphaned instead of closed (`bead.orphaned`, 12:58:55Z), which kept alerts
+regenerating until the manual close on 2026-08-17.
 
 ## Repository State
 
@@ -150,5 +234,5 @@ single-crash framing — both superseded. `-1` is a harness sentinel, and the
 incident was 44 crashes. Cite the consolidated report.
 
 ---
-**Report date:** 2026-09-08 · Bead `domchk-779d1180` (split child 1 of 5 of `domchk-f6757c18`)
-**Sections completed:** Summary, Incident timeline · **Pending from later children:** Root Cause, Repository State, Resolution, Lessons Learned
+**Report date:** 2026-09-08 · Split of `domchk-f6757c18` — summary + timeline `domchk-779d1180` (child 1) · **root cause + impact `domchk-08bdde8d` (child 2)** · repository state `domchk-0936d2db` (child 3) · resolution + lessons learned `domchk-1ef6b252` (child 4) · CLAUDE.md procedures + finalization `domchk-6f771e64` (child 5)
+**Sections completed:** Summary, Incident timeline, Root Cause, Impact · **Pending from later children:** Repository State, Resolution, Lessons Learned
