@@ -1,7 +1,7 @@
 # Repository Maintenance Guide
 
 **Purpose:** Prevent repository bloat and maintain system stability  
-**Last Updated:** 2026-09-06  
+**Last Updated:** 2026-09-08  
 **Status:** ✅ Active
 
 ---
@@ -259,6 +259,94 @@ remaining work items — see §7.1 items 2–8 of
 [stepwise-git-gc-strategy.md](./stepwise-git-gc-strategy.md). The safeguards above are
 independent of that rework.
 
+Need **deeper aggressive compression than gc gives** (e.g. a `--depth=250
+--window=250` repack)? Do not hand-roll an invocation — start from the
+executed-and-measured procedure in
+[Memory-Capped Manual Repack](#memory-capped-manual-repack-bf-5jhvpk-procedure-2026-09-08)
+below.
+
+---
+
+## Memory-Capped Manual Repack (bf-5jhvpk procedure, 2026-09-08)
+
+`safe-git-gc.sh` owns scheduled gc. When a bead asks for **deeper aggressive
+compression on top of it** — the bf-5jhvpk target was
+`git repack -a -d --depth=250 --window=250` — start from the invocation below,
+which was executed and verified against this repository on 2026-09-08. Do not
+invent a new invocation, and do not run it bare (rules at the end).
+
+**The command that worked** (run detached, log polled to completion):
+
+```bash
+setsid nohup bash -c '
+  systemd-run --user --scope --unit=bf-5jhvpk-repack \
+    -p MemoryMax=4G -p MemorySwapMax=0 -p CPUQuota=300% -- \
+    nice -n 15 git -c pack.windowMemory=512m -c pack.threads=3 \
+      repack -a -d --depth=250 --window=250 --no-write-bitmap-index
+' > .beads/logs/bf-5jhvpk-repack.log 2>&1 &
+```
+
+Why each piece is there:
+
+| Piece | Why |
+|---|---|
+| `systemd-run --user --scope -p MemoryMax=4G` | Hard ceiling — a runaway repack is OOM-killed inside its own scope instead of the 12GiB dispatch scope (the bf-4x12ec mechanism) |
+| `-p MemorySwapMax=0` | The cap must not be met with swap |
+| `-p CPUQuota=300%` + `nice -n 15` | Keeps the box responsive for co-tenants |
+| `pack.windowMemory=512m` | Per-window soft bound; sized down because depth/window 250 searches far more delta candidates than the gc defaults |
+| `pack.threads=3` | Window memory is **per thread** (see [Persistent Pack-Memory Bounds](#persistent-pack-memory-bounds-oom-root-cause-fix)), so threads must be pinned for a worst case to be computable |
+| `--no-write-bitmap-index` | Non-bare repo; default gc would not write a bitmap either. The old pack's `.bitmap` disappearing is expected, not data loss |
+| `setsid nohup` + log file | Prior attempts died with their agent; detached output lets a restart or SIGHUP arrive mid-run without killing the repack |
+| box-wide gc lock | Hold `/tmp/domain-check-safe-git-gc.lock` (the `safe-git-gc.sh` convention) so the run cannot race the nightly 03:00 gc |
+
+**Measured result** — 2026-09-08T00:28:54Z, HEAD `7f8af4d`, executor bead
+`domchk-371e54d8`, baseline bead `domchk-2971874f`: **exit 0, elapsed 3 s**,
+**scope peak 350.4 M against the 4G cap** (~11x headroom; a 1 s cgroup sampler
+peaked at 260 MiB — coarser than systemd's continuous accounting), and **no
+OOM** in `journalctl --user`, `journalctl -k`, or `dmesg` for the run window.
+Full depth/window 250 — **the first rung of the ladder held, no fallback tier
+was needed**. Attempt 1 (00:26:36Z) exited 1 client-side before git ran: **this
+box's `systemd-run` rejects `-p Nice=15`** ("Unknown assignment") — apply
+niceness as a `nice -n 15` command prefix instead, as above.
+
+| Metric | Before (00:08Z baseline) | After (00:28Z run / 00:49Z verification) | Delta |
+|---|---|---|---|
+| packs | 2 (~99 M + 679 K) | **1** (104,777,374 B) | 2 → 1, old packs pruned |
+| packed + loose | 103.26 MiB | 100.89 MiB | **−2.37 MiB (−2.3%)** |
+| loose objects | 485 / 3.48 MiB | 88 / 580 KiB at the run; 101 / 656 KiB at verification | −397 net then −384 vs baseline (485 → 561 at run time → 88 → 101) |
+| in-pack objects | 11,700 | 12,174 | +474 (formerly loose) |
+| `du -sh .git` | 107 M | **104 M** | −3 M |
+
+Raw `size-pack` reads **+0.47 MiB**, which is an artifact and not growth: the
+baseline's 99.78 MiB spanned *two* packs and *excluded* 3.48 MiB of loose
+objects that the single new pack absorbed. On the like-for-like measure — total
+object store, packed plus loose — the repository shrank 2.37 MiB. (The loose
+row's path explains its own numbers: co-tenant churn took loose objects
+485 → 561 between the 00:08Z baseline and the 00:28Z run, and the repack packed
+the reachable ones in, landing at 88 — hence −397 net while 474 objects moved
+in-pack. Churn kept adding loose objects after the run, so the 00:49Z
+verification saw 101 / 656 KiB — that snapshot, 100.25 MiB pack + 656 KiB
+loose, is what the packed + loose row's 100.89 MiB reads against.)
+Full read-out and post-run integrity record:
+[post-repack verification](./post-repack-verification-bf-5jhvpk-2026-09-08.md).
+
+**Fallback ladder if `MemoryMax` trips** (exit 137, or an OOM entry in the
+journal): `--depth=250 --window=250` → `--depth=50 --window=50` →
+`--depth=10 --window=10`. A repack is safe to re-run — new packs are written
+before old ones are removed — so a tripped run leaves the repository valid;
+retry at the next rung down rather than re-running the same tier.
+
+**Rules:**
+
+- **Never run a bare (uncapped) repack on this box.** Unbounded `pack-objects`
+  is what memcg-OOM-killed 129 consecutive attempts in bf-173o7e and produced
+  the bf-4x12ec family.
+- **Never raise the cap.** Walk down the ladder instead.
+- Never run without the gc lock held, and never leave a detached run unpolled.
+- Verify afterwards: `git fsck --full` (dangling-objects-only output is normal
+  co-tenant churn), zero `tmp_*` files under `.git/objects/pack`, old packs and
+  their indexes gone, and `./scripts/check-repo-health.sh` exit 0.
+
 ---
 
 ## Unpushed-Commit Backlog Monitor (gap M-1, 2026-09-07)
@@ -494,6 +582,7 @@ at the layer you needed and restart from the bottom of that table if the problem
 
 **Detailed Documentation:**
 - [Repository Maintenance Recommendations](./repository-maintenance-recommendations.md) - Comprehensive guide
+- [Post-Repack Verification (bf-5jhvpk, 2026-09-08)](./post-repack-verification-bf-5jhvpk-2026-09-08.md) - Measured results and integrity record for the memory-capped repack; any future aggressive-compression bead starts from the [Memory-Capped Manual Repack](#memory-capped-manual-repack-bf-5jhvpk-procedure-2026-09-08) section above
 - [Cleanup and Recovery Procedures](../archive/crash-investigations/cleanup-and-recovery-procedures.md) - Emergency procedures
 - [Crash Mitigation Strategies](../crash-mitigation-strategies.md) - Prevention strategies
 - [bf-4yjq Crash Context Report](../crash-context-report-bf-4yjq-comprehensive.md) - Original bloat incident; Prevention Status Follow-up section maps its recommendations to current controls
