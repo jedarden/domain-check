@@ -7,6 +7,13 @@ First recorded crash: **2026-08-14T10:23:11.219513632Z** · Exit code: **-1**
 
 All timestamps UTC unless marked EDT (local = UTC−4).
 
+> **2026-09-08 — consolidated.** This is the split parent's artifact survey,
+> now the summary document for umbrella `domchk-2ff261ce`'s four-child split.
+> §1–§8 are the 2026-09-02 survey, retained as written; **§9** (added by child
+> 4, `domchk-10640b7f`) folds in the three sibling children's deliverables,
+> applies their corrections to the superseded figures below, and verifies the
+> parent bead's four acceptance criteria with pointers.
+
 ## 1. Headline findings
 
 1. **This was not one crash — it was the first of 44.** Between 10:21 and 11:27
@@ -21,10 +28,17 @@ All timestamps UTC unless marked EDT (local = UTC−4).
    The kill is consistent with a **cgroup/memcg-scoped OOM** on the agent scope
    (the same pattern visible in today's kernel journal for `safe-git-gc-*.scope`
    memcg kills), not exhaustion of the host's 62G.
+   *(Dated correction 2026-09-08: the "~8 s" is the `free -h` result → gc
+   launch pause, not a launch→kill interval; the verifiable launch→kill gap for
+   attempt 15 is 45.6 s, and for all 44 kills 18.6–80.6 s — see §9.2.)*
 3. **The kernel record for the crash window is unrecoverable.** The systemd
    journal's only boot starts 2026-08-15 19:26 EDT — after the crash. No kernel
    OOM lines for Aug 14 survive; the classification rests on the needle-side
    exit codes plus the source-level command correlation above.
+   *(Dated correction 2026-09-08: the boot's first entry is
+   2026-08-15T23:56:33Z = 19:56:33 EDT — "unrecoverable" stands, the timestamp
+   is corrected, and the mechanism is now kernel-proven for the same scopes one
+   day later via the Aug-16 `CONSTRAINT_MEMCG` census — see §9.2.)*
 4. **Resolution path:** needle's auto-split template kicked in; the final
    attempt decomposed the bead into three children — `bf-173o7e` (gc, **Closed**),
    `bf-5jhvpk` (repack, still **Open**), `bf-im2sl1` (verify, still **Open**) —
@@ -78,6 +92,8 @@ All timestamps UTC unless marked EDT (local = UTC−4).
 
 - **Kernel journal for the crash window:** gone. `journalctl --list-boots` shows a
   single boot starting 2026-08-15 19:26:03 EDT; nothing from Aug 14 survives.
+  *(Dated correction 2026-09-08: first entry is 2026-08-15T23:56:33Z =
+  **19:56:33 EDT** — see §9.2.)*
 - **`.beads/logs/*` monitoring logs:** earliest entries 2026-09-01 — the
   resource/crash monitors did not exist on Aug 14.
 - **`.git/gc.log`:** absent (no failed-gc residue).
@@ -86,6 +102,11 @@ All timestamps UTC unless marked EDT (local = UTC−4).
   pack was since rewritten by scheduled maintenance, so pack mtimes no longer
   evidence the original cleanup.
 - **Needle log itself:** contains no "oom"/memory events — only exit codes.
+
+*(Dated correction 2026-09-08: the "primary artifacts" table above lists the
+**five** transcripts that had been captured as of 2026-09-02. Child 1 of the
+split later established that **all 53** attempt transcripts survive and
+committed them byte-verified — see §9.1 and §9.2.)*
 
 ## 4. System state evidence
 
@@ -165,7 +186,127 @@ specification itself prescribed the memory-hazardous command, and no
 domain-check code was involved. Work was completed via the split; the parent
 bead is Closed with final metrics recorded (18 GB → 753 MB, 4,649 → 141 loose).
 
+## 9. Consolidation addendum (2026-09-08 — child 4 of the `domchk-2ff261ce` split)
+
+Written by `domchk-10640b7f`, the final child of the auto-split this bead's
+umbrella underwent on 2026-09-02T14:52Z. It consolidates the three sibling
+children's deliverables into this summary, applies their corrections to the
+2026-09-02 figures above (originals retained, each marked in place), and
+verifies the parent bead's four acceptance criteria. Nothing in §1–§8 is
+rewritten; where this section disagrees with them, this section is the
+correction.
+
+### 9.1 Deliverables consolidated (all committed and pushed)
+
+| Child | Bead | Deliverable | Commit |
+|---|---|---|---|
+| 1 | `domchk-a3f1f8f5` | Surviving log-source inventory — every source, its window, recoverability; captured **all 53** attempt transcripts (`docs/crashes/bf-4x12ec/transcripts/`, 53/53 `cmp`-verified + `census.tsv` + `MANIFEST.sha256`) | `e1d9477` |
+| 2 | `domchk-ba8584a1` | Crash timeline — 53 attempts in 3 phases (44 × exit −1 → 8 × 600 s timeout → 1 × exit 0 auto-split), per-attempt table re-derived from the primary worker log | `66a8e09` |
+| 3 | `domchk-eae1d2ed` | System-level cause class — host-wide OOM vs memcg OOM vs timeout, each tested against primaries; 44-row gc-launch → kill correlation table | `9edb0b4` |
+
+Companion documents already in the tree that this summary sits between: the
+canonical report [`bf-4x12ec-crash-investigation.md`](bf-4x12ec-crash-investigation.md)
+(`b366d86`, mechanism + Addenda), the signal-sentinel semantics note
+[`bf-4x12ec-evidence-signal-semantics-domchk-15854355-2026-09-07.md`](bf-4x12ec-evidence-signal-semantics-domchk-15854355-2026-09-07.md)
+(`50ae4a6`), and the alert inventory
+[`bf-4x12ec-alert-inventory.md`](bf-4x12ec-alert-inventory.md) (`fea1a62`, the
+44 storm alert beads `bf-fmg2cw` → `bf-5x69lm` plus 16 regeneration beads).
+
+### 9.2 Dated corrections to §1–§8
+
+1. **"Killed ~8 s after launching gc" (§1.2, §4).** 8.2 s is the gap between
+   the `free -h` *tool_result* (10:43:59.438Z) and the gc *tool_use record*
+   (10:44:07.643Z) — the pre-launch pause, not a launch→kill interval. The
+   verifiable launch→kill gap for attempt 15 is **45.6 s**; for all 44 kills,
+   **18.6–80.6 s** (mean 30.7 s, median 25.9 s). Child 3 §4 carries the full
+   44-row table. The direction of the error runs against the original
+   conclusion: the gc ran ~45 s, not ~8 s, with 45 Gi host-available
+   throughout.
+2. **Journal boot bound (§1.3, §3).** The single surviving boot's first entry
+   is **2026-08-15T23:56:33Z (19:56:33 EDT)**, not 19:26 EDT. The conclusion
+   is unchanged — no kernel OOM record for Aug 14 can exist — and the gap to
+   the last kill (2026-08-14T11:27:26Z) is ~36.5 h.
+3. **Log coverage (§3).** Five transcripts were the state of the capture on
+   2026-09-02; **all 53 survive** and are now committed byte-verified in
+   `docs/crashes/bf-4x12ec/transcripts/` (child 1's finding: until 2026-09-07
+   a `~/.claude` retention event would have silently destroyed 48 of 53
+   primary transcripts). The mid-tool-call death shape is now proven for every
+   crash attempt, not just the sampled ones: 43 of 44 end at
+   `git gc --aggressive --prune=now`, attempt 8 at the same command behind an
+   `echo` header, all with no `tool_result`.
+4. **Exit −1 semantics (§5, §8).** `exit_code −1` is needle's writer-side
+   sentinel for "no exit status captured" — not a POSIX signal number (no
+   signal −1 exists; the alert body's "signal −1" is a renderer applying
+   `code − 128 if code > 128` to the sentinel). The *mechanism* behind the 44
+   sentinel deaths is memcg-OOM SIGKILL, but the code itself identifies no
+   signal. See the signal-semantics note (§9.1).
+5. **Mechanism confidence (§1.2, §4).** "Consistent with a cgroup/memcg-scoped
+   OOM" is now the verified verdict, not an inference from a parallel: the
+   dispatch scope's `MemoryMax` is **12 GiB** (12884901888 B), verified live on
+   a `run-p*.scope` on 2026-09-07, with dispatched agents at
+   `oom_score_adj=200`; and the same mechanism is **kernel-proven one day
+   later** — the Aug-16 census holds 257 `CONSTRAINT_MEMCG` git kills inside
+   `run-p*.scope` memcgs at anon-rss median 11.73 GiB / max 11.97 GiB (99.8 %
+   of the 12 GiB cap). For Aug-14 itself the class remains **regime-matched,
+   not kernel-proven** (§5.3 of child 3), exactly as §1.3 states.
+
+### 9.3 Resolution status as of 2026-09-08
+
+§7.3's "should be closed rather than re-dispatched" recommendation, updated
+against the live bead store this attempt:
+
+| Bead | Role | Status (2026-09-08) |
+|---|---|---|
+| `bf-4x12ec` | Crash target | **Closed** rev 4 (2026-08-17) |
+| `bf-173o7e` | gc child | **Closed** rev 19 — closed 2026-08-17T17:12:09Z, "17.20GB loose objects packed into 444MB pack file" |
+| `bf-5jhvpk` | repack child | Umbrella **Open** rev 18 — its repack child `domchk-371e54d8` is Closed rev 4 and the repack **executed 2026-09-08T00:28Z** (2 packs → 1, 100.25 MiB; peak pack-objects RSS 350.4 MiB against the 4 G cap). Awaiting re-close — do **not** re-run |
+| `bf-im2sl1` | verify child | **Open** rev 1, never dispatched — redundant with the daily 02:00 repo-health timer |
+
+Repository today (live `git count-objects -vH` / `du -sh .git` this attempt):
+`.git` **106 MB**, ~250 loose objects / ~1.6 MiB (normal churn — 248 on the
+first read, 252 on the second), **one pack 100.25 MiB** — against the 18 G
+`.git` / 4,649 loose / 17.20 GiB the crash attempts measured.
+The bloat cannot recur through `.beads/` (fully gitignored, 0 tracked files),
+and the bare-gc/push path is bounded by `pack.windowMemory=2g` /
+`pack.deltaCacheSize=1g` / `pack.threads=1` (repo + global).
+
+### 9.4 Parent acceptance criteria — verification (`domchk-2ff261ce`)
+
+Each of the four parent criteria, checked off with pointers to evidence:
+
+- [x] **Capture any available logs from bead bf-4x12ec execution** — §3 above
+      (2026-09-02 survey) as corrected by §9.2.3; full inventory: child 1's
+      log-source inventory (§9.1), which captured the primary worker log
+      (1,146 bf-4x12ec records), all 53 agent transcripts
+      (`docs/crashes/bf-4x12ec/transcripts/`), and the 44 alert-bead records
+      (`.beads/checkpoint/forensic.jsonl`, captured as the evidence bundle's
+      `alert-beads-raw.jsonl`); second bundle
+      `docs/crash-investigations/evidence/bf-4x12ec/crash-logs/`.
+- [x] **Document the crash context (what the bead was doing)** — §2 above
+      (short form) and child 2's full 53-attempt timeline (§9.1). Context: the
+      bead's own task body prescribed `git gc --aggressive --prune=now` on a
+      repo holding 17.20 GiB across 4,649 loose objects inside a 12 GiB
+      dispatch scope; every kill landed inside that gc (child 3 §4).
+- [x] **Check for system-level evidence (OOM, timeout, resource exhaustion)** —
+      §4 above, now the tested verdict of child 3 (§9.1): host-wide OOM
+      **excluded** (45 Gi available / 0 B swap mid-storm, attempt-15 capture),
+      timeout **excluded** (deaths at 38.9–115.8 s vs the 600 s ceiling, and
+      needle's own deadline kills are separately recorded as 124),
+      **memcg OOM inside the 12 GiB dispatch scope confirmed** as the cause
+      class — INFRASTRUCTURE per `docs/crash-response-guide.md`.
+- [x] **List all artifacts found with timestamps** — §3 inventory above
+      (recovered + negative findings, with mtimes), child 1's §2 source table
+      (coverage windows per source), the alert inventory (44 alert beads with
+      exit timestamps, `bf-fmg2cw` 10:23:11.225Z → `bf-5x69lm`
+      11:28:02.199Z), and the evidence bundles' `census.tsv` /
+      `attempt-index.tsv` / `MANIFEST.sha256`.
+
+The parent's requested **output** — crash timeline (§2 + child 2), available
+log sources (§3 + child 1), system state evidence (§4 + child 3), and error
+messages (§5) — is carried by this document plus the three child deliverables.
+
 ---
 
 Investigation date: 2026-09-02 · Investigator bead: domchk-2ff261ce
+Consolidation addendum: 2026-09-08 · Investigator bead: domchk-10640b7f (child 4 of 4)
 Artifact paths verified on this box at write time.
