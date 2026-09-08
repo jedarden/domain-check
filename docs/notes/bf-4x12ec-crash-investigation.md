@@ -146,3 +146,149 @@ No contradiction touches the record identity (title / type / priority /
 assignee), the crash-window facts, or the exit-signal semantics. Where the
 doc's body and its addenda disagree, the addenda carry the primary-source
 version.
+
+## Exit code and signal analysis (child 3 of the split, `domchk-0e707410`)
+
+Written 2026-09-07 by the exit/signal child of the `domchk-c99cdf80` split.
+Source material is the retrieved bundle `docs/crashes/bf-4x12ec/`
+(`domchk-4bad8e94`) and its sibling evidence bundle (9b32085); every figure
+below was re-extracted first-hand from those files for this section rather
+than carried over from the addenda.
+
+### What the retrieved logs record
+
+Exit-code census over the 53 `agent.completed` events in
+`needle-events-2026-08-14-bf-4x12ec.jsonl.gz` (re-tallied from the file, and
+cross-checked against `attempt-index.tsv` — the two agree):
+
+| exit_code | n | `outcome.classified` | attempts | completion window (UTC) | durations |
+|---|---|---|---|---|---|
+| −1 | 44 | `crash` | 1–44 | 10:23:02.958Z → 11:27:26.174Z | 38.9 – 115.8 s |
+| 124 | 8 | `timeout` | 45–52 | 11:38:07.867Z → 12:50:14.283Z | 600,018 – 600,024 ms (the 600 s cap) |
+| 0 | 1 | `success` | 53 | 12:58:45.114Z | 491,784 ms |
+
+The stream records **no other exit codes** — in particular no 137 (a shell's
+own 128+9 job report can appear only inside captured stderr text, never in
+the `exit_code` field) and no ≥129 signal-shaped code. Attempt 2 — the death
+the tasked timestamp names — completed 10:25:01.512001992Z, exit −1, duration
+104,481 ms.
+
+### What "exit code −1" and "signal −1" denote
+
+- **−1 cannot be a real exit status** (POSIX statuses are 0–255). It is
+  needle's writer-side sentinel: `status.code().unwrap_or(-1)` —
+  `ExitStatus::code()` is `None` for a signal death, so *any* signal flattens
+  to −1, and −1 is also written literally when no wait status was ever
+  reaped (`docs/signal-analysis-exit-code-negative-one.md` §2, source-pinned
+  and re-verified 2026-09-07 by `domchk-15999f2c`).
+- **The one kill needle does not record as −1 is its own deadline kill**, which
+  becomes 124 (GNU timeout convention). That is why the 8 × 124 rows separate
+  cleanly from the 44 × −1 — and it rules out needle's own timeout machinery
+  as the source of the −1s: those attempts died at 38.9–115.8 s, nowhere near
+  the 600 s ceiling the agent itself passed to the gc (`timeout: 600000` on
+  the final `tool_use`).
+- **Classification path:** `Outcome::classify` maps negative → `Crash(code)`;
+  the crash handler then renders the alert body
+  `- **Exit code**: {code} (signal {signal_num})` with
+  `signal_num = code ≤ 128 ? code : code−128`, and labels the alert
+  `signal-{signal_num}`. On the sentinel this produces, verbatim,
+  `- **Exit code**: -1 (signal -1)` and the label `signal--1` — confirmed
+  live in the sibling bundle's `alert-beads-raw.jsonl`: **44/44** alert beads
+  carry both the body line and the label.
+- **"(signal −1)" is template arithmetic on a sentinel, not a signal number.**
+  No negative signal exists (`signal(7)` numbers 1–64); the `signal--1` label
+  is cosmetically broken and semantically empty. The records therefore carry
+  **no signal identity** — SIGKILL is inferred from context, not recorded
+  (see the correlation table below for that inference).
+- The corpus's older "−1 ⇒ SIGHUP" reading is the Python-subprocess
+  convention; needle is Rust and flattens every signal to −1, and this log
+  contains zero sighup/hangup evidence (signal-analysis doc §5.2).
+
+### Crash classification (per `docs/crash-response-guide.md`)
+
+**INFRASTRUCTURE — memcg-OOM SIGKILL inside the 12 GiB dispatch scope.**
+
+- **Entry rule:** guide Phase 1 reads "Exit code -1 → Infrastructure event
+  (Phase 2A)". All 44 deaths match it.
+- **Class definition match:** the guide's INFRASTRUCTURE class is
+  "memcg-OOM inside the dispatch scope, resource exhaustion, repository
+  bloat → Check the cgroup boundary and repo size, verify work completion" —
+  this crash matches every clause.
+- **Not the other classes:** not SERVICE_FAILURE (no 5xx, no external service
+  in the path); not FALSE_POSITIVE-by-completion *at the death instants*
+  (each kill landed mid-task inside the gc — the work completed only later,
+  12:58:45Z, under child bf-173o7e); not CODE_DEFECT (no application error in
+  any of the 53 attempts, and the identical binary/template/prompt completed
+  at attempt 53 and again under the child).
+- **Phase 2A checklist disposition:**
+
+  | Checklist item | Result |
+  |---|---|
+  | Check the **cgroup boundary**, not just the host | ✅ host had 50 Gi available 65 s before the kill; the binding limit is the scope's `MemoryMax=12GiB`, identified from live scopes (canonical report Addendum 3) |
+  | Kernel `oom-kill`/`CONSTRAINT_MEMCG` lines in the window | ⚠️ **unrecoverable for Aug-14** — the surviving boot begins 2026-08-15 19:26 EDT. The guide's own caveat (a notice with no kernel line may be a replayed counter) applies, so the classification rests on corroboration, stated as such below |
+  | Verify task completion before classifying | ✅ completed by retry — `verification.passed` 12:58:45.126649351Z; bead closed 2026-08-17 rev 4 |
+  | 30-second-rule FALSE_POSITIVE check | ✅ not applicable — per-attempt committing was not the pattern here; every kill landed inside the gc itself |
+
+- **Action per the guide: "NO CODE CHANGES NEEDED."** The mitigations are
+  configuration, not code: `pack.windowMemory=2g` / `pack.deltaCacheSize=1g` /
+  `pack.threads=1` (repo + global) and `scripts/safe-git-gc.sh` — all landed
+  (repo CLAUDE.md, "Mechanical guard for the bare-gc path").
+
+### Resource-state correlation (the supporting evidence)
+
+Attempt-2 session transcript (`session-transcript-attempt2-971486ad.jsonl`,
+28 records, read first-hand), aligned against the worker-log kill record:
+
+| Time (UTC) | Record | Reading |
+|---|---|---|
+| 10:23:26.221Z | `git count-objects -vH` | **4,649 loose objects, 17.20 GiB** (in-pack 4,081 in 1 pack, 9.60 MiB; 0 garbage) |
+| 10:23:43.210Z | `du -sh .git/` | **18G** |
+| 10:23:56.490Z | `free -h` | 62 Gi total, 11 Gi used, **50 Gi available**; swap 24 Gi, 0 B used; up 2 days |
+| 10:24:08.660Z | final transcript record | `Bash` `tool_use` — **`git gc --aggressive --prune=now`**, timeout 600000, **with no matching `tool_result`** |
+| 10:25:01.512Z | `agent.completed` (worker log) | **exit −1**, 104,481 ms |
+
+1. **The kill lands inside the gc.** 52.9 s after the last transcript record:
+   the agent died running the exact operation it was tasked to run, with the
+   tool call still outstanding.
+2. **The binding resource is not host RAM.** 50 Gi available at the last
+   reading, 65 s before the kill. The ceiling hit is the dispatch scope's
+   cgroup cap (12 GiB): 17.20 GiB of loose objects cannot be packed under it
+   with `--aggressive`'s large pack windows. This is exactly the situation
+   the guide's Phase 2A warns about — "the kill can land while the host has
+   memory to spare".
+3. **The −1/124 boundary is itself evidence.** Attempts that hit the *memory*
+   ceiling died at 38.9–115.8 s (−1); attempts that reached the *time*
+   ceiling died at exactly 600.0 s (124, needle's own deadline kill); and the
+   one clean exit (0, attempt 53) is the attempt that never ran the gc at all
+   — it executed needle's auto-split template instead (Addendum 4 §3). The
+   command, prompt (71,698 bytes) and template were identical throughout the
+   44 + 8 — the variable that separates the two kill regimes is which ceiling
+   each attempt reached first, memory or time; the eventual clean gc
+   completion belongs to child bf-173o7e, after the retry chain had ended.
+4. **No defect signature.** No application error output accompanies any of
+   the 44 deaths, and there are no core dumps (Addendum 2).
+5. **Same-period kernel corroboration.** The same cleanup effort, two days
+   later with kernel logging available, produced **257 `CONSTRAINT_MEMCG`
+   git kills on 2026-08-16** at 1.2–11.97 GB anon-rss (163 of 257 hugging the
+   11–12 GB ceiling), all `oom_score_adj=200` inside transient
+   `run-p*.scope` memcgs — the same scope, the same mechanism, kernel-visible
+   (Addendum 3 §"NEW: 257 git OOM-kills on Aug-16"; Addendum 6). No git OOM
+   kill occurs on any other day of the current boot.
+6. **Why exit −1 rather than a 137 from inside git:** `memory.oom.group=0` on
+   these scopes means the kernel kills a single task — the highest-badness
+   one in the hitting memcg. On Aug-16 that was usually `git` itself; on
+   Aug-14 it was the agent child (hence exit −1 on the worker record). Same
+   cause, different victim (Addendum 3).
+7. **Isolation.** 0/44 phase-1 deaths have any other bead completing within
+   ±3 s (Addendum 2 §"Isolation: not a fleet-wide event") — a bead-local
+   retry storm, not a system-wide event.
+
+### Confidence
+
+| Claim | Confidence | Basis |
+|---|---|---|
+| `exit_code −1` = died-without-exit-status sentinel | **Certain** | needle source, pinned and unit-tested; 44/44 records consistent |
+| "(signal −1)" carries no signal identity | **Certain** | template arithmetic on the sentinel; no negative signal exists |
+| Outcome class INFRASTRUCTURE (Phase 2A) | **High** | every Phase 1/2A rule and checklist item points the same way |
+| Delivery = SIGKILL | **High (inferred)** | instant death, no error output, no core dump, 600 s cap never reached |
+| Mechanism = memcg-OOM at the 12 GiB scope cap | **High (regime-matched, not kernel-proven for Aug-14)** | resource-state correlation above + 257 same-mechanism kills two days later; the one thing that would settle it outright — an Aug-14 kernel line — is unrecoverable (surviving boot starts 2026-08-15 19:26 EDT) |
