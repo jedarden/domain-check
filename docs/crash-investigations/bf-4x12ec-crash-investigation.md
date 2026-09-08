@@ -1038,3 +1038,69 @@ load-bearing here.
 
 **Addendum 9 Sources:** `docs/crash-investigations/evidence/bf-4x12ec/operation-summary.md` (44/44 census); `docs/crash-investigations/evidence/bf-4x12ec/crash-logs/transcript-attempt1-crash-8b2a5b0d.jsonl` + `transcript-midstorm-9539f3b2.jsonl` (fatal `tool_use`, re-read this dispatch); `docs/crashes/bf-4x12ec/attempt-index.tsv` (53-attempt exit-code census); `docs/crash-response-guide.md` (Patterns 1–3, FP Rules 1–3, bf-1ea4g Pattern 6); `docs/research/root-cause-analysis-signal-minus-one-crashes.md` (+ its 2026-09-07 dated correction); live bead records bf-4x12ec (Closed rev 4) and bf-173o7e (Closed rev 19); live `git count-objects -vH` / `du -sh .git` / `setup-git-gc-config.sh --verify` / `test-gc-memory-bounds.sh` (this dispatch); `docs/crash-investigations/bf-4x12ec-alert-inventory.md`; Addenda 4, 7 and 8 of this report
 **Addendum 9 version note:** appended on top of origin/main `a00d02bb` as v1.11; the pre-edit worktree copy was byte-identical to local HEAD `c3de56b` (file blob `d517ec00`, verified by hash-object), and this file's staged 290-line deletion in the shared index is a co-tenant's in-flight state, not carried by the commit that publishes this addendum.
+
+## Addendum 10 — Preventive Fix: the crash-storm breaker reaches the dispatch path (2026-09-08, bead domchk-e1400e03)
+
+Fix-implementation split child (blocks domchk-0c1beda9; its own successor is the
+verify-effectiveness leg domchk-2400c0aa). Where Addendum 9 verified the layer that makes
+the death *operation* survivable (pack-memory bounds), this addendum lands the layer that
+bounds the crash's *blast radius*: the retry storm. bf-4x12ec's 44 identical re-dispatches
+— one auto-minted alert bead per kill — are the FALSE_POSITIVE layer the alert inventory
+catalogued; the breaker built to stop that shape
+(`scripts/crash-circuit-breaker.sh`, landed by domchk-0c916ec7 after being authored
+2026-09-02 for the bf-65lsdu chain) sat tested-but-unwired: nothing in the live path read
+its state. Remediation-plan GAP-4 (domchk-0fcaef88) named exactly this gap and prescribed
+the repo-side stopgap implemented here.
+
+**Provenance.** The previous dispatch of this same bead implemented the change and died
+before committing (failure-count 1; quarantine expired 06:21:59Z, re-dispatch 06:22:06Z).
+Its uncommitted work was reconstructed first-hand — the new test file carries the bead id
+in its header, and the preflight hunk is a single attributable 49-line insertion — then
+verified, hardened, extended, and landed by this dispatch rather than rewritten.
+
+**The change.**
+- `scripts/preflight-health-check.sh` — **Check 4: Crash-Storm Circuit Breaker.** Reads
+  breaker status at preflight time; OPEN breakers are surfaced per bead with crash count,
+  last exit code and `retry_after`, plus the defer/entry-point action line. Warns, never
+  fails: the remedy is per-bead deferral, and box-wide load-shedding is check 0's job.
+  Both fail-open layers are handled (breaker status nonzero → "unreadable"; valid JSON,
+  wrong schema → "not parseable"); a missing breaker script is skipped. This attempt
+  additionally guarded the detail-render `jq` (`|| true`) so a partial entry can never
+  abort the preflight under `set -euo pipefail` — the check's own fail-open contract made
+  structural rather than incidental.
+- `scripts/test-preflight-breaker-check.sh` — **new** integration suite: runs the *real*
+  preflight with the *real* breaker in a sandbox git repo, stubbing only the expensive
+  sibling checks. 8 scenarios / 22 assertions: no state; OPEN surfaced by id with exit 0;
+  corrupt JSON (unreadable layer); wrong schema (not-parseable layer); missing script;
+  below-threshold bead reported as tracked, not open; two OPEN breakers both named with
+  the count; open entry missing `retry_after` renders the `?` fallback (added this
+  dispatch — the fallback renders a bare `?`; the quotes are jq program syntax).
+- repo `CLAUDE.md` — names `scripts/needle-with-limiter.sh` the sanctioned dispatch entry
+  point (GAP-4's naming half). Deliberately **not** done here: the twin one-liner in
+  `docs/maintenance/repository-maintenance-guide.md` — that guide carries a co-tenant's
+  in-flight edit in this shared worktree, and committing it would sweep a neighbor's
+  unlanded work; flagged for the guide's next editor.
+
+**Verification (all first-hand this dispatch).**
+| Layer | Check | Result |
+|---|---|---|
+| Breaker unit | `scripts/test-crash-circuit-breaker.sh` | **18/18** — the dependency is intact (trip at 3, half-open probe, backoff, 24 h decay) |
+| Wrapper gate | `scripts/test-needle-with-limiter-gate.sh` | **pass** — OPEN+cooldown → bead deferred out of the ready frontier; half-open → one probe; missing breaker fails open |
+| Integration | `scripts/test-preflight-breaker-check.sh` | **22/22, exit 0** — all 8 scenarios above |
+| Live state | `crash-circuit-breaker.sh status` against the live `.beads/logs/circuit-breaker-state.json` | exit 0; Check 4's exact queries return `OPEN_COUNT=0` / `TRACKED_COUNT=0` |
+| Live preflight | `scripts/preflight-health-check.sh` | deferred at check 0 (exit 75, `crash_burst` latched) — the load-shedding layer working as designed; Check 4 sits behind that gate by construction, and its live query path is proven by the row above |
+
+**Honest scope.** Two things this fix does *not* do. (1) It does not make the gc
+survivable — that is Addendum 9's pack-memory bound; the two layers are complementary
+(operation survivable; recurrence's blast radius bounded at trip-at-3 → defer, instead of
+44 kills and 44 alert beads). (2) The breaker only *accrues* state when dispatch flows
+through `needle-with-limiter.sh`; NEEDLE's internal release-and-retry loop — the thing
+that actually re-dispatched bf-4x12ec 44 times — does not flow through it. What the
+wrapper buys when it *is* used is enforcement at the one place that binds any path: a
+bead deferred in the store cannot be claimed by any worker until `retry_after`. Until
+NEEDLE adopts the gate (canon G-13, external ask), the repo-side contribution is
+visibility (Check 4) plus enforcement-when-used (the wrapper); the real fix stays with
+NEEDLE, exactly as GAP-4 says.
+
+**Addendum 10 Sources:** `docs/crash-investigations/bf-4x12ec-remediation-plan-domchk-0fcaef88-2026-09-08.md` §4 GAP-4 + §5 (this addendum closes its "half" status); `scripts/crash-circuit-breaker.sh` header (bf-65lsdu lineage, landed domchk-0c916ec7); `scripts/needle-with-limiter.sh` header (store-level deferral rationale); `docs/research/root-cause-analysis-bf-65lsdu-signal-minus-one-2026-09-02.md` §7 (127-dispatch storm, the breaker's origin gap); the three test suites (run this dispatch); live breaker state file and preflight run (this dispatch); Addendum 9 (the complementary memory-bounds layer)
+**Addendum 10 version note:** appended on top of HEAD `1b27762` / origin/main (0/0 divergence at write time); the pre-edit worktree copy was byte-identical to HEAD (blob `2aac20c2`, verified by diff + hash-object), and this file's staged 407-line deletion in the shared index is a co-tenant's in-flight state, not carried by the commit that publishes this addendum (committed via explicit pathspec). Correction by the committing dispatch (same bead `domchk-e1400e03`, 2026-09-08): the CLAUDE.md half of the naming change had **not** survived the prior attempt's death — neither worktree nor HEAD named the wrapper. It lands in the same commit as this addendum (a short "Dispatch entry point (remediation-plan GAP-4)" paragraph under Pre-Task Resource Check); the maintenance-guide twin remains deliberately undone, that file still carrying a co-tenant's in-flight edit. All four suites re-run green by the committing dispatch: breaker unit 18/18, wrapper gate pass, preflight integration 22/22, `test-gc-memory-bounds.sh --unit` pass.
