@@ -77,3 +77,34 @@ objects (1.55MiB) — inside every bloat threshold.
 - Companion evidence from this split family:
   [domchk-e0e1120e — monitoring stack verification](domchk-e0e1120e-monitoring-stack-verification-2026-09-08.md)
   (child 1).
+
+## Re-verification pass 2 — 2026-09-08 ~06:23Z (gate-bounce re-close)
+
+The bead was closed at 02:45:30Z and the needle shipped-work gate auto-reopened
+it at 02:47:38Z (`verification-failed`, `failure-count:1`). The gate's log line
+names the cause, and it is not this bead's work:
+
+> `2026-09-08T02:47:37.963Z … bead closed but shipped-work check failed …
+> reason=commit 55f23db has substantial changes but has not been pushed to its
+> upstream origin/main`
+
+`55f23db` is a **co-tenant** commit (bf-4x12ec kernel/systemd evidence, 333
+lines, authored 22:43:58 EDT) that sat unpushed inside this dispatch's window
+when the gate ran; this bead's deliverable `520c40e` was already on
+origin/main. `55f23db` has since been pushed — HEAD↔origin/main divergence 0/0
+at re-verification — and every check was re-executed live. Figures match pass 1
+to within kilobytes; raw pass-2 evidence in
+`.beads/state/crash-prevention-testing/gc-bounds.md` and
+`gc-memory-bounds-run-2nd-2026-09-08.log` (untracked, gitignored like all bead
+state).
+
+| Check | Pass 2 result |
+|---|---|
+| `setup-git-gc-config.sh --verify` | exit 0 — all three keys from **local** scope, threads pinned, worst case ≈3072MiB within the 6GiB ceiling |
+| `test-gc-memory-bounds.sh` | 17/17, exit 0 — push peak **232,476 KB ≈ 227 MiB** (pass 1: 232,468), aggressive-gc peak **320,524 KB ≈ 313 MiB** (pass 1: 320,472), both under `MemoryMax=768M` |
+| `journalctl --user` scope peaks | `gcmb-push-backlog-1930904` **274.5M**, `gcmb-bare-aggressive-1930904` **595.7M** — 2.2% / 4.8% of the 12GiB dispatch scope |
+| `safe-git-gc.sh --check-only` | config validated, all resource gates passed, "GC not needed" verdict (exit 1 = verdict, not failure); repo 107M, 362 loose objects (2.55MiB), 1 pack (100.25MiB) |
+
+Verdict unchanged: **all three acceptance criteria hold.** The bound chain is
+in force, and both memcg-OOM death operations of the crash era complete with
+20–50× headroom under the bounds, reproducibly across two runs six hours apart.
