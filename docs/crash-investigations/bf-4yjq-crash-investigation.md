@@ -1,5 +1,14 @@
 # Comprehensive Crash Investigation: bf-4yjq
 
+> **📂 DETAILED RECORD (re-labeled 2026-09-08, domchk-8b3c1c69).** The canonical consolidated
+> crash investigation report for bf-4yjq — the entry point covering the parent deliverables
+> (crash summary, logs/error indicators, reproducibility assessment) and the split-child
+> findings table — is now
+> **[`docs/crashes/bf-4yjq-crash-investigation.md`](../crashes/bf-4yjq-crash-investigation.md)**.
+> This file remains the detailed 11-section investigation record with the complete evidence
+> chain (§11 formal classification, §7 reproducibility re-verification, §3 evidence
+> reconciliation); its dated corrections govern on any figure-level conflict.
+
 **Subject bead:** bf-4yjq — "Git origin remote points to GitHub directly; Forgejo mirror has diverged/gone stale" (P2, closed 2026-08-17)
 **Investigation bead:** domchk-4eab7c59
 **Report date:** 2026-09-02

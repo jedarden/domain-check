@@ -1,14 +1,16 @@
 # Comprehensive Crash Report: Bead bf-4yjq
 
-> **⚠️ PARTIALLY SUPERSEDED (2026-09-02).** The crash count and cadence in this report are
+> **⚠️ PARTIALLY SUPERSEDED (2026-09-02; canonical pointer updated 2026-09-08).** The crash count and cadence in this report are
 > incorrect: it records **9 crashes at ~17-minute intervals**, but verification against
 > `.beads/checkpoint/forensic.jsonl` established **50 crashes at ~3.1-minute intervals**
 > (2026-08-12 17:54:00–20:30:43 UTC), part of a same-day 455-event workspace-wide crash storm.
-> Its "1.7 GB" post-cleanup repository figure is an intermediate state; 91–92 MB matches the
-> gc evidence and current verification. See
-> **`docs/crash-investigations/bf-4yjq-crash-investigation.md`** (canonical) and
-> `docs/crash-circumstances-bf-4yjq-domchk-d5dd1b33-2026-09-02.md`. The signal analysis and
-> prevention-stack validation below remain valid.
+> Its "1.7 GB" post-cleanup repository figure is an intermediate state; 91–106 MB matches the
+> gc evidence and current verification. The canonical consolidated report is
+> **[`docs/crashes/bf-4yjq-crash-investigation.md`](bf-4yjq-crash-investigation.md)**
+> (domchk-8b3c1c69); the detailed investigation record is
+> `docs/crash-investigations/bf-4yjq-crash-investigation.md`; see also
+> `docs/archive/crash-investigations/crash-circumstances-bf-4yjq-domchk-d5dd1b33-2026-09-02.md`.
+> The signal analysis and prevention-stack validation below remain valid.
 
 **Report Date:** 2026-09-01
 **Investigation Task:** domchk-7c4d8aa1

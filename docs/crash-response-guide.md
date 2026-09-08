@@ -498,8 +498,9 @@ exit 1 means no bound is in force or threads are unpinned.
 **Reference artifacts:**
 - `docs/reports/bf-4yjq-comprehensive-crash-report.md` — comprehensive crash report
   (root-cause analysis and telemetry valid; crash count/cadence superseded — see its banner)
-- `docs/crash-investigations/bf-4yjq-crash-investigation.md` — canonical investigation
-  (verified 50-crash count)
+- `docs/crashes/bf-4yjq-crash-investigation.md` — canonical consolidated report (domchk-8b3c1c69;
+  verified 50-crash count; detailed record:
+  `docs/crash-investigations/bf-4yjq-crash-investigation.md`)
 - `docs/crash-artifacts-bf-4yjq.md` — preserved crash artifacts
 - `docs/crashes/bf-4yjq-cleanup-verification.md` — post-cleanup verification record
 - `docs/crash-mitigation-strategies.md` — mitigation strategies
@@ -1091,8 +1092,9 @@ Other Exit Code?
 - **Repository Bloat (bf-4yjq, 2026-08-12 — repaired and re-verified 2026-09-06):**
   - `docs/reports/bf-4yjq-comprehensive-crash-report.md` — comprehensive report
     (root cause and telemetry valid; crash count/cadence superseded — see its banner)
-  - `docs/crash-investigations/bf-4yjq-crash-investigation.md` — canonical investigation
-    (verified 50 crashes at ~3.1-minute intervals)
+  - `docs/crashes/bf-4yjq-crash-investigation.md` — canonical consolidated report
+    (domchk-8b3c1c69; verified 50 crashes at ~3.2-minute intervals; detailed record:
+    `docs/crash-investigations/bf-4yjq-crash-investigation.md`)
   - `docs/crashes/bf-4yjq-cleanup-verification.md` — cleanup verified, repo at ~94MB
   - `docs/maintenance/repository-maintenance-guide.md` — size limits, daily maintenance,
     emergency cleanup steps
