@@ -784,3 +784,60 @@ holds at 104M with `fsck --full` clean, the bound resolves through the
 effective git-config chain, the crash-storm breaker now gates dispatch itself,
 and all eight maintenance timers fire — so this bead ships the verifying pass
 and closes the investigation out, not a new fix.
+
+## Verification — crash information gathering (re-dispatch bead `domchk-c95117c0`, 2026-09-08)
+
+Bead `domchk-c95117c0` (created 2026-08-17T15:59Z) is the original
+crash-information-gathering task for this family, re-dispatched. Its first
+attempt (2026-08-25) produced
+`docs/crash-summary-bf-4x12ec-comprehensive.md` (commit `0f27e54`, since
+moved to `docs/archive/crash-investigations/` by the `a883044` archive pass),
+and the analysis / report / fix-effectiveness legs are covered by the three
+verification sections above. Per the verify-then-close rule for this crash
+family, this section re-derives the tasked facts first-hand at HEAD `60ecf28`
+(2026-09-08) instead of manufacturing a duplicate summary — near-identical
+report titles across beads are this corpus's main false-positive source.
+
+### Acceptance-criteria mapping
+
+| This bead's acceptance criterion | Where it is satisfied | What this pass re-derived first-hand |
+|---|---|---|
+| Retrieve agent transcript/logs | `docs/crashes/bf-4x12ec/` (53 per-attempt transcripts, `attempt-index.tsv`, attempt-2 bracket) + `docs/crash-investigations/evidence/bf-4x12ec/crash-logs/` | Both bundles present and tracked. Re-tallied the primary event log `needle-events-2026-08-14-bf-4x12ec.jsonl.gz`: 1,146 records spanning 10:21:06.970Z (attempt-1 claim) → 12:58:55.502Z (`bead.orphaned`); the exit code lives in the nested `data` object, so the naive whole-record count finds each one twice — **53 `agent.completed` = 44 × exit −1 / 8 × exit 124 / 1 × exit 0**, mirrored 1:1 by `outcome.classified` |
+| Document crash timestamp, exit code, signal | §"Exit code and signal analysis"; canonical report §Timestamp reconciliation | 44 kills 2026-08-14 10:23:02.958Z → 11:27:26.175Z at attempt lifetimes **38,882–115,797 ms**. The task's own note names 10:41:13Z — one of the 44 alert heartbeats, not a kill. For the *named* crash (alert `bf-3m9m1v`, `Timestamp:` 10:25:30.457Z): kill = attempt 2's `agent.completed` exit −1 at **10:25:01.512Z**, the heartbeat **28.95 s after**. Exit `−1` is needle's died-without-exit-code sentinel, not a signal number; sender = kernel memcg OOM killer (`CONSTRAINT_MEMCG`) inside the 12 GiB `run-p<id>-i<id>.scope` dispatch scopes — regime-matched, since no Aug-14 kernel/journal line survives (window precedes the single surviving boot by 36 h 29 m) |
+| Capture the bead's full description and context | §"Original bead context" (re-read live this pass) | `bead show bf-4x12ec` → **Closed, rev 4**; Phase-1.2 emergency stabilization: `git gc --aggressive --prune=now` + `git repack -a -d --depth=250 --window=250` against **4,627 loose objects / 17.20 GiB** (17+ identical 237 MB `.beads/*.jsonl` snapshots); close notes carry the outcome (753 MB / 141 loose, gc completed despite the agent crashes) |
+| Identify what the agent was working on when it crashed | `docs/crashes/bf-4x12ec/README.md` "What attempt 2 was doing when it was killed"; `transcripts/census.tsv` | **All 44 crash attempts** end inside the same tasked command: 43 with last record `Bash:git gc --aggressive --prune=now`, 1 with its `echo "Starting aggressive git garbage collection…" && git gc` launcher — always mid-tool_use, never a `tool_result`. Attempt 2's last reads before dying: `git count-objects -vH` → 4,649 loose / 17.20 GiB; `du -sh .git` → 18G; `free -h` → **50 Gi available** (so never host OOM — the ceiling was the dispatch scope's 12 GiB `MemoryMax`) |
+| Note any error messages or stack traces | §"Exit code and signal analysis"; attempt transcripts | **None exist, by mechanism.** SIGKILL leaves no stack trace and no error string: greps for `Killed`/`signal 9`/`oom` over the attempt-2 transcript return 0, transcripts end mid-tool_use with no matching `tool_result`, and the only non-−1 failures are the **8 × exit 124** dispatch-cap timeouts (attempts 45–52, 600 s each, completions 11:38:07.867Z–12:50:14.283Z) |
+
+### The original deliverable's superseded claims
+
+The archived `crash-summary-bf-4x12ec-comprehensive.md` — and the note bead
+`domchk-c95117c0` still carries from its 2026-08-25 attempt — predate the
+kernel-record recovery. Readers should apply these deltas rather than
+re-citing them:
+
+| Archived claim | Corrected by later evidence |
+|---|---|
+| "Crash timestamp 2026-08-14T10:41:13Z (initial alert)" | An alert-bead heartbeat, not a kill instant — every corpus "crash timestamp" is one of the 44 heartbeats (§Timestamp reconciliation) |
+| "The git gc operation itself was terminated via SIGKILL after ~57 minutes" | No attempt lived 57 minutes: the 44 kills ran 39–116 s. The figure conflates the ~66-minute storm window with a single operation; the 8 later attempts are 600 s exit-124 dispatch timeouts |
+| "Root cause: repository bloat (18GB) + long-running operation timeout/OOM" | Right family, wrong locus: **cgroup-local memcg OOM** (usage == limit == 12,582,912 kB in 375 surviving same-regime kills) while the host held 50 GiB available — both the "timeout/51 GB" and "OOM impossible/51 GB available" framings are superseded (§Consolidation) |
+
+What the archived summary got right and stands: agent
+`claude-code-glm-4.7`; classification INFRASTRUCTURE, not a code defect (zero
+defects across all 53 attempts); the 17 × 237 MB `.beads/` snapshot account
+of the bloat; and "task ultimately succeeded" — attempt 53 exited 0 at
+12:58:45.113Z and completed the work (the orphaned-release that then
+regenerated FP alerts is prevention row 3).
+
+Supporting live state at this pass: HEAD `60ecf28`, `.git` **105M** / 114
+loose objects / 100.49 MiB pack / 0 garbage / **0 unpushed** — the 18G regime
+this crash died in stays packed down. No file under `.beads/` was written;
+all store access was read-only.
+
+**The tasked question, in one line:** all the crash information this bead was
+tasked to gather already exists first-party — 53 transcripts plus the
+1,146-event worker-log extract under `docs/crashes/bf-4x12ec/` (44 × exit −1
+memcg-OOM SIGKILLs, each attempt killed inside the bare
+`git gc --aggressive --prune=now` it was running; heartbeat-vs-kill
+timestamps decoded; no stack traces by mechanism) — so this bead ships the
+verifying pass and the archived summary's superseded deltas, not a duplicate
+report.
