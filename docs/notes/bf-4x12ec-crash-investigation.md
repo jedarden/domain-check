@@ -740,3 +740,47 @@ bf-4x12ec owes already exists as
 false-positive) 44-kill memcg-OOM retry storm, INFRASTRUCTURE not code, fully
 remediated and holding — so this bead ships the verifying pass, not a
 duplicate report.
+
+## Verification — fix effectiveness (re-dispatch bead `domchk-2400c0aa`, 2026-09-08)
+
+Bead `domchk-2400c0aa` (created 2026-08-26, worked 2026-09-08) re-dispatched
+the third leg of this family: **verify the fix works, run a test proving it
+prevents the crash, and close the investigation out.** The two verification
+sections above cover the analysis leg (`domchk-0c1beda9`) and the
+report-existence leg (`domchk-7b316e8e`); this one exercises the fix itself —
+the mitigation layer catalogued in §"Files and systems involved" → "The
+mitigation layer that exists because of this crash", plus the GAP-4
+dispatch-path wiring landed at HEAD `23d83f3` (2026-09-08T03:55:16 −0400) by
+`domchk-e1400e03`, whose commit message names this bead as the blocker it
+satisfied. Per the verify-then-close rule for this crash family, everything
+below was **re-executed first-hand at HEAD `23d83f3`** (2026-09-08T08:09Z),
+not carried over from the sections above.
+
+### Acceptance-criteria mapping
+
+| This bead's acceptance criterion | Where this file satisfies it | What the verifying pass re-derived (first-hand, 2026-09-08T08:09Z, HEAD `23d83f3`) |
+|---|---|---|
+| Confirm the original issue is resolved | §Files and systems → "The target of the original task" (store-state row); §Consolidation → "What child 4 verified first-hand" | `du -sh .git` → **104M** (was ~18G); `git count-objects -vH` → **13** loose objects / 136.00 KiB, **12,424 in-pack** in a single **100.49 MiB** pack, **0 garbage**; `git fsck --full` **exit 0** (dangling tree only — ordinary churn, not corruption); `check-repo-health.sh` **exit 0** with "CLEAR: no unpushed backlog (0 < 50 warn threshold)". The 17.20 GiB loose-object regime every attempt died in stays gone. |
+| Run a test to verify the fix prevents the crash | §Files and systems → "Test suites for the layer" row → `scripts/test-gc-memory-bounds.sh` | **Full suite run (integration included): 17 passed, 0 failed, rc 0, 61 s wall.** It re-runs both memcg-OOM death operations at reduced scale inside `MemoryMax=768M` — 1/16th of the 12 GiB dispatch scope that killed all 44 attempts: bare `git gc --aggressive --prune=now` **exited 0**, pack-objects peak RSS **320,468 KB (~313 MiB)** (the unbounded run exceeded 12 GiB); the bf-1ea4g death operation — bounded `git push` over an unpacked 192 MiB near-identical-snapshot backlog — **exited 0**, peak RSS **232,472 KB (~227 MiB)**, and the bare remote received the backlog. The scaled bound (128m window / 64m cache / 1 thread) is the deployed config's, scaled. |
+| Document the complete investigation timeline | §Original bead context → "Crash timestamp"; the canonical report's §Incident timeline (minute-level, 10:17:26 bead created → 12:58:55 `bead.orphaned`); the two verification sections above (exit census re-tallied from the primary event log) | Timeline is complete in this file plus `docs/crash-reports/bf-4x12ec-git-gc-crash.md`; the verifying pass re-confirmed the census figures it cites stand (53 `agent.completed` = 44 × exit −1 / 8 × 124 / 1 × 0), and adds the post-crash timeline leg this file's earlier sections predate: remediation layered in through 2026-09-08, ending with the GAP-4 dispatch-path wiring at `23d83f3`. |
+| Close out the investigation with final report | The canonical report `docs/crash-reports/bf-4x12ec-git-gc-crash.md` (finalized `76bf33c`, footer complete) + this consolidated record, which now carries all three verification legs | Close-out evidence recorded on bead `domchk-2400c0aa` itself before close (note path), per this family's shipped-work-gate history. |
+
+### The fix, layer by layer — verified live at this pass
+
+| Layer | Command run this pass | Result |
+|---|---|---|
+| Effective pack-memory bound on the bare path | `./scripts/setup-git-gc-config.sh --verify` | rc 0 — effective (system → global → local) `pack.windowMemory=2g` / `pack.deltaCacheSize=1g` / `pack.threads=1`; worst-case pack memory ≈ **3,072 MiB**, within the 6,442,450,944-byte ceiling for the 12 GiB dispatch scope |
+| Death operations survive the bound | `./scripts/test-gc-memory-bounds.sh` (full) | **17/17, rc 0** — see the criterion-2 row above for the two integration results |
+| Crash-storm breaker on the dispatch path (GAP-4, new at this HEAD) | `./scripts/test-crash-circuit-breaker.sh`; `./scripts/test-needle-with-limiter-gate.sh` | Both **rc 0** — breaker unit suite (exponential backoff, deferral, rebuild, 24h decay) and wrapper gate (OPEN + cooldown defers the bead out of the ready frontier; half-open probes once; missing breaker fails open; only exit −1/137 trip it) |
+| Preflight surfaces an open breaker | `./scripts/test-preflight-breaker-check.sh`; then the live `./scripts/preflight-health-check.sh` | Integration suite **22/22, rc 0**; live preflight **5/5 checks passed**, Check 4 reporting "No open breakers" |
+| Scheduled maintenance | `systemctl --user list-timers 'domain-check-*' --all` | All **8 timers present with future trigger times** (service 2 min / resource 5 min / crash-pattern 10 min / alert-triage ~1 h / repo-health 02:00 / auto-gc 02:30 / gc 03:00 / full gc Sun 04:00) |
+| Bounded gc wrapper preflight | `./scripts/safe-git-gc.sh --check-only` | Resource checks passed; verdict "**GC not needed**" — its documented exit 1 *verdict* (nothing to do), not a failure |
+
+**The tasked question, in one line:** the fix is verified effective
+first-hand — both operations that memcg-OOM-killed all 44 bf-4x12ec attempts
+now complete inside 1/16th of the dispatch scope that killed them (peaks
+~313 MiB gc / ~227 MiB push against a 12 GiB cap), the store they bloated
+holds at 104M with `fsck --full` clean, the bound resolves through the
+effective git-config chain, the crash-storm breaker now gates dispatch itself,
+and all eight maintenance timers fire — so this bead ships the verifying pass
+and closes the investigation out, not a new fix.
