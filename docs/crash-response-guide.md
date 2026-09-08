@@ -581,6 +581,133 @@ domchk-f239e178 (in flight at verification time).
 
 ---
 
+## Prevention Strategies at a Glance
+
+Every pattern above has a deployed countermeasure. This is the map; **each claim is only
+as current as its last validation** — [`docs/crash-prevention-validation.md`](crash-prevention-validation.md)
+is the step-by-step procedure per layer, and its battery was all-green on **2026-09-08**
+(13 live checks + 19 tracked suites). Re-run before citing.
+
+| Pattern | Prevention layers in force | Where validated |
+|---------|---------------------------|-----------------|
+| 1 — Post-completion false positive | work-completion markers (`.beads/state/work-completion/`), closed-bead gate + 7-day dedup window in the alert layer | `test-verify-work-completion.sh` 11/11 · `test-closed-bead-filter.sh` 7/7 · `test-crash-alert-fixes.sh` 13/13 |
+| 2 — Git gc OOM | `safe-git-gc.sh` (bounded, checkpointed) + persistent `pack.windowMemory=2g`/`threads=1` bounds on *any* pack-objects, bare or scripted | `test-safe-git-gc-limits.sh` 33/33 · `test-setup-git-gc-config.sh` 34/34 · `setup-git-gc-config.sh --verify` exit 0 |
+| 3 — Repository bloat | `.beads/` fully gitignored (0 tracked files) · 10 MB pre-commit hook · daily bounded gc + weekly full gc timers · repo-health thresholds | `setup-git-hooks.sh --check` · `git ls-files .beads \| wc -l` → 0 · `check-repo-health.sh` exit 0 |
+| 4 — Service availability | preflight gateway check (`curl -skf` — self-signed cert) · 2-min service-monitor timer · retry/backoff + circuit-breaker policy | `preflight-health-check.sh` 5/5 · `service-monitor.sh --once` exit 0 |
+| 5 — Max turns exhaustion | verify-work-completion gate before close (task evidence recorded even when the agent dies post-completion) | `test-verify-work-completion.sh` 11/11 |
+| 6 — Unbounded push over backlog | `.beads/` untracked (precondition) + pack bounds (operation) + `check-unpushed-backlog.sh` telemetry wired into the daily 02:00 health check | `test-gc-memory-bounds.sh` 17/17 (death-op replay) · `test-unpushed-backlog-wiring.sh` 11/11 |
+| Storm amplifier (re-dispatch into the same crash) | crash-storm circuit breaker + concurrency limiter gating dispatch (`needle-with-limiter.sh`) · surge gate (`system-event-mode.sh`, exit 75 = defer) wired into preflight | `test-crash-circuit-breaker.sh` · `test-needle-with-limiter-gate.sh` 25/25 · `test-preflight-breaker-check.sh` 22/22 · `test-system-event-mode.sh` 32/32 |
+
+**What is deliberately *not* on this map:** NEEDLE-side retry stop-condition (H-1),
+per-scope memory telemetry (M-2), gateway failover (G-4), prevention feedback loop (G-5)
+— open requirements in [`docs/crash-prevention-requirements.md`](crash-prevention-requirements.md) §4.
+Do not cite this guide as covering them.
+
+---
+
+## Operational Runbooks by Alert Type
+
+One runbook per alert class. Each: what fired it → actions in order → when to close →
+when to escalate. Phase references point into the Investigation Checklist above.
+
+### Runbook A — Crash alert, target exit −1 (signal death)
+
+1. **Resolve the target first.** Read the target bead's own deliverable and
+   `git log --all --grep <target-id>` — most alerts point at work another worker already
+   finished. Run the dedup gate before investigating:
+   `./scripts/alert-deduplication.sh check <alert-bead-id>` (0 = duplicate → suppress).
+2. **Check for a completion marker:** `cat .beads/state/work-completion/<target>.json`.
+   `"result": "VERIFIED"` → post-completion death; verify-then-close (Runbook F applies to
+   the bead, no investigation owed).
+3. **No marker → get the real kill time** from the needle worker log's `agent.completed`
+   record (the alert's `Timestamp:` is a heartbeat that trails the kill by 8–120 s), then
+   run Phase 2A — including the **cgroup check**, not just host memory.
+4. `exit −1` is a sentinel, not a signal (note 2): assert a mechanism only from
+   kernel/journald records (`oom-kill`, `CONSTRAINT_MEMCG`).
+5. **Close criteria:** work verified intact + mechanism named from evidence + bead notes
+   state classification. **Escalate** if `git fsck` fails or artifacts are missing.
+
+### Runbook B — Crash alert, exit 1 `error_max_turns`
+
+1. Verify the main task's deliverable exists (commit, artifact, `verify-work-completion`
+   marker) before reading the trace.
+2. Deliverable present → FALSE_POSITIVE (workflow-only failure): document in bead notes,
+   close. Do not re-run the task.
+3. Deliverable absent → find the loop that consumed the turns
+   (`jq -r 'select(.type=="tool_call") | .tool' <trace> | tail -20`), fix the task shape
+   (split via `bead-split-recommender.sh`), re-dispatch.
+4. **Escalate** only if the same bead max-turns repeatedly on *different* shapes — that is
+   a turn-budget problem (NEEDLE G-12), not a task problem.
+
+### Runbook C — Crash alert, exit 1 HTTP 503/502 (service failure)
+
+1. Confirm the gateway is actually down **with the right probe**:
+   `curl -skf --max-time 5 https://traefik-apexalgo-iad.tail1b1987.ts.net:8444/health`.
+   Plain `-sf` fails curl 60 on the self-signed cert while the gateway is fine — a
+   documented false alarm.
+2. Gateway up → transient blip at crash time: retry with backoff
+   (`scripts/retry-with-backoff.sh` / the exponential-backoff pattern in
+   `docs/notes/service-availability-retry-strategy.md`), classify SERVICE_FAILURE, close.
+3. Gateway down → defer until restored; the 2-min service-monitor timer
+   (`domain-check-service-monitor.timer`) is the recovery signal.
+4. **Close criteria:** classification + either retry-success or deferral note.
+   **Escalate** after ~30 min of continuous 5xx (persistent outage, not a blip).
+
+### Runbook D — Resource alert (memory pressure / disk / load)
+
+1. Confirm current state: `free -h && df -h / && uptime`, or
+   `./scripts/resource-monitor.sh --once` (pressure %, unsafe-gc flag).
+2. Memory pressure ≥70% (warning) → stop dispatching heavy work; ≥80% → treat as an
+   active event and gate with `./scripts/system-event-mode.sh check` (exit 75 = defer).
+3. Disk <30GB → clear regenerable `target/` dirs from repos you are *not* building
+   (never back them up); <20GB is critical — escalate before any gc or pack operation.
+4. Load >10 → no new dispatches until it drains; the box was never the OOM constraint
+   (the 12 GiB dispatch scope is), but load multiplies every other failure mode.
+5. **Close criteria:** metrics back under warning + the deferral lifted.
+
+### Runbook E — Repo-health alert (bloat / backlog / gc)
+
+1. Measure: `du -sh .git .git/objects && git count-objects -vH` and
+   `./scripts/check-unpushed-backlog.sh` (WARN ≥50, CRITICAL ≥200 commits ahead).
+2. Bloat path → `./scripts/safe-git-gc.sh --check-only`, then `--full` under
+   `./scripts/safe-git-monitor.sh --watch`; never bare `git gc --aggressive`
+   (Pattern 3). Verify with `git fsck --full` afterwards.
+3. Backlog path → identify the unpushed commits (`git log origin/main..HEAD --oneline`),
+   push if they are yours and reversible, and do **not** push a co-tenant's work.
+4. Confirm the mechanical bound survived: `./scripts/setup-git-gc-config.sh --verify`
+   (exit 1 = no effective bound or unpinned threads → restore before anything else).
+5. **Escalate** if `.git/objects` > 10GB (preemptive cleanup required) or fsck reports
+   corruption.
+
+### Runbook F — Crash surge / infrastructure event
+
+1. Detector: `./scripts/crash-pattern-detection.sh` — exit 2 = infrastructure event
+   (threshold: 3 abnormal terminations in 5 minutes, workspace-wide).
+2. **Stop adding load first.** `./scripts/system-event-mode.sh check` → exit 75 latches
+   the deferral; preflight re-checks it (Check 4) so new dispatches defer.
+3. Triage the *environment*, not the beads: repo size (Runbook E), memory (Runbook D),
+   gateway (Runbook C) — a fixed-cadence exit-−1 wave across multiple beads is an
+   environmental regime (bf-4yjq), not N independent task failures.
+4. Derive scale from `.beads/checkpoint/forensic.jsonl`, not alert beads (alert-bead
+   sampling undercounted bf-4yjq 50 → "9").
+5. Expect alert fan-out; the dedup gate + 5-min cooldown absorb part of it. Fix the cause
+   and the alert pool drains — do not burn agent-days closing alerts one by one during
+   the event.
+6. **Close criteria:** detector back to exit 0, deferral lifted, surge classified with a
+   named mechanism.
+
+### Runbook G — Breaker open / dispatch deferred
+
+1. `./scripts/crash-circuit-breaker.sh status` names the latched bead(s); exit 4 from the
+   limiter = dispatch blocked, exit 75 = deferred by the surge gate.
+2. This is the system working as designed (Pattern 6's amplifier cut). Do **not** force
+   dispatch around it; fix the underlying crash (Runbooks A–E) and let the breaker's
+   half-open probe clear it, or `bead update --status deferred` the bead it names.
+3. **Escalate** only if the breaker re-trips on the same bead after a fix landed — that
+   means the fix did not land.
+
+---
+
 ## False Positive Detection Heuristics
 
 Use these rules to quickly identify false positives:
@@ -1056,6 +1183,12 @@ Other Exit Code?
 
 ## Related Documentation
 
+- **Prevention validation (2026-09-08):**
+  [`docs/crash-prevention-validation.md`](crash-prevention-validation.md) — per-layer
+  testing procedures for every safeguard cited in this guide, integration-wiring checks,
+  failure-attribution rules, and the dated verification record. Run it before repeating
+  any "prevention in force" claim from this guide.
+
 - **Automated Crash Alert System (2026-09-02):**
   - `docs/crash-alert-fix-implementation-2026-09-02.md` - Complete crash alert system documentation
   - `docs/monitoring-implementation-summary-2026-09-02.md` - Monitoring system implementation
@@ -1105,7 +1238,11 @@ Other Exit Code?
 ---
 
 **Guide Status:** ✅ Complete  
-**Last Updated:** 2026-09-07 (fifth pass — Pattern 6 added: bf-1ea4g's unbounded
+**Last Updated:** 2026-09-08 (sixth pass, domchk-82c1ff9a — "Prevention Strategies at a
+Glance" mapping every pattern to its deployed countermeasure with the validation suite
+that proves it, seven operational runbooks keyed to alert type, and the validation-battery
+cross-link ([crash-prevention-validation.md](crash-prevention-validation.md), all-green
+2026-09-08)); fifth pass — Pattern 6 added: bf-1ea4g's unbounded
 push over a 422-commit unpushed backlog, its preventive layers with the
 2026-09-07 live-verification battery, the open H-1/M-2 residuals, and the M-1
 backlog-telemetry deployment note, domchk-87ef5683); fourth pass — bf-1ea4g canonical-record block added to
