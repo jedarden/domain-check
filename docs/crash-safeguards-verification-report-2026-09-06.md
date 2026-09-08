@@ -23,7 +23,7 @@
 
 All eight parent acceptance criteria were executed to completion with real measured results, and every in-process crash safeguard in the codebase held under both unit-test and live-process verification:
 
-- **Standard suite:** `go build` / `go vet` / `go test ./...` all exit 0 — 13/13 test packages pass, 0 failures, re-confirmed uncached (`-count=1`).
+- **Standard suite:** `go build` / `go vet` / `go test ./...` all exit 0 — 12/12 test packages pass, 0 failures, re-confirmed uncached (`-count=1`).
 - **Signals:** SIGTERM, SIGINT and SIGHUP were each delivered to a freshly built live process; all three took the graceful-drain path and exited 0. A held active connection produced a genuine 4.24 s drain inside the 15 s budget.
 - **Panic recovery:** 7/7 tests pass — panics become logged 500s with crash-recorder feed, `ErrAbortHandler` re-panics pass through, and a response already started aborts rather than corrupting.
 - **Timeouts:** the 30 s request-timeout middleware returns 503 on overrun, propagates deadlines to handlers, drops late writes, and does not misclassify client disconnects; server-level Read/ReadHeader/Write/Idle timeouts are correct against that budget. 6/6 + 2/2 pass.
@@ -55,16 +55,18 @@ All steps ran in the shared worktree on the lab box, each after a passing prefli
 ## 1. Standard Test Suite / Regressions (step 1)
 
 **Criterion:** *"Run existing test suite to ensure no regressions."*
-**Verdict: 🟢 PASS** — 13/13 test packages, 0 failures (working tree). One repository-integrity finding disclosed (F1).
+**Verdict: 🟢 PASS** — 12/12 test packages, 0 failures (working tree). One repository-integrity finding disclosed (F1).
 
 | Command | Exit | Outcome |
 |---|---|---|
 | `go build ./...` | 0 | clean |
 | `go vet ./...` | 0 | clean |
-| `go test ./...` | 0 | 13/13 packages `ok` |
-| `go test -count=1 ./...` (uncached re-run) | 0 | 13/13 `ok`, 0 FAIL |
+| `go test ./...` | 0 | 12/12 packages `ok` |
+| `go test -count=1 ./...` (uncached re-run) | 0 | 12/12 `ok`, 0 FAIL |
 
 Per-package (uncached): bootstrap 0.4s · cache 0.3s · **checker 23.8s** · cli 1.1s · config 0.005s · domain 0.03s · **httpclient 20.1s** · ratelimit 6.8s · **rdap 14.2s** · resilience 0.1s · **server 4.5s** · whois 0.3s. No-test-file packages: `cmd/calculate-divergence-stats`, `cmd/domain-check`, `cmd/extract-github-commits`, `internal/watch`, `web`.
+
+> **Count correction (13 → 12).** The step-1 summary and the step-1 bead's notes tally this as "13/13 test packages." The raw file does not support 13: `step1-testsuite.txt` records **12** distinct packages, each `ok` twice — one fresh uncached run (the per-package timings above) and one `(cached)` — 24 `ok` lines total, 0 FAIL; and the tree at step-1 HEAD `4f5d984` contains exactly 12 packages with `_test.go` files (17 packages total, 5 without). This report uses the raw file: **12/12**. The overcount changes nothing — no package failed in either reading.
 
 **Failing packages: NONE** in the working tree. Long tests (`DOMCHECK_RUN_LONG_TESTS`) were excluded here by design — steps 3 and 4 own them, and both ran them.
 
