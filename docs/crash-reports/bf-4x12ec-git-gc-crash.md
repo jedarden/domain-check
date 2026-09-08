@@ -4,10 +4,11 @@
 > `domchk-f6757c18` (umbrella: *Document crash findings and
 > create verification report*). This child contributes the **Summary block** and
 > the **incident timeline**, consolidated from investigation work that already
-> exists in this repo. Of the placeholder sections left at the end, **Root
-> Cause** and **Impact** are filled by child 2 (`domchk-08bdde8d`) and
-> **Repository State** by child 3 (`domchk-0936d2db`); **Resolution** and
-> **Lessons Learned** remain placeholders pending children 4–5.
+> exists in this repo. Section ownership in this split: **Root Cause** +
+> **Impact** — child 2 (`domchk-08bdde8d`); **Repository State** — child 3
+> (`domchk-0936d2db`); **Resolution** + **Lessons Learned** — child 4
+> (`domchk-1ef6b252`); CLAUDE.md procedures + finalization — child 5
+> (`domchk-6f771e64`).
 
 ## Summary
 
@@ -17,9 +18,12 @@
   not a signal number: needle's classification for a child agent that terminated
   without a wait status (signal death). The 8 later attempts exited `124`
   (the 600 s agent timeout) and the 53rd exited `0`.
-- **Resolution**: ⏳ **PENDING** — placeholder; a later child in this split
-  writes the verdict and the resolution narrative. (The outcome *events* are in
-  the timeline below.)
+- **Resolution**: ✅ **COMPLETED** — the objective (pack the 17.20 GiB and
+  eliminate the OOM hazard) was achieved and is holding, but via decomposition
+  and the child beads, not via the 44 crashed attempts: the 53rd attempt split
+  the work, and the gc itself completed under child `bf-173o7e`, commit-recorded
+  (`91e7d05`) and post-verified (`0a61037`). Verdict + narrative:
+  [Resolution](#resolution).
 - **Workspace / worker / session**: `/home/coding/domain-check` /
   `claude-code-glm-4.7-lab-domain-check` / session `a6dbb1fc` (agent
   `claude-code-glm-4.7`, model `glm-4.7`)
@@ -294,15 +298,152 @@ caution under [Sources](#sources-read-not-re-derived)) · fresh
 
 ## Resolution
 
-> ⏳ **PLACEHOLDER — PENDING. Not filled in by this child.** A later child in
-> this split records the verdict (COMPLETED / PARTIAL / FAILED) and what
-> actually happened, including which bead performed the eventual cleanup.
+> Filled by child 4 of the split (`domchk-1ef6b252`). Assembled from outcome
+> evidence already in the repo — the 2026-08-26 verification report, the
+> commit record, and the consolidated report — not re-derived.
+
+**Resolution: ✅ COMPLETED.** The task's objective — pack the 17.20 GiB /
+~4,650 loose objects and eliminate the OOM hazard during git operations — was
+fully achieved and still holds: 106 MB `.git`, 289 loose objects / 1.95 MiB,
+0 garbage, `git fsck --full` clean (fresh snapshot 2026-09-08,
+[Repository State](#repository-state) above). The verdict is COMPLETED rather
+than PARTIAL because every acceptance criterion in the bead body is met on the
+commit-recorded record (`0a61037`, 2026-09-02) and on today's snapshot. What
+keeps it from being a clean first-try completion is the *path*: 52 of 53
+attempts (44 kills + 8 timeouts) bought zero packing progress, and the work
+finished only after needle's auto-split decomposed the monolith.
+
+### Did the task actually succeed despite the crash?
+
+**Yes — by decomposition, not by survival.** Three outcomes must not be
+conflated:
+
+1. **The 44 phase-1 attempts: failed completely.** Each was memcg-OOM killed
+   inside its dispatch scope before writing any pack bytes — the object store
+   was byte-identical before and after every death. Nothing was accomplished
+   by any of them, and nothing of any attempt survived its kill.
+2. **The 53rd attempt: succeeded** — exit 0 at 12:58:45Z after 491.8 s, with a
+   passing verification gate. Its work product was *organizational*: children
+   `bf-173o7e` (gc) / `bf-5jhvpk` (repack) / `bf-im2sl1` (verify), chained
+   with dependencies under the umbrella label. "gc" / "repack" / "verify" each
+   fit an individual scope budget where the monolith did not.
+3. **The bead's actual objective: completed under child `bf-173o7e`** — Closed
+   2026-08-17T17:12:09Z, reason *"Git gc completed successfully — 17.20GB
+   loose objects packed into 444MB pack file, repository valid"* (that close
+   reason's figures are its own day-of measurement; the 2026-08-26 live
+   measurement is 753 MB `.git` / 750.67 MiB pack,
+   [Repository State](#repository-state)). The parent `bf-4x12ec` itself was
+   closed manually 2026-08-17T14:50:41Z, after being released orphaned
+   (`bead.orphaned`, 2026-08-14T12:58:55Z) instead of closed at success.
+
+This corrects the 2026-08-26
+[`bf-4x12ec-verification-report.md`](bf-4x12ec-verification-report.md) in one
+specific way while keeping its verdict: that report attributed the completion
+to background survival — "the actual git operation was already in progress via
+the git subprocess" and finished after the agent died. That mechanism is **not
+supported**: every phase-1 kill left the repo byte-identical, so no gc
+survived a kill, and no gc ran to completion on Aug-14 at all. What that
+report got right, and what stands, is the **outcome** — work completed
+successfully, repository healthy, no remediation needed. (Its single-crash
+framing and "signal -1" reading are superseded — see the caution under
+[Sources](#sources-read-not-re-derived).)
+
+### Did the work product survive the crash?
+
+**Yes — as repository state, not as in-window commits.** The storm left no
+commit: the repo sat at its 2026-08-09 baseline `00117cb` for the whole
+incident, and `git rev-list --count 00117cb..8373e5d` = 1 (the next commit is
+the day-after bead migration; re-verified live 2026-09-08). A `git gc` changes
+the object store, not the tree, so the surviving evidence of completion is
+**commit-recorded, not commit-carried**:
+
+| Commit | Date (UTC) | What it evidences |
+|---|---|---|
+| `8373e5d` | 2026-08-15 13:56 | first commit after the storm — repo and git operations alive the next morning |
+| `91e7d05` | 2026-08-17 00:43 | message records the completed final gc pass: *"Before: 527M .git, 163 loose objects (3 pack files) → After: 752M .git, 0 loose objects (1 optimized pack file)"*. It touches only `.needle-predispatch-sha` (dispatch bookkeeping) — a gc leaves no tree diff to commit |
+| `0a61037` | 2026-09-02 | post-gc repo-health verification — **all criteria pass**: 92M `.git`, 54 loose objects, 1 pack / 10,478 objects / 90.18 MiB, `git fsck --full` exit 0 with zero findings, `git status` 0.009 s |
+| `89c66af` | 2026-09-02 | the corrected root-cause record the outcome rests on (victim selection; 12 GiB `MemoryMax` directly verified) |
+
+Read `91e7d05`'s "before" figure carefully: **527M is the state after the
+earlier reduction passes, not the 18G crash-time figure** — that message
+records the final pass of a multi-pass cleanup. The 18G → 753 MB first
+reduction leg is not commit-recorded at all (no commit exists inside the
+window); its figures come from the live 2026-08-26 measurement in
+[`bf-4x12ec-verification-report.md`](bf-4x12ec-verification-report.md).
+
+### Acceptance criteria — met, and when
+
+| Bead criterion | Target | Met | Evidence |
+|---|---|---|---|
+| `git gc --aggressive --prune=now` completes without OOM/timeout | no kill | 2026-08-16/17 — **not** on 08-14 | `bf-173o7e` close reason; `91e7d05` message |
+| `git repack -a -d --depth=250 --window=250` | completes | 2026-09-08 | 2 packs → 1 / 100.25 MiB ([Repository State](#repository-state)) |
+| Repository size | < 500 MB | by 2026-09-02 | `0a61037` — 92M (the first post-cleanup snapshot, 2026-08-26, was 753 MB — above target) |
+| Loose objects | < 100 | by 2026-09-02 | `0a61037` — 54 (first snapshot was 141) |
+| `git fsck` completes without timeout | no timeout | 2026-08-26 | verification report; `--full` is the integrity gate ([fsck caveat](#git-fsck---no-full-invalid-reflog-entry-output-is-not-corruption)) |
+| Git operations without OOM | clone/fetch/checkout OK | 2026-08-26, holding | verification report; daily bounded gc and pushes since |
+
+The two criteria that missed their number on the first post-cleanup snapshot
+(753 MB vs <500 MB; 141 vs <100) were met by the scheduled maintenance
+trajectory — bounded gc, not more aggressive gc.
+
+### Data loss
+
+**No.** No commit was lost — no commit exists inside the crash window and the
+repo sat at its `00117cb` baseline for the whole incident (git-history table
+above). No working-tree or object-store loss — every kill preceded any
+pruning, so all 17.20 GiB of loose objects were intact after each of the 44
+deaths. The later size reduction was a verified consolidation into a pack, not
+deletion: `git fsck --full` exit 0 with zero findings (`0a61037`) and **0
+garbage objects** in every snapshot since. What the incident cost was time, not
+data — ~2.6 hours of dispatch churn across 53 attempts, plus the orphaned
+release that kept false-positive alerts regenerating until the manual close
+(2026-08-17) and again in the 2026-08-26 wave.
 
 ## Lessons Learned
 
-> ⏳ **PLACEHOLDER — not filled in by this child.** Recommendations to prevent
-> similar crashes. Source of record:
-> `docs/crash-investigations/bf-4x12ec-final-crash-report.md` ("Lessons Learned").
+> Filled by child 4 of the split (`domchk-1ef6b252`). The seven-lesson source
+> of record is
+> [`docs/crash-investigations/bf-4x12ec-final-crash-report.md`](../crash-investigations/bf-4x12ec-final-crash-report.md)
+> ("Lessons Learned"); this section carries the four **prevention**
+> recommendations that came out of this incident, with their live status, and
+> compresses the rest.
+
+**The one-sentence lesson:** the hazard was in the task text, the binding
+constraint was the dispatch scope's memory ceiling, and 44 retries of a
+deterministic kill bought exactly what the first one bought — nothing. Each
+prevention measure below attacks one of those three.
+
+### Prevention recommendations (status verified live 2026-09-08)
+
+| # | Hazard from this incident | Recommendation | Status (2026-09-08) |
+|---|---|---|---|
+| 1 | The bead's own body prescribed bare `git gc --aggressive --prune=now`, which builds delta chains across the *entire* 17.20 GiB object set **in memory before writing a pack byte** — that is why 44 kills left the repo byte-identical | **Run gc only through `scripts/safe-git-gc.sh`** — soft `SAFE_GC_MEMORY_MAX` (drives `pack.windowMemory`, default 2g) under a hard `SAFE_GC_CGROUP_MAX` ceiling (default 6g), `ulimit -v` fallback, fail-fast preflight (exit 2 before any git work), per-stage checkpoint/resume | Live. The same bounds are also persisted as plain git config (`pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` — the window limit is per-thread) repo-locally **and** globally via `scripts/setup-git-gc-config.sh`; `--verify` reports worst case ≈3,072 MiB, inside the 6 GiB ceiling for a 12 GiB dispatch scope |
+| 2 | Every attempt ran in a needle transient scope with `MemoryMax=12 GiB` (agent scopes; 6 GiB test-runner scopes), `oom_score_adj=200`, `memory.oom.group=0` — a workload whose peak exceeds the scope *must* die, and with `oom.group=0` *which* task dies is nondeterministic (agent task on Aug-14, `git` on Aug-16) | **Size the work to the scope, not the scope to the work.** Before dispatching a heavy operation, bound its peak (delta window/depth, `pack.windowMemory`, chunking/decomposition) so it fits the dispatch scope; decompose rather than raise limits; never read "host had N GB free" as headroom for a memcg-scoped task | Caps directly verified in the live scopes ([Root Cause](#root-cause)); the durable fix here was bounding the command (row 1), not raising the scope — the host had 45 Gi free all storm and attempts died anyway |
+| 3 | The one successful attempt released the bead **orphaned** instead of closing it (`bead.orphaned`, 12:58:55Z) — false-positive alerts regenerated until the manual close on 2026-08-17 and again in the 2026-08-26 wave | **Gate every close on work verification:** `./scripts/verify-work-completion.sh <bead-id> --summary "..."` before `bead close` — fails on unpushed commits or missing expected artifacts, and writes `.beads/state/work-completion/<bead-id>.json` so crash triage can tell post-completion deaths from mid-task ones | Live (`scripts/README.md`); the alert side is also fixed — closed-bead filtering + duplicate detection in `scripts/crash-alert-manager.sh` (CLAUDE.md "Crash Alert System") |
+| 4 | Nothing watched the repository between incidents — the bloat that armed this trap was invisible until git operations started dying | **Keep the repo-health automation installed:** systemd user timers (repo health + auto-gc check daily, incremental gc daily 03:00, full gc weekly Sun 04:00 at `MemoryMax=4G`), the 10 MB pre-commit size gate, and CLAUDE.md's bloat thresholds | Live: all 8 `domain-check-*` timers present with future trigger times (`systemctl --user list-timers 'domain-check-*'`); `check-repo-health.sh` exit 0; pre-commit hook installed and current (`./scripts/setup-git-hooks.sh --check`) |
+
+### The rest of the lesson set (compressed — full text in the final report)
+
+1. **Stop retrying deterministic failures — decompose.** Same cause + same
+   command + kill within ~2 min should trip the circuit breaker
+   (`scripts/crash-circuit-breaker.sh`, now present) or the split path *early*;
+   needle's auto-split only engaged ~96 minutes in, and the split is what
+   worked.
+2. **Never rule out OOM from host memory alone.** Check the process's cgroup
+   budget — this box memcg-kills git while tens of GB of host RAM are free.
+3. **Do not let task text prescribe memory-hazardous commands.** This bead's
+   body did, authored as a mitigation *for* bloat; the safe script now exists
+   and is codified in CLAUDE.md.
+4. **Close beads at success** — never release them orphaned (row 3 above).
+5. **Pre-flight config hygiene.** Two attempts died to a stale
+   `gc.aggressivewindow='1.hour'` before the crash loop even started; validate
+   git config before large operations.
+6. **Capture kernel evidence immediately — it does not survive.** Journal
+   rotation erased every Aug-14 kernel line, which is why this report's root
+   cause is inference-plus-corroboration and says so.
+7. **Write crash reports from primary event logs, not earlier summaries.** The
+   "57-minute gc" and single-crash narratives propagated across documents
+   until re-derived from the JSONL event stream.
 
 ## Sources (read, not re-derived)
 
@@ -320,4 +461,4 @@ incident was 44 crashes. Cite the consolidated report.
 
 ---
 **Report date:** 2026-09-08 · Split of `domchk-f6757c18` — summary + timeline `domchk-779d1180` (child 1) · **root cause + impact `domchk-08bdde8d` (child 2)** · repository state `domchk-0936d2db` (child 3) · resolution + lessons learned `domchk-1ef6b252` (child 4) · CLAUDE.md procedures + finalization `domchk-6f771e64` (child 5)
-**Sections completed:** Summary, Incident timeline, Root Cause, Impact, Repository State · **Pending from later children:** Resolution, Lessons Learned
+**Sections completed:** Summary, Incident timeline, Root Cause, Impact, Repository State, Resolution, Lessons Learned · **Pending from child 5 (`domchk-6f771e64`):** CLAUDE.md procedures + finalization
