@@ -389,3 +389,129 @@ environment that killed each attempt at it — the gc could not complete inside 
 while 17.20 GiB of loose objects were what it had to read. The operation was eventually completed
 under child **bf-173o7e**, after the retry chain had ended: the task succeeded, only the dispatch
 attempts died (Addendum 4 §3; child 3 §"Resource-state correlation", item 3).
+## Files and systems involved (`domchk-6df39087`)
+
+Written 2026-09-08T01:50Z by the files-and-systems child of the `domchk-c99cdf80` split. Scope:
+everything the bf-4x12ec task was aimed at, everything that killed it, and everything that now
+carries its record — catalogued, not re-analyzed. The kill mechanism and its evidence chain are
+child 3 §"Crash classification"; the repo/host conditions are child 2. Numbering note: this bead
+and `domchk-0e707410` (§"Exit code and signal analysis") both carry "child 3" in their dispatch
+descriptions — two sections, one number; the bead IDs are the stable identifiers.
+
+Every path below was verified live at HEAD `b435372` (2026-09-08): existence and tracking with
+`git ls-files --error-unmatch`, beads via the live store.
+
+### The target of the original task — this repo's git object store
+
+| Item | Detail |
+|---|---|
+| What bf-4x12ec was dispatched to repair | The `.git` object store of **this** repository: 18G, of which **17.20 GiB / 4,649 loose objects** — the attempt-2 readings taken inside the crash window (child 2 §Repository state). ~95.7% loose, loose:packed ≈ 1,800:1 |
+| What grew it | ~237–248 MB `.beads/*.jsonl` snapshots committed 17+ times between 2026-08-01 and 2026-08-12 (bf-2ildm's GitHub-commits extraction). One environmental regime: bf-2ildm created the bloat, bf-4yjq and bf-1s6c3 died on it Aug 12–13, bf-4x12ec died on it Aug 14 **removing** it (child 2 §Parallel investigations) |
+| The operation every attempt died in | Bare `git gc --aggressive --prune=now` — the bead's own acceptance criterion, alongside `git repack -a -d --depth=250 --window=250` and a `git fsck --no-full` that had been timing out at two minutes (§Original bead context; child 2 §Repository state) |
+| Where the store stands now (measured live 2026-09-08T01:50Z) | `.git` 105M; 178 loose objects; 12,174 in-pack in a 100.25 MiB pack; `fsck` clean per the repo CLAUDE.md health record. `.beads/` is wholly gitignored (`.gitignore:66`) plus repo-wide `*.db` / `*.jsonl` (`.gitignore:68-70`), so the growth path that created the bloat cannot recur through bead state |
+
+### The mitigation layer that exists because of this crash
+
+This is the guide's "NO CODE CHANGES NEEDED" disposition (child 3) turned into tooling —
+configuration and wrappers, not application changes. All paths tracked at HEAD `b435372`.
+
+| Layer | Files |
+|---|---|
+| Bounded gc — replaces the bare one-liner that killed all 44 attempts | `scripts/safe-git-gc.sh` (memory-capped, staged, checkpoint/resume, preflight validation), `scripts/cleanup-bloat.sh` — whose header names its own provenance: *"Replaces the old 'bare git gc --aggressive --prune=now' one-liner that caused the bf-1s6c3 crash"* — plus `scripts/cleanup-repo-bloat.sh`, `scripts/recover-repo-bloat.sh`, `scripts/safe-git-gc-monitor.sh`, `scripts/git-gc-monitor.sh`, `scripts/detect-unsafe-gc.sh`, `scripts/pre-gc-health-check.sh`, `scripts/check-repo-size.sh` |
+| The mechanical guard on the bare path | `scripts/setup-git-gc-config.sh` — persistent `pack.windowMemory=2g` / `pack.deltaCacheSize=1g` / `pack.threads=1`, applied repo-local **and** global, bounding bare `git gc` **and** `git push` pack-objects (the bf-198ne push-side variant of this same crash) |
+| Repo-health detection | `scripts/check-repo-health.sh`, `scripts/repo-health-monitor.sh`, `scripts/repo-health-check.sh`, `scripts/monitor-repo-health.sh`, `scripts/auto-gc-trigger.sh`, `scripts/preflight-health-check.sh` |
+| Scheduled maintenance | `scripts/setup-repo-maintenance.sh` plus the `domain-check-*-timer`/`-service` unit files in `scripts/` — systemd **user** timers (this box is NixOS; no crontab): crash-pattern 10 min, resource 5 min, service 2 min, repo-health + auto-gc check daily 02:00, incremental gc 03:00, full gc Sun 04:00 |
+| Crash-alert pipeline — the layer that minted this crash's 44 alerts and now suppresses their duplicates | `scripts/crash-alert-manager.sh` (closed-bead filter, dedup + processed-alert tracking, completion awareness, exit-code validation, cooldown), `scripts/crash-classifier.sh`, `scripts/alert-deduplication.sh`, `scripts/alert-cooldown.sh`, `scripts/crash-pattern-detection.sh`, `scripts/alert-triage-sweep.sh`, `scripts/classify-signal-crash.sh`, `scripts/crash-circuit-breaker.sh`, `scripts/setup-alert-triage-timer.sh` |
+| Work-completion and commit hygiene | `scripts/verify-work-completion.sh`, `scripts/pre-commit-repo-size-hook` (per-clone, installed by `scripts/setup-git-hooks.sh`) — the 10 MB staged-file gate that would have blocked the 237 MB `.beads/*.jsonl` commits that started the bloat |
+| Test suites for the layer | `scripts/test-safe-git-gc-limits.sh`, `scripts/test-gc-memory-bounds.sh` (reruns both memcg-OOM death commands under a 768 MiB cgroup), `scripts/test-cleanup-bloat.sh`, `scripts/test-setup-git-hooks.sh`, `scripts/test-crash-alert-fixes.sh`, `scripts/test-closed-bead-filter.sh`, `scripts/test-repo-monitoring.sh`, and the remaining `scripts/test-*` companions |
+| Run-time forensics the layer writes | `.git/safe-gc.log` and `.git/safe-gc-checkpoint.json` (what ran, peak RSS); `.beads/logs/git-gc-check.log`, `git-gc.log`, `git-gc-full.log`, `crash-monitor.log`, `resource-monitor.log`, `service-monitor.log` — all gitignored |
+
+### The bead-forge → bead-rs migration (confounding system)
+
+The store the crash-era record was born in and the store that holds it today are **different
+systems**, and the seam falls directly across the crash.
+
+| Fact | Value | Source |
+|---|---|---|
+| Store the bead was created and dispatched in | **bead-forge** — the `bf-` prefix; created 2026-08-14T10:17:26Z, all 44 kills the same day | §Original bead context |
+| Store that holds it now | **bead-rs** — `.beads/config.json` + `.beads/beads.db` (SQLite). `bf`/`bead-forge` is retired on this box; running it against a bead-rs store is a documented corruption hazard, never a recovery tool | repo CLAUDE.md "Beads (bead-rs CLI)"; live workspace shape verified 2026-09-08 |
+| Ordering | **The crash predates the migration.** Last crash-era event 2026-08-14T12:58:45Z (attempt 53); the rehydration commit `8373e5d` *"migrate: rehydrate the bead workspace from bead-forge to bead-rs"* is dated 2026-08-15 13:56:53Z (CLAUDE.md dates the migration program itself 2026-08-14). Under either date every bf-4x12ec death precedes the store that now carries the record | `git show -s 8373e5d`; repo CLAUDE.md |
+| What the seam costs the record | The bead-rs checkpoint's **event** stream begins 2026-08-16T04:21:10Z — **zero Aug-14 events survive as events**. Everything crash-era (creation, the 44 alert beads, pre-migration assignment) survives only as **imported issue snapshots** in `forensic.jsonl`; the earliest bf-4x12ec-relevant *events* are post-migration (seq 2194 `assignment_cleared` 2026-08-17, seq 3407 `closed` 2026-08-17). This is the **cause** of §Original bead context's caveat that the crash-time assignee rests on the needle log's `worker_id` + `prior_assignee` rather than any live assignment event | checkpoint grep (this bead, 2026-09-08): earliest event `"time":"2026-08-16T04:21:10.940Z"` |
+| Migration artifacts — all **outside** this repo | `~/bf-migration-backup/domain-check.*`: `beads.tgz`, `converted.jsonl`, `dest.jsonl`, `import.log` (1,571 issues inserted, 0 conflicted, 0 retained), plus the src/dest id, label and title maps | directory listing + import log, 2026-09-08 |
+| Recovery path if the live store is lost, wrong-schema, or corrupt | `bead init`, then `bead sync import-only --input .beads/checkpoint/forensic.jsonl --restore-into-empty --actor <you>` — lossless only to the last explicit `bead sync flush-only`; **never** `--merge` (wipes external references, comments and structured data on updated issues); **never** any bf-shaped command | repo CLAUDE.md "Recovering a broken or fresh-clone workspace" |
+
+### The systems in the kill path
+
+| System | Role in this crash |
+|---|---|
+| NEEDLE dispatch | Owned every attempt: worker `claude-code-glm-4.7-lab-domain-check`, one dispatch per attempt inside a systemd transient scope, the per-attempt `agent.completed` records behind the 53-row census (child 3 §"What the retrieved logs record"), and — pre-0.4.2 — auto-minting **one alert bead per kill**: the 44 alerts, and downstream the Aug-26 duplicate/false-positive verification wave catalogued below |
+| systemd cgroups | The binding limit: transient `run-p*.scope` memcg with `MemoryMax=12GiB`; `oom_score_adj=200` marking the agent children preferred victims; `memory.oom.group=0` meaning a single-task kill — which is why the same mechanism killed `git` itself on Aug-16 and the agent child on Aug-14 (child 3 §"Resource-state correlation", item 6) |
+| Linux kernel memcg OOM killer | The killer: `CONSTRAINT_MEMCG` SIGKILL. Kernel-proven for the same cleanup effort on 2026-08-16 (257 git kills); regime-matched, not kernel-proven for Aug-14 itself — the journal for that window is unrecoverable (child 2 §Host state, caveat 2) |
+| git (`pack-objects`) | The memory consumer: `--aggressive`'s pack windows reading 17.20 GiB of loose objects from inside a 12 GiB scope — arithmetically impossible to complete |
+| **Not** involved | **domain-check application code** — zero defects across every investigation of this and every other crash in this workspace; no external service in the kill path (no 5xx, no timeout — so not SERVICE_FAILURE); the host's RAM was never exhausted (50 Gi available 65 s before the kill) |
+
+### The files that carry the record
+
+**Sibling docs already covering this crash** — the tasked three, one of which has moved:
+
+| Tasked path | State at HEAD `b435372` |
+|---|---|
+| `docs/crash-investigation-bf-4x12ec.md` | Present — the early repo-root investigation |
+| `docs/crash-summary-bf-4x12ec-comprehensive.md` | **Moved** — now `docs/archive/crash-investigations/crash-summary-bf-4x12ec-comprehensive.md`. The tasked root path no longer exists (same archive freeze that moved ~387 crash docs into `docs/archive/crash-investigations/`); cite the archive path |
+| `docs/crash-investigations/bf-4x12ec-crash-investigation.md` | Present — the consolidated report with Addenda 1–7; this file's line-citation target |
+
+**Verification reports referencing bf-4x12ec** — the tasked six, all tracked, all in
+`docs/archive/crash-investigations/`, all dated 2026-08-26. They dispose of the *alert-layer*
+aftermath (each re-verifies one of the 44 auto-minted alerts against the already-completed bead),
+not new crashes:
+
+| Alert bead | File | Verdict |
+|---|---|---|
+| bf-22h8jj | `verification-report-bf-22h8jj-false-positive-resolved-bf-4x12ec-crash.md` | FALSE POSITIVE resolved |
+| bf-438934 | `verification-report-bf-438934-duplicate-alert-resolved-bf-4x12ec-crash.md` | DUPLICATE alert resolved |
+| bf-1uh46l | `verification-report-bf-1uh46l-duplicate-alert-resolved-bf-4x12ec-crash.md` | DUPLICATE alert resolved |
+| bf-22w69c | `verification-report-bf-22w69c-duplicate-alert-resolved-bf-4x12ec-crash.md` | DUPLICATE alert resolved |
+| bf-qz9mov | `verification-report-bf-qz9mov-duplicate-alert-resolved-bf-4x12ec-crash.md` | DUPLICATE alert resolved |
+| bf-whzeuf | `verification-report-bf-whzeuf-duplicate-alert-resolved-bf-4x12ec-crash.md` | DUPLICATE alert resolved |
+
+Same-shape reports outside the tasked six, all tracked: `verification-report-bf-{2m532x,3cy3vk,44upi7,4h2mqq}-…`
+in the same archive directory; `docs/crashes/bf-4nmj66-duplicate-alert-resolved-bf-4x12ec-crash.md`
+and `docs/crashes/bf-5a3q4w-duplicate-alert-resolved-bf-4x12ec-crash.md`;
+`docs/verification/bf-2u3dzu-crash-alert-bf-4x12ec.md` and `bf-5f9xqg-crash-alert-bf-4x12ec.md`;
+`docs/crash-reports/bf-4x12ec-verification-report.md`.
+
+**Evidence bundles** (tracked, force-added past the repo-wide `*.jsonl` ignore — the bundles the
+earlier sections of this file quote from):
+
+| Bundle | Contents |
+|---|---|
+| `docs/crashes/bf-4x12ec/` (retrieved by `domchk-4bad8e94`) | `needle-events-2026-08-14-bf-4x12ec.jsonl.gz` (the 53 `agent.completed` events), `needle-events-…-attempt2-bracket.jsonl`, `session-transcript-attempt2-971486ad.jsonl`, `attempt-index.tsv`, `bracket-source-lines.tsv`, `transcripts/`, `MANIFEST.sha256`, `README.md` |
+| `docs/crash-investigations/evidence/bf-4x12ec/` (committed `9b32085`) | `crash-logs/` — `needle-worker-log-bf4x12ec-events.jsonl`, `needle-worker-log-crash-window-full.jsonl`, `alert-beads-raw.jsonl` (all 44 verbatim), `alert-beads-exit-timestamps.txt`, `exit-code-timeline.txt`, four verbatim attempt transcripts; plus `crash-logs/README.md`, `operation-summary.md`, `system-state.md` |
+
+**Analysis trail in this repo** (tracked unless noted): `docs/crash-investigations/bf-4x12ec-*.md` —
+`alert-inventory`, `crash-artifacts-2026-09-02`, `crash-timeline-domchk-ba8584a1-2026-09-07`,
+`evidence-signal-semantics-domchk-15854355-2026-09-07`, `final-crash-report`,
+`log-review-2026-09-02`, `log-source-inventory-domchk-a3f1f8f5-2026-09-07` (the doc that corrected
+the surviving-boot first entry to 2026-08-15 19:56:33 EDT), `root-cause`,
+`section-inventory-domchk-f6aba211-2026-09-07`; `docs/crash-investigations/bf-4x12ec-remediation-plan-domchk-0fcaef88-2026-09-08.md`
+(untracked at this HEAD — a sibling's in-flight deliverable); `docs/signal-analysis-exit-code-negative-one.md`
+(the −1-semantics source); and this file's own three earlier sections.
+
+**Outside the repo:** `~/.needle/logs/needle-<worker>.log` (the fleet worker log the events files
+were cut from); journald (the kernel memcg records — none survive for Aug-14); `.beads/beads.db`
+and `.beads/checkpoint/forensic.jsonl` (gitignored — the authoritative store and its durable copy);
+`~/bf-migration-backup/` (above); `.git/safe-gc.log` (post-repair gc forensics).
+
+### Classification (per `docs/crash-response-guide.md`)
+
+**INFRASTRUCTURE — memcg-OOM SIGKILL of the gc inside the 12 GiB dispatch scope.** The guide's
+class table defines INFRASTRUCTURE as *"memcg-OOM inside the dispatch scope, resource exhaustion,
+repository bloat"* — every clause matches, and its Phase 2A "Common Infrastructure Events" list
+names bf-4x12ec explicitly. Explicitly not the others: not FALSE_POSITIVE *at the death instants*
+(every kill landed mid-task inside the gc; completion came later, 12:58:45Z, under child
+bf-173o7e), not SERVICE_FAILURE (no external service, no 5xx), and **not a domain-check
+CODE_DEFECT** — zero application errors across all 53 attempts, with the identical
+prompt/template completing at attempt 53 and again under the child. Disposition per the guide: no
+code changes; the mitigations are the configuration layer catalogued above. The rule-by-rule
+Phase-2A walkthrough and the confidence table are child 3 §"Crash classification" — not
+duplicated here.
