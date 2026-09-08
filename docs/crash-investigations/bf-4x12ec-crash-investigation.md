@@ -1,7 +1,7 @@
 # Crash Investigation: Agent Signal -1 on Bead bf-4x12ec
 
 ## Summary
-Bead bf-4x12ec experienced an agent crash with exit code -1 (signal -1) on 2026-08-14, as part of a 64-minute retry storm: 44 attempts were SIGKILLed between 10:23:02Z and 11:27:26Z, each surviving only 39–116 seconds, before the `git gc --aggressive --prune=now` operation completed on the 53rd attempt at 12:58:45Z. Per established crash investigation protocol, this investigation determines the crash context, verifies work completion status, and documents findings.
+Bead bf-4x12ec experienced an agent crash with exit code -1 (signal -1) on 2026-08-14, as part of a 64-minute retry storm: 44 attempts were SIGKILLed between 10:23:02Z and 11:27:26Z, each surviving only 39–116 seconds, before the bead was decomposed on the 53rd attempt at 12:58:45Z and the `git gc --aggressive --prune=now` completed under child bead bf-173o7e — attempt 53 executed needle's auto-split (`SPLIT_COMPLETE`), not the gc (Addendum 4 §3; corrected 2026-09-08, bead domchk-8c78ae8b, from "completed on the 53rd attempt"). Per established crash investigation protocol, this investigation determines the crash context, verifies work completion status, and documents findings.
 
 ## Crashed Bead Details
 - **Bead ID:** bf-4x12ec
@@ -40,14 +40,46 @@ From parallel crash investigations (bf-4yjq, bf-2ildm, etc.):
 - **Disk Usage:** 84% full (350GB/444GB used)
 - **Crash Pattern:** 9 systematic crashes in 2.5 hours on bf-4yjq alone
 
+**Correction (2026-09-08, bead domchk-8c78ae8b):** the four figures above are
+secondhand readings from parallel investigations, with no Aug-14 primary source
+behind any of them. Addendum 2 §Evidence-window limitation records that *no*
+kernel log or memory telemetry survives for 2026-08-14 (the current boot began
+2026-08-15 19:26 EDT; `.beads/logs/resource-metrics.log` begins 2026-09-01), so
+none of these contemporaneous numbers is verifiable. Addendum 3 §"the death
+loop ran under heavy load saturation" supplies the sourced version of the load
+figure from direct `fleet.cpu_saturated` telemetry: **load 10.4–30.92 on 9
+reported cores, mean ~13.8**. The "<2GB available ⇒ OOM killer active" premise
+is expressly corrected by Addendum 2 §Corrections item 4 — a **cgroup**
+(`CONSTRAINT_MEMCG`) kill inside a capped scope does not require low *system*
+free memory; ample free RAM and a memcg kill coexist. And the bf-4yjq line
+cites exactly the count the corrected record supersedes:
+`docs/crash-analysis-bf-1s6c3-2026-09-06.md` gives bf-4yjq **50 kills**
+(17:54–20:30Z) on the evening of 2026-08-12, and CLAUDE.md's crash section
+states the 2026-09-06 record "supersedes the 2026-09-01 corpus's '9 crashes in
+2.5 hours' count." The bullets are retained as the v1.0-era historical record.
+
 ## Signal Analysis
 
-**Signal -1 Definitive Identification:**
+**Signal -1 Identification** *(heading softened 2026-09-08, bead
+domchk-8c78ae8b — was "Definitive Identification"; see the correction below)*:
 - Signal -1 = **SIGKILL (Signal 9)** in Linux
 - **Delivered by:** Linux OOM (Out Of Memory) killer
 - **Process termination:** Immediate, no graceful shutdown
 - **Core dump:** None generated (SIGKILL prevents core dumps)
 - **Indication:** Memory exhaustion, not application error
+
+**Correction (2026-09-08, bead domchk-8c78ae8b):** the claim carried by the
+original "Definitive Identification" heading is stronger than the evidence.
+`exit_code = -1` is needle's sentinel for a child agent that terminated
+without a wait status — killed by a signal — and **is not itself a POSIX
+signal** (Addendum 2 §"Signal -1, precisely"). SIGKILL(9)-via-OOM is the
+*canonical inference* from instant death, zero application error logs and no
+core dumps, not an identification; direct Aug-14 kernel logs do not survive
+(Addendum 2 §Evidence-window limitation). The `## Crashed Bead Details`
+Signal line already reads this way ("source most consistent with the OOM
+killer — see Signal Analysis and Addendum 2"). The mechanism is corroborated,
+not directly observed, by 257 same-window git memcg kills on Aug-16 (Addendum
+6; refined by Addendum 3). The bullets are retained as the v1.0-era record.
 
 ## Original Work Context
 
@@ -61,7 +93,7 @@ The bead workspace migration (bead-forge → bead-rs) was a separate effort, com
 
 ### Resolution Steps (from the bead's recorded outcome)
 1. **Removed the bloat source:** `.beads/checkpoint/` files excluded from git tracking via `.gitignore`
-2. **Executed aggressive garbage collection:** `git gc --aggressive --prune=now` — the operation that killed the original agent run, completed on retry
+2. **Executed aggressive garbage collection:** `git gc --aggressive --prune=now` — the operation that killed the original agent run, completed under child bead **bf-173o7e** after the attempt-53 auto-split, not on any bf-4x12ec retry (no bf-4x12ec attempt ever completed it: 44 × exit -1, 8 × exit 124; Addendum 4 §3 — corrected 2026-09-08, bead domchk-8c78ae8b, from "completed on retry")
 3. **Additional repack optimization:** `git repack -a -d --depth=250 --window=250`
 4. **Verified integrity:** `git fsck --no-full` completes without timeout (dangling objects only)
 5. **Verified git operations:** clone, fetch, and checkout all complete without OOM
@@ -120,6 +152,20 @@ below, no bloat signature.
 4. Linux OOM killer invoked SIGKILL (signal 9)
 5. Process terminated immediately with exit code -1
 6. Bead marked as crashed and released for retry
+
+**Correction (2026-09-08, bead domchk-8c78ae8b):** steps 2 and 3 above are
+superseded by Addendum 3's kernel evidence and are retained only as the
+v1.0-era mechanism sketch. There is **no concurrency evidence** — each
+phase-1 attempt ran exactly one `git gc --aggressive --prune=now`, and every
+surviving transcript ends with that single tool call unanswered, killed
+mid-gc (Addendum 4 §1; Addendum 3 §Root-cause determination). The exhaustion
+was **cgroup** memory exhaustion, not system OOM: the dispatch scope runs
+with `MemoryMax=12GiB`, which a `git gc --aggressive` over ~17 GB of loose
+objects cannot fit under — git anon-rss at kill measured **1.2–11.97 GB, mean
+10.14 GB**, with 163 of the 257 Aug-16 kernel-recorded git kills hugging the
+11–12 GB ceiling (Addendum 3 §"257 git OOM-kills"; count corrected from
+Addendum 2's "13 events" by Addendum 6). Step 4 names the right killer but
+the constraint was the memcg cap, not free-system-memory exhaustion.
 
 ### Why the Crash Occurred
 The crash occurred **not because of a bead implementation defect**, but because:
@@ -221,8 +267,8 @@ this report are preserved as of their original 2026-08-17 investigation date.
 **System Status:** ✅ HEALTHY — All safeguards operational and effective.
 
 **Investigation Date:** August 17, 2026
-**Last Reviewed:** September 8, 2026 (Addendum 7: parent acceptance-criteria mapping + live completion verification, bead domchk-fe10456e; prior: no-code-defect finding made explicit for domain-check, bead domchk-e48b5e1b, 2026-09-07; metric provenance re-check, bead domchk-791bfb2e)
-**Report Version:** 1.9 (Addenda 2–7 below; Addendum 4 re-verified by second dispatch; v1.7 corrects Addendum 4's attribution of the 753 MB final metrics from bf-173o7e to the parent bead bf-4x12ec; v1.8 adds the explicit "no domain-check code defect / environmental-only" finding under Crash Classification and in the Conclusion — a clarification, no prior claim was refuted; v1.9 appends Addendum 7, the consolidation record mapping parent domchk-46a00141's three acceptance criteria to their delivering beads/commits/artifacts and re-verifying bf-4x12ec's completion status live)
+**Last Reviewed:** September 8, 2026 (body harmonized with the addenda — Summary/Resolution-step "53rd attempt" phrasing, RCA mechanism, Signal framing, System-State sources — per the section inventory, bead domchk-8c78ae8b; concurrent: Addendum 8, crash-window resource timeline + safe-operating-limits verdict, bead domchk-5f3ec6e1, appended at e0b70dab while these v1.10 edits were still uncommitted; prior: Addendum 7, parent acceptance-criteria mapping + live completion verification, bead domchk-fe10456e; no-code-defect finding made explicit for domain-check, bead domchk-e48b5e1b, 2026-09-07; metric provenance re-check, bead domchk-791bfb2e)
+**Report Version:** 1.10 (Addenda 2–8 below; Addendum 4 re-verified by second dispatch; v1.7 corrects Addendum 4's attribution of the 753 MB final metrics from bf-173o7e to the parent bead bf-4x12ec; v1.8 adds the explicit "no domain-check code defect / environmental-only" finding under Crash Classification and in the Conclusion — a clarification, no prior claim was refuted; v1.9 appends Addendum 7, the consolidation record mapping parent domchk-46a00141's three acceptance criteria to their delivering beads/commits/artifacts and re-verifying bf-4x12ec's completion status live; v1.10 applies the section inventory's gap checklist (bead domchk-f6aba211) in place — dated Correction blocks under Summary, System State, Signal Analysis and Root Cause Analysis harmonizing the body's v1.0-era wording with the addenda's primary-source corrections, with no historical text removed)
 
 ## Addendum 2 — Primary-Source Retry-Storm Analysis (2026-09-02, bead domchk-661c2dc6)
 
@@ -555,7 +601,9 @@ Alert bead `domchk-90640785` (created 2026-08-26T21:13:53Z, dispatched
 2026-09-02) tasked a fresh investigation of this crash. Findings:
 
 - **bf-4x12ec is Closed** (2026-08-17T14:50:41Z); the work completed
-  2026-08-14T12:58:45Z on the 53rd attempt. The alert fired **nine days after
+  2026-08-14T12:58:45Z on the 53rd attempt *(phrasing corrected by Addendum 4
+  §3: attempt 53 ran needle's auto-split, not the gc — the gc completed under
+  child bf-173o7e; annotated 2026-09-08, bead domchk-8c78ae8b)*. The alert fired **nine days after
   both** — this is another instance of the duplicate-alert pattern documented
   in a dozen prior verification reports (bf-qz9mov, bf-1uh46l, bf-48vwac,
   bf-4h2mqq, bf-4xbt4g, bf-4oblul, bf-2m532x, bf-3cy3vk, bf-44upi7, bf-2u3dzu,
@@ -755,7 +803,6 @@ AC mapping above changes: bf-4x12ec still Closed rev 4, the dependency child
 `domchk-0e707410` still Closed (rev 4, verified live 2026-09-08), and all three
 criteria still bind to the beads/commits/artifacts listed above.
 
-
 ### Residual work (owned elsewhere, not owed by this consolidation)
 
 Body-level harmonization of this report — the section inventory's six contradictions and
@@ -766,6 +813,11 @@ State, and the unreconciled 4,627 vs 4,649 before-count) — is tasked to the
 gap-finalization bead **`domchk-8c78ae8b`** (in progress at consolidation time). Addendum 4
 §3 already corrects the 53rd-attempt narrative in place; this addendum deliberately leaves
 the body text untouched to avoid colliding with that in-flight revision.
+
+*(Completed 2026-09-08 by `domchk-8c78ae8b`, report v1.10: dated Correction blocks now
+sit under the Summary, System State, Signal Analysis and Root Cause Analysis, harmonizing
+each with the addenda; the 4,627 vs 4,649 reconciliation had already landed under the
+metrics table via bead `domchk-791bfb2e`.)*
 
 ---
 **Addendum 7 Investigation Date:** September 8, 2026
