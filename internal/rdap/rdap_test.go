@@ -833,6 +833,9 @@ func TestRDAPClientCheck(t *testing.T) {
 		defer server.Close()
 
 		client := newTestRDAPClient(server)
+		// Short retry schedule: the registry answers 429 on every attempt,
+		// and the interactive default would back off in real time.
+		client.retryCfg = fastRetryConfig()
 		result, err := client.Check(ctx, "ratelimited.com")
 		if err != nil {
 			t.Fatalf("Check failed: %v", err)
