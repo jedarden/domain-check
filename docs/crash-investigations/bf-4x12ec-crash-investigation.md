@@ -78,6 +78,27 @@ The bead recorded both size targets as **PARTIAL** (753MB vs <500MB; 141 vs
 <100) but accepted: the OOM risk was eliminated and all git operations returned
 to normal. Loose objects were subsequently driven below 100 — see Addendum.
 
+**Metric provenance (re-verified live 2026-09-07, bead domchk-791bfb2e):** the
+"after" column above is confirmed verbatim against the live bead record —
+bf-4x12ec FINAL METRICS read "`.git` size: 753MB (was ~18GB)", "Loose objects:
+141 (was 4,627)", "Pack objects: 10,265 in 750.67 MiB pack". The "before"
+loose count appears as three different numbers across primary sources, all
+genuine and taken at different instants: **4,515** in the contemporaneous
+`docs/cleanup-resolution-2026-08-17.md` (which also records a post-cleanup
+118 loose / 9,525 packed in a 750.53 MB pack — a slightly later reading), and
+**4,627** in bf-4x12ec's own description and completion notes. The table uses
+4,627 because the bead's notes are the source it cites. A fourth figure,
+**4,649**, is the crash-time live `git count-objects -vH` the killed agents
+themselves ran (`count: 4649, size: 17.20 GiB, in-pack: 4081, packs: 1,
+size-pack: 9.60 MiB` — surviving per-attempt transcripts,
+`docs/crash-investigations/evidence/bf-4x12ec/crash-logs/`); see Addendum 4.
+Crash-time state and post-cleanup verified state are kept separate throughout
+(the table's Before/After columns; the 2026-08-17 body sections; the dated
+re-verification snapshots in the addenda). Re-checked live 2026-09-07:
+`.git` 107MB, 467 loose objects / 3.37 MiB, 11,700 in-pack, 2 packs,
+size-pack 99.78 MiB, 0 garbage — normal churn since the 2026-09-02 snapshot
+below, no bloat signature.
+
 ### Migration Context (separate, related effort)
 - **Commit:** `61d27ac` (2026-08-15 09:56:53)
 - **Action:** Complete bead workspace rehydration from bead-forge to bead-rs
@@ -180,8 +201,8 @@ this report are preserved as of their original 2026-08-17 investigation date.
 **System Status:** ✅ HEALTHY — All safeguards operational and effective.
 
 **Investigation Date:** August 17, 2026
-**Last Reviewed:** September 2, 2026
-**Report Version:** 1.6 (Addenda 2–6 below; Addendum 4 re-verified by second dispatch)
+**Last Reviewed:** September 7, 2026 (metric provenance re-check, bead domchk-791bfb2e)
+**Report Version:** 1.7 (Addenda 2–6 below; Addendum 4 re-verified by second dispatch; v1.7 corrects Addendum 4's attribution of the 753 MB final metrics from bf-173o7e to the parent bead bf-4x12ec)
 
 ## Addendum 2 — Primary-Source Retry-Storm Analysis (2026-09-02, bead domchk-661c2dc6)
 
@@ -429,8 +450,14 @@ class as Addenda 2–3. Net-new findings beyond them:
    bf-im2sl1**; `bf dep add` chaining them; umbrella label on bf-4x12ec), then
    printing `SPLIT_COMPLETE`. `verification.passed` fired at 12:58:45Z and
    `bead.orphaned` at 12:58:55Z. **The actual `git gc --aggressive
-   --prune=now` ran under child bf-173o7e**, which recorded the final metrics
-   (18 GB → 753 MB, 4,649 → 141 loose) before closing 2026-08-17. The
+   --prune=now` ran under child bf-173o7e**, which closed 2026-08-17T17:12:09Z
+   with reason "Git gc completed successfully - 17.20GB loose objects packed
+   into 444MB pack file, repository valid" — the child's own recorded figure.
+   The 753 MB / 141-loose final metrics were recorded on the **parent bead
+   bf-4x12ec** (rev 4, updated 2026-08-17T14:50:41Z), i.e. *before* the child
+   closed. (Attribution corrected 2026-09-07, bead domchk-791bfb2e, against
+   the live bead records; an earlier revision of this addendum credited
+   bf-173o7e with the 753 MB metrics, which its record does not contain.) The
    Summary's "gc completed on the 53rd attempt" is therefore corrected to:
    *the bead was decomposed on the 53rd attempt; the gc completed under
    bf-173o7e.*
