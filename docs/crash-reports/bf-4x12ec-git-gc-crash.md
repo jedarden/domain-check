@@ -5,9 +5,9 @@
 > create verification report*). This child contributes the **Summary block** and
 > the **incident timeline**, consolidated from investigation work that already
 > exists in this repo. Of the placeholder sections left at the end, **Root
-> Cause** and **Impact** are now filled by child 2 (`domchk-08bdde8d`);
-> **Repository State**, **Resolution** and **Lessons Learned** remain
-> placeholders pending children 3–5.
+> Cause** and **Impact** are filled by child 2 (`domchk-08bdde8d`) and
+> **Repository State** by child 3 (`domchk-0936d2db`); **Resolution** and
+> **Lessons Learned** remain placeholders pending children 4–5.
 
 ## Summary
 
@@ -191,7 +191,7 @@ analysis for exit −1) · [`docs/crash-investigations/bf-4x12ec-final-crash-rep
 
 | Question | Answer |
 |---|---|
-| **Repository state** | **Healthy — never corrupted.** The kills left the object store byte-identical (4,649 loose objects / 17.20 GiB before and after every attempt; no half-written pack). After the eventual cleanup: 753 MB → 92 MB (2026-09-02) → **105 MB today**, 0 garbage objects. Fresh `count-objects`/`fsck` snapshot: [Repository State](#repository-state) below. |
+| **Repository state** | **Healthy — never corrupted.** The kills left the object store byte-identical (4,649 loose objects / 17.20 GiB before and after every attempt; no half-written pack). After the eventual cleanup: 753 MB → 92 MB (2026-09-02) → **106 MB** (fresh snapshot 2026-09-08), 0 garbage objects. Fresh `count-objects`/`fsck` snapshot: [Repository State](#repository-state) below. |
 | **Git operations** | **Working.** Broken only inside the failing dispatch scopes during the storm — every phase-1 attempt died before writing a pack, and ordinary git use on this workspace was never broken. Post-cleanup, all operations pass: `./scripts/check-repo-health.sh` green (re-run 2026-09-08, exit 0), scheduled bounded gc and pushes running daily. |
 | **Data loss** | **None.** No commits were lost — the repo sat at its 2026-08-09 baseline (`00117cb`) for the whole incident and no commit exists inside the crash window (git-history table above). No working-tree or object-store loss: every kill preceded any pruning, so the 17.20 GiB of loose objects was intact after each death, and the later size reduction was a verified consolidation into a single pack, not deletion. |
 
@@ -202,11 +202,95 @@ regenerating until the manual close on 2026-08-17.
 
 ## Repository State
 
-> ⏳ **PLACEHOLDER — not filled in by this child.** Covers the parent template's
-> Impact block: repository state (healthy / corrupted), whether git operations
-> were working or broken, and whether any data was lost. Source of record:
-> `docs/crash-investigations/bf-4x12ec-final-crash-report.md` ("System State at
-> Crash" and "Work Completion Status").
+> Filled by child 3 of the split (`domchk-0936d2db`). The parent template's
+> Impact-block questions are answered at summary level in
+> [Impact](#impact) — repository state, whether git operations were broken, and
+> data loss. This section is the metrics record: before/after object-store
+> figures, a fresh post-gc snapshot taken for this child, and the fsck
+> caveat future verifications need.
+
+**Verdict: HEALTHY — the repository was never corrupted.** Every phase-1 kill
+preceded any pack write, so the object store stayed byte-identical across all
+44 attempts; the later size reduction was a verified consolidation into a pack,
+not deletion of reachable data.
+
+### Before / after
+
+| Milestone | `.git` size | Loose objects | Pack | Source |
+|---|---|---|---|---|
+| **At crash time** — 2026-08-14 10:21Z (before) | **18G** | **4,649 / 17.20 GiB** | 9.60 MiB | crash-window transcript (`git count-objects -vH`, `du -sh .git`; timeline above) |
+| First cleanup complete — closed 2026-08-17, measured 2026-08-26 | 753 MB | 141 | 10,265 objects / 750.67 MiB | [`bf-4x12ec-verification-report.md`](bf-4x12ec-verification-report.md) |
+| Post-gc verification — 2026-09-02 (commit `0a61037`) | 92M | 54 | 1 pack / 10,478 objects / 90.18 MiB | [`repo-health-verification-post-gc-2026-09-02.md`](../archive/crash-investigations/repo-health-verification-post-gc-2026-09-02.md) |
+| **Fresh snapshot — 2026-09-08T03:28Z** (this child) | **106M** | 289 / 1.95 MiB | 1 pack / 12,174 objects / 100.25 MiB | commands below |
+
+The 18G → 753 MB → ~100M trajectory *is* the incident's cleanup. The drift
+since 2026-09-02 (92M → 106M; 10,478 → 12,174 in-pack) is normal churn from
+concurrent agent commits plus the 2026-09-08 `depth=250/window=250` repack that
+consolidated 2 packs into the current single 100.25 MiB pack — not renewed
+bloat. Loose objects sit at 289 / 1.95 MiB (daily-churn range; 0
+prune-packable, **0 garbage**), and every health threshold passes with an order
+of magnitude to spare.
+
+### Fresh snapshot (taken for this child, 2026-09-08T03:28Z)
+
+```console
+$ git count-objects -vH
+count: 289
+size: 1.95 MiB
+in-pack: 12174
+packs: 1
+size-pack: 100.25 MiB
+prune-packable: 0
+garbage: 0
+size-garbage: 0 bytes
+
+$ du -sh .git
+106M	.git
+```
+
+- **`git fsck --full`** — 2026-09-08 fresh run: **exit 0 in 2.7 s, zero
+  errors**; dangling-object notices only, which are benign (unreachable-recent,
+  not damage). Latest prior verified result: `--full` exit 0 with **zero
+  findings** at all (2026-09-02, `0a61037`). See the caveat below before
+  reaching for `--no-full`.
+- **`./scripts/check-repo-health.sh`** — 2026-09-08 fresh run: **exit 0, all
+  criteria passing** — size healthy (105 MB as the script reports it), single
+  pack, effective pack-memory bound verified (worst case ≈3072 MiB, within the
+  6 GiB ceiling for a 12 GiB dispatch scope), no unmanaged aggressive gc
+  running, unpushed backlog clear. Its one ⚠️ lists five 14.3 MB
+  `dist/domain-check_darwin_amd64_v1/` release binaries in history —
+  informational inventory, unrelated to the gc incident.
+- **Git operations** — working. `git fsck --full` completes in ~3 s where the
+  pre-cleanup repo timed out; the 2026-09-02 criteria table measured
+  `git status` at 0.009 s and `git log --oneline -5` at 0.003 s. Scheduled
+  bounded gc and ordinary pushes run daily without incident.
+- **Data loss** — none. See [Impact](#impact): the repo sat at its 2026-08-09
+  baseline for the whole incident and no commit exists inside the crash window.
+
+### `git fsck --no-full` "invalid reflog entry" output is NOT corruption
+
+`git fsck --no-full` in this repo exits 2 with ~1,008
+`error: … invalid reflog entry <OID>` lines. That output is **git 2.50.1
+`--no-full` noise on a packed repository, not corruption** (bead
+`domchk-b037ca90`): with `--no-full`, fsck never opens packfiles, so reflog
+entries whose targets live in the pack are misreported as invalid. Every
+flagged OID was individually verified to exist (`git cat-file -t` → `commit`)
+and to be reachable. The control experiment on an unrelated healthy repo on
+this box (`~/SIGIL`) fails identically under `--no-full` (5,238 of the same
+error) and is clean under `--full` — the noise is systemic to the flag on
+packed repos, not damage in this one. **Use `git fsck --full` as the integrity
+gate on this box** (dangling-object warnings under `--full` are benign), and do
+not "repair" the reflog (`reflog expire` / `reflog delete`) — the entries are
+valid and expiring them would destroy real history.
+
+**Sources for this section:** commit **`0a61037`** +
+[`docs/archive/crash-investigations/repo-health-verification-post-gc-2026-09-02.md`](../archive/crash-investigations/repo-health-verification-post-gc-2026-09-02.md)
+(bead `domchk-b037ca90` — post-gc acceptance-criteria table, SIGIL control) ·
+[`bf-4x12ec-verification-report.md`](bf-4x12ec-verification-report.md)
+(first-cleanup figures only; that document's *framing* is superseded — see the
+caution under [Sources](#sources-read-not-re-derived)) · fresh
+`git count-objects -vH` / `du -sh .git` / `git fsck --full` /
+`./scripts/check-repo-health.sh` run for this child at 2026-09-08T03:28Z.
 
 ## Resolution
 
@@ -236,4 +320,4 @@ incident was 44 crashes. Cite the consolidated report.
 
 ---
 **Report date:** 2026-09-08 · Split of `domchk-f6757c18` — summary + timeline `domchk-779d1180` (child 1) · **root cause + impact `domchk-08bdde8d` (child 2)** · repository state `domchk-0936d2db` (child 3) · resolution + lessons learned `domchk-1ef6b252` (child 4) · CLAUDE.md procedures + finalization `domchk-6f771e64` (child 5)
-**Sections completed:** Summary, Incident timeline, Root Cause, Impact · **Pending from later children:** Repository State, Resolution, Lessons Learned
+**Sections completed:** Summary, Incident timeline, Root Cause, Impact, Repository State · **Pending from later children:** Resolution, Lessons Learned
