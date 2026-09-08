@@ -67,6 +67,21 @@ ran once the storm ended and the repo was cleaned.
 
 ## 3. Crash Circumstances (verified)
 
+> **Dated correction (2026-09-07, domchk-7a34eb37):** [bf-4yjq-evidence-reconciliation-domchk-7a34eb37-2026-09-07.md](bf-4yjq-evidence-reconciliation-domchk-7a34eb37-2026-09-07.md)
+> re-verified this section against all raw-log sources. Count (50) and window confirmed from
+> three independent sources; the mean interval is **191.9 s (~3.2 min)**, not 188 s (that
+> figure divided the span by 50 events rather than 49 gaps); and the "no raw session
+> evidence survives" statement below is **superseded for dispatch transcripts** — 56 per-run
+> session transcripts survive in `docs/crash/bf-4yjq/raw-logs/` (recovered 2026-09-06,
+> domchk-495041ac). The statement remains true for core dumps, kernel logs, and trace
+> capture. The transcripts show all 50 crash runs' last tool call is `git push` — the storm
+> was uniformly push-side (see the reconciliation doc §3). The same corrections apply to the
+> §5 indicator table ("~188 s" → 191.9 s; "raw telemetry: none survives" → superseded for
+> session transcripts), and to §6 step 2's "contemporaneous telemetry": the load-15–17 /
+> disk-84 % readings trace to `docs/crash-analysis/bf-4yjq-system-state-snapshot-2026-09-01.txt`,
+> a **Sep-1 capture** (byte-identical to the Sep-1 `.beads/crash-bf-4yjq-summary.txt`), not an
+> Aug-12 instrument reading — no monitor log under `.beads/logs/` reaches back to Aug-12.
+
 All figures below were re-derived from `.beads/checkpoint/forensic.jsonl` on 2026-09-02
 (domchk-d5dd1b33), and the headline count independently re-verified on 2026-09-02
 (domchk-4eab7c59): **50 distinct alert beads titled "ALERT: Agent crash on bead bf-4yjq"**.
