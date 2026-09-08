@@ -17,6 +17,7 @@ import (
 	"github.com/jedarden/domain-check/internal/httpclient"
 	"github.com/jedarden/domain-check/internal/ratelimit"
 	"github.com/jedarden/domain-check/internal/rdap"
+	"github.com/jedarden/domain-check/internal/resilience"
 	"github.com/jedarden/domain-check/internal/server"
 	"github.com/jedarden/domain-check/internal/watch"
 	"github.com/jedarden/domain-check/internal/whois"
@@ -43,6 +44,8 @@ func main() {
 		runCheck(os.Args[2:])
 	case "bulk":
 		runBulk(os.Args[2:])
+	case "healthcheck":
+		runHealthcheck(os.Args[2:])
 	case "serve":
 		runServer(os.Args[2:])
 	case "help", "-h", "--help":
@@ -67,6 +70,7 @@ Usage:
   domain-check [serve] [flags]     Start the HTTP server (default)
   domain-check check <domain> [flags]  Check domain availability
   domain-check bulk <file> [flags]     Bulk check domains from file
+  domain-check healthcheck [flags]     Probe external service health
 
 Serve flags:
   --addr string           HTTP listen address (default ":8080")
@@ -106,10 +110,27 @@ Bulk flags:
   --timeout duration      HTTP timeout for RDAP queries (default 30s)
   --progress              Show progress indicator
 
+Healthcheck flags:
+  --url string            Health endpoint to probe; repeatable and
+                          comma-separated for several targets
+                          (default: the inference gateway health endpoint)
+  --timeout duration      Per-attempt HTTP timeout (default 5s)
+  --retries int           Retries after the initial attempt, exponential
+                          backoff (default 5); 0 disables retrying
+
 Exit codes (check/bulk):
   0  All checked domains are available
   1  At least one domain is taken/registered
   2  Error occurred
+
+Exit codes (healthcheck):
+  0  Every target is healthy (a target that recovered after retries exits 0
+     and is reported as DEGRADED)
+  1  At least one target is unavailable with a transient failure — worth
+     retrying later
+  2  At least one target is unavailable with a permanent failure — retrying
+     will not help, investigate
+  3  Usage or configuration error
 
 Examples:
   domain-check serve --addr :3000
@@ -121,6 +142,8 @@ Examples:
   domain-check check premium.com --watch --forever --interval 5m
   domain-check bulk domains.txt --concurrency 30 --format csv
   domain-check bulk domains.txt --progress
+  domain-check healthcheck
+  domain-check healthcheck --url https://gateway.internal:8444/health --timeout 3s --retries 2
 `)
 }
 
@@ -323,6 +346,71 @@ func runBulk(args []string) {
 	os.Exit(exitCode)
 }
 
+// runHealthcheck executes the healthcheck subcommand.
+func runHealthcheck(args []string) {
+	// Defaults mirror the documented pre-flight check: the inference gateway's
+	// health endpoint, one 5s attempt budget and the standard retry policy.
+	cfg := cli.HealthCheckConfig{
+		Timeout: resilience.DefaultHealthCheckTimeout,
+		Retries: resilience.DefaultMaxRetries,
+	}
+
+	// Simple flag parsing.
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "--url":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "error: --url requires a value")
+				os.Exit(2)
+			}
+			cfg.URLs = append(cfg.URLs, args[i+1])
+			i++
+		case "--timeout":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "error: --timeout requires a value")
+				os.Exit(2)
+			}
+			d, err := time.ParseDuration(args[i+1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: invalid timeout: %v\n", err)
+				os.Exit(2)
+			}
+			if d <= 0 {
+				fmt.Fprintln(os.Stderr, "error: timeout must be positive")
+				os.Exit(2)
+			}
+			cfg.Timeout = d
+			i++
+		case "--retries":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "error: --retries requires a value")
+				os.Exit(2)
+			}
+			var err error
+			cfg.Retries, err = parseInt(args[i+1])
+			if err != nil || cfg.Retries < 0 {
+				fmt.Fprintln(os.Stderr, "error: invalid retries: must be a non-negative integer")
+				os.Exit(2)
+			}
+			i++
+		case "-h", "--help":
+			printUsage()
+			os.Exit(0)
+		default:
+			if len(arg) > 0 && arg[0] == '-' {
+				fmt.Fprintf(os.Stderr, "error: unknown flag: %s\n", arg)
+				os.Exit(2)
+			}
+			fmt.Fprintf(os.Stderr, "error: unexpected argument: %s (healthcheck takes only flags; use --url)\n", arg)
+			os.Exit(2)
+		}
+	}
+
+	exitCode := cli.HealthCheck(context.Background(), cfg)
+	os.Exit(exitCode)
+}
+
 // parseInt parses a string to an int.
 func parseInt(s string) (int, error) {
 	var result int
@@ -452,6 +540,29 @@ func runServer(args []string) {
 		log.Error("failed to initialize domain checker", "error", err)
 		os.Exit(1)
 	}
+
+	// One pre-flight log line at startup, so a service-class outage (the
+	// inference gateway is the documented example) shows up in the server's
+	// own log without the operator script. Single attempt — startup must not
+	// wait on a dependency that is already down.
+	go func() {
+		result := resilience.CheckHealth(ctx, resilience.GatewayTarget(resilience.DefaultGatewayURL))
+		if ctx.Err() != nil {
+			return // shutting down; the answer no longer matters
+		}
+		if result.Healthy {
+			log.Info("pre-flight health check passed",
+				"target", result.Name,
+				"status", result.StatusCode,
+				"latency_ms", result.LatencyMS)
+			return
+		}
+		log.Warn("pre-flight health check failed",
+			"target", result.Name,
+			"class", result.Class.String(),
+			"latency_ms", result.LatencyMS,
+			"error", result.Err)
+	}()
 
 	// Create service monitor for uptime and check counting.
 	monitor := server.NewServiceMonitor()
