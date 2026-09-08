@@ -378,3 +378,165 @@ of *alerts*; no `ALERT: Agent crash on bead bf-4x12ec` bead was created after 20
 - Child 3: `domchk-1e38a7c2` — Document the two-wave bf-4x12ec duplicate-alert pattern
 - Child 4: `domchk-a3690174` — Confirm crash-alert mitigations prevent bf-4x12ec regeneration
 - Child 5: `domchk-e9ed52aa` — Close residual open bf-4x12ec wave-1 alert beads as false positives
+
+---
+
+## Per-bead false-positive verdict (Child 2: domchk-b2b77f12)
+
+**Added 2026-09-08**, bead `domchk-b2b77f12` (child 2 of the `domchk-bcdd4b4f` split). Every
+citation below was re-verified before writing: doc paths resolved against HEAD (`git ls-tree`),
+commit SHAs confirmed to exist (`git cat-file -t`), and each report's verdict line read. Store-level
+evidence is the bead's own `close_reason` in `.beads/checkpoint/forensic.jsonl`, cross-checked
+against the live store. Statuses are live at writing time (2026-09-08 ~02:00Z) and drift as sibling
+`domchk-e9ed52aa` closes beads.
+
+### Verdict classes
+
+- **verified-FP (doc)** — a subject-specific report naming this alert bead exists at HEAD and concludes FALSE POSITIVE; original commit cited.
+- **verified-FP (store)** — no dedicated doc, but the bead's own close reason concludes false-positive / already-resolved.
+- **unverified** — no disposition evidence found anywhere.
+
+**Real at creation vs spurious.** All 44 wave-1 alerts were **real at creation**:
+`evidence/bf-4x12ec/crash-logs/alert-beads-exit-timestamps.txt` maps each one 1:1 onto a distinct
+exit -1 kill of a still-open target (10:23:11Z → 11:28:02Z), and the 8 exit-124 timeouts minted no
+alert beads. Their FALSE POSITIVE verdict is therefore **retrospective** — the alerted work
+completed on attempt 53 at 12:58:45Z and `bf-4x12ec` closed 2026-08-17T14:50:41Z, so nothing was
+left to retry. The only **spurious-at-creation** alerts are the wave-2 beads (all 2026-08-26), fired
+9+ days after closure; Addendum 5 classifies `domchk-90640785` FALSE POSITIVE on exactly that
+ground. No `ALERT: … bf-4x12ec` bead exists after 2026-08-14, so nothing new fires today.
+
+### Cross-check against the canonical verdict
+
+Addendum 3's figures are confirmed: 53 attempts on 2026-08-14 = 44 × exit -1 (one alert bead each),
+8 × exit 124 (no alert beads), 1 × exit 0 at 12:58:45Z; `bf-4x12ec` formally closed
+2026-08-17T14:50:41Z — re-confirmed live from the store (closed, rev 4, updated 2026-08-17T14:50:41Z).
+
+*Attribution correction:* the split description credits the verdict to "Addendum 3
+(domchk-90640785)"; the document attributes **Addendum 3 to `domchk-0f9eb93a`** and **Addendum 5 to
+`domchk-90640785`**. Both state the same 53-attempt table and the same FALSE POSITIVE
+classification, so the cross-check holds under either citation.
+
+### Wave 1 — 44 alert beads (all real at creation; the FP verdict is retrospective)
+
+| # | Bead | Alert heartbeat (UTC) | Live status | Verdict | Evidence |
+|---|------|-----------------------|-------------|---------|----------|
+| 1 | `bf-fmg2cw` | 2026-08-14T10:23:11 | open | unverified | no doc, not closed |
+| 2 | `bf-3m9m1v` | 2026-08-14T10:25:30 | closed | verified-FP (store) | close_reason: "work completed / already-resolved" |
+| 3 | `bf-msui35` | 2026-08-14T10:27:04 | closed | verified-FP (store) | close_reason: "work completed / already-resolved" |
+| 4 | `bf-191ch8` | 2026-08-14T10:28:37 | open | verified-FP (doc) | `docs/archive/crash-investigations/crash-investigation-bf-191ch8.md` (a081775) |
+| 5 | `bf-12ad85` | 2026-08-14T10:29:46 | in_progress | verified-FP (doc) | `docs/archive/bead-verification-reports/BEAD_BF-12AD85_RESOLUTION.md` (60f3fa2) |
+| 6 | `bf-438k7j` | 2026-08-14T10:31:14 | closed | verified-FP (store) | close_reason: "work completed / already-resolved" |
+| 7 | `bf-30pdr8` | 2026-08-14T10:32:17 | closed | verified-FP (store) | close_reason: "work completed / already-resolved" |
+| 8 | `bf-438934` | 2026-08-14T10:33:19 | open | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-438934-duplicate-alert-resolved-bf-4x12ec-crash.md` (b1e221c) |
+| 9 | `bf-2vepdz` | 2026-08-14T10:35:02 | closed | verified-FP (store) | close_reason: "FALSE POSITIVE" |
+| 10 | `bf-5a3q4w` | 2026-08-14T10:36:34 | closed | verified-FP (doc) | `docs/crashes/bf-5a3q4w-duplicate-alert-resolved-bf-4x12ec-crash.md` (36088d5) |
+| 11 | `bf-4nmj66` | 2026-08-14T10:38:09 | closed | verified-FP (doc) | `docs/crashes/bf-4nmj66-duplicate-alert-resolved-bf-4x12ec-crash.md` (2db9d9d) |
+| 12 | `bf-3yv2jn` | 2026-08-14T10:39:42 | open | verified-FP (doc) | `docs/reports/bf-3yv2jn-duplicate-crash-alert.md` (39807ef) + `docs/notes/VERIFICATION_REPORT_BF-3YV2JN.md` (0a3fe3b) — two parallel handler reports, both FALSE POSITIVE, both live at HEAD |
+| 13 | `bf-lntjyq` | 2026-08-14T10:41:13 | closed | verified-FP (store) | close_reason: "FALSE POSITIVE" |
+| 14 | `bf-whzeuf` | 2026-08-14T10:43:31 | closed | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-whzeuf-duplicate-alert-resolved-bf-4x12ec-crash.md` (59159e9) |
+| 15 | `bf-22w69c` | 2026-08-14T10:45:01 | open | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-22w69c-duplicate-alert-resolved-bf-4x12ec-crash.md` (4063921) |
+| 16 | `bf-2oov1x` | 2026-08-14T10:46:37 | closed | verified-FP (store) | close_reason: "work completed / already-resolved" |
+| 17 | `bf-4qj2rz` | 2026-08-14T10:48:23 | closed | verified-FP (store) | close_reason: "FALSE POSITIVE" |
+| 18 | `bf-qz9mov` | 2026-08-14T10:49:44 | open | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-qz9mov-duplicate-alert-resolved-bf-4x12ec-crash.md` (d3f4ed3) |
+| 19 | `bf-4h2mqq` | 2026-08-14T10:50:58 | closed | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-4h2mqq-duplicate-alert-resolved-bf-4x12ec-crash.md` (2bb1b9a) |
+| 20 | `bf-48vwac` | 2026-08-14T10:52:14 | open | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-48vwac.md` (15eff68) |
+| 21 | `bf-4xbt4g` | 2026-08-14T10:53:14 | closed | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-4xbt4g.md` (d8f3630) |
+| 22 | `bf-1uh46l` | 2026-08-14T10:55:49 | closed | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-1uh46l-duplicate-alert-resolved-bf-4x12ec-crash.md` (d8a9aa3) |
+| 23 | `bf-c1sthq` | 2026-08-14T10:57:10 | open | unverified | no doc, not closed |
+| 24 | `bf-2m532x` | 2026-08-14T10:58:19 | open | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-2m532x-false-positive-resolved-bf-4x12ec-crash.md` (76f3e0f) |
+| 25 | `bf-67jjlg` | 2026-08-14T10:59:58 | closed | verified-FP (store) | close_reason: "FALSE POSITIVE" |
+| 26 | `bf-4oblul` | 2026-08-14T11:01:40 | open | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-4oblul.md` (2521d85) |
+| 27 | `bf-3cy3vk` | 2026-08-14T11:03:25 | closed | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-3cy3vk-false-positive-resolved-bf-4x12ec-crash.md` (1bdf948) |
+| 28 | `bf-353z15` | 2026-08-14T11:05:05 | closed | verified-FP (store) | close_reason: "work completed / already-resolved" |
+| 29 | `bf-bm3x3s` | 2026-08-14T11:06:06 | closed | verified-FP (store) | close_reason: "work completed / already-resolved" |
+| 30 | `bf-2804g8` | 2026-08-14T11:07:21 | closed | verified-FP (store) | close_reason: "FALSE POSITIVE" |
+| 31 | `bf-44upi7` | 2026-08-14T11:08:40 | open | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-44upi7-false-positive-resolved-bf-4x12ec-crash.md` (6d52b2d) |
+| 32 | `bf-22h8jj` | 2026-08-14T11:09:54 | open | verified-FP (doc) | `docs/archive/crash-investigations/verification-report-bf-22h8jj-false-positive-resolved-bf-4x12ec-crash.md` (e489ae0 — commit subject mislabels it "bf-44upi7"; the added blob is bf-22h8jj's report) |
+| 33 | `bf-drsdsn` | 2026-08-14T11:11:10 | in_progress | unverified | no doc, not closed |
+| 34 | `bf-68u9bl` | 2026-08-14T11:12:19 | in_progress | unverified | no doc, not closed |
+| 35 | `bf-2aa8vo` | 2026-08-14T11:13:29 | in_progress | unverified | no doc, not closed |
+| 36 | `bf-4833lh` | 2026-08-14T11:14:39 | open | verified-FP (doc) | `docs/notes/crash-investigation-bf-4833lh.md` (afdbc2d; its "no crash … SIGHUP" mechanism is superseded by Addendum 3 memcg-OOM — FP disposition stands) |
+| 37 | `bf-2ozrew` | 2026-08-14T11:15:47 | in_progress | unverified | no doc, not closed |
+| 38 | `bf-2u3dzu` | 2026-08-14T11:17:23 | closed | verified-FP (doc) | `docs/verification/bf-2u3dzu-crash-alert-bf-4x12ec.md` (19bb5df) |
+| 39 | `bf-10jhaa` | 2026-08-14T11:18:53 | closed | verified-FP (store) | close_reason: "FALSE POSITIVE" |
+| 40 | `bf-5f9xqg` | 2026-08-14T11:21:10 | closed | verified-FP (doc) | `docs/verification/bf-5f9xqg-crash-alert-bf-4x12ec.md` (dc09ccc) |
+| 41 | `bf-f49g6z` | 2026-08-14T11:22:46 | closed | verified-FP (store) | close_reason: "FALSE POSITIVE" |
+| 42 | `bf-2yruum` | 2026-08-14T11:24:40 | in_progress | unverified | no doc, not closed |
+| 43 | `bf-25uq3d` | 2026-08-14T11:25:52 | open | verified-FP (doc) | indirect — `docs/archive/crash-investigations/verification-report-domchk-30b53d74-complete.md` names bf-25uq3d as its Parent Bead, verdict ✅ systematic FP pattern |
+| 44 | `bf-5x69lm` | 2026-08-14T11:28:02 | deferred | unverified | no doc, not closed |
+
+**Tally:** 44 = **22 verified-FP (doc)** + **14 verified-FP (store)** + **8 unverified**.
+23 closed / 21 not closed (14 open, 6 in_progress, 1 deferred) at writing time.
+
+The 14 store-verified beads were closed by their own handlers with a close reason that concludes
+false-positive or already-resolved (quoted in abbreviated form above); none has a dedicated doc.
+Their close reasons also carry superseded mechanism claims (repository-bloat "OOM killer",
+"capacity-governance kill") that predate Addendum 3's kernel evidence — the dispositions stand, the
+mechanisms do not.
+
+### Wave 2 / pre-wave / scope C
+
+| Bead | Created (UTC) | Live status | Verdict | Evidence |
+|------|---------------|-------------|---------|----------|
+| `domchk-c95117c0` | 2026-08-17T15:59:21 | open | unverified | no doc, not closed (pre-wave; earliest bf-4x12ec investigation bead) |
+| `domchk-2ff261ce` | 2026-08-26T20:17:41 | open | unverified | no disposition |
+| `domchk-9aa5f0a8` | 2026-08-26T20:17:43 | open | unverified | no disposition |
+| `domchk-46a00141` | 2026-08-26T20:21:16 | open | unverified | no disposition |
+| `domchk-c59d96ac` | 2026-08-26T20:21:19 | open | unverified | no disposition (blocks wave-1 `bf-191ch8`) |
+| `domchk-4009b661` | 2026-08-26T20:24:15 | closed | verified-FP (store) | close_reason concludes the work completed; its "NOT OOM, capacity-governance" mechanism claim is superseded by Addendum 3 |
+| `domchk-661c2dc6` | 2026-08-26T20:39:11 | closed | verified — authored **Addendum 2** | close_reason reconstructs the 53-attempt storm from the primary event log |
+| `domchk-ff1dfcfc` | 2026-08-26T20:44:40 | closed | verified-FP (store) | close_reason: no code/doc change needed, prior committed docs already cover it |
+| `domchk-4adc1a55` | 2026-08-26T20:44:44 | open | verified — authored **Addendum 6** | committed in `docs/crash-investigations/bf-4x12ec-crash-investigation.md`; bead itself still open |
+| `domchk-0e428c71` | 2026-08-26T20:44:50 | open | unverified | no disposition |
+| `domchk-d986ce54` | 2026-08-26T20:54:16 | closed | verified — authored **Addendum 4** | close_reason: "FALSE POSITIVE duplicate (attempt #20 teardown heartbeat on a bead Closed since Aug-17)" |
+| `domchk-9e2aa740` | 2026-08-26T20:54:20 | closed | verified — memcg-OOM root cause | close_reason matches Addendum 3's determination |
+| `domchk-c99cdf80` | 2026-08-26T20:57:49 | open | unverified | no disposition |
+| `domchk-c0077666` | 2026-08-26T21:05:38 | open | unverified | no disposition |
+| `domchk-fcbaefea` | 2026-08-26T21:11:08 | open | unverified | no disposition (blocks wave-1 `bf-44upi7`) |
+| `domchk-90640785` | 2026-08-26T21:13:53 | closed | verified — authored **Addendum 5** | close_reason: "Alert was a false positive (fired 9 days post-closure)" |
+| `domchk-bcdd4b4f` | 2026-08-26T21:13:57 | open | n/a | umbrella of this split — in flight |
+| `domchk-862d95d1` | 2026-08-26T20:39:17 | closed | verified (scope C) | close_reason: work-completion verification, all acceptance criteria met |
+| `domchk-30d451d3` | 2026-08-26T21:10:47 | closed | verified (scope C) | close_reason: 44 × -1 / 8 × 124 / 1 × 0 verified from the primary event log |
+| `domchk-0bda808c` | 2026-08-26T21:10:56 | closed | verified (scope C) | close_reason: memcg-OOM root cause, matches Addendum 3 |
+
+### Findings and corrections
+
+1. **Citation paths in the split description are stale.** `docs/verification-report-bf-2m532x-*`,
+   `-bf-3cy3vk-*`, `-bf-44upi7-*` and `docs/crash-investigation-bf-191ch8.md` all live under
+   `docs/archive/crash-investigations/` since a883044 (2026-09-06). All four resolve there at HEAD;
+   none was lost.
+2. **Eleven more alert beads have committed FP reports beyond the ten known citations:**
+   bf-438934 (b1e221c), bf-4h2mqq (2bb1b9a), bf-qz9mov (d3f4ed3), bf-whzeuf (59159e9),
+   bf-1uh46l (d8a9aa3), bf-22w69c (4063921), bf-48vwac (15eff68), bf-4oblul (2521d85),
+   bf-4xbt4g (d8f3630), bf-22h8jj (e489ae0), bf-2u3dzu (19bb5df) — plus the indirect bf-25uq3d.
+   Doc-verified total: 22 of 44.
+3. **Commit-subject mismatch (trust the blob, not the message):** e489ae0's subject says
+   "verification report for crash alert bf-44upi7" but `git show --stat e489ae0` adds only
+   bf-22h8jj's report; bf-44upi7's report was added by 6d52b2d.
+4. **afdbc2d (bf-4833lh) predates the kernel evidence** and concludes "No crash occurred …
+   SIGHUP"; Addendum 3 established memcg-OOM SIGKILL. Its FP disposition stands, its mechanism is
+   superseded. Several store close reasons carry the same superseded mechanism claims.
+5. **Verification ≠ closure.** 12 of the 22 doc-verified wave-1 beads are still open or
+   in_progress: their Aug-26 reports were written by handling agents, but the alert bead itself was
+   never closed. This is exactly the residual `domchk-e9ed52aa` owns.
+6. **Open alert beads are dependency-gated by open re-investigation children** (edge on the alert
+   bead's own `dependencies`): bf-fmg2cw ← domchk-bc542283 (open); bf-191ch8 ← domchk-c59d96ac
+   (open); bf-12ad85 ← domchk-0fcaef88 (in_progress); bf-438934 ← domchk-7b316e8e (open);
+   bf-3yv2jn ← domchk-3a6b037a (in_progress); bf-22w69c ← domchk-4b0334eb (open);
+   bf-qz9mov ← domchk-bf20ed27 (open); bf-48vwac ← domchk-559f022e (open); bf-c1sthq ←
+   domchk-2400c0aa (open); bf-2m532x ← domchk-4d934d6f (open); bf-4oblul ← domchk-f6757c18 (open);
+   bf-44upi7 ← domchk-fcbaefea (open); bf-22h8jj ← domchk-d55c4004 (open);
+   bf-25uq3d ← domchk-3152117c (open); bf-2aa8vo ← domchk-6c808e3d (open);
+   **bf-4833lh ← domchk-6fa86cd6 (closed — unblocked, ready to close)**.
+7. **Five wave-1 beads have no investigation child at all** — bf-drsdsn, bf-68u9bl, bf-2ozrew,
+   bf-2yruum (in_progress) and bf-5x69lm (deferred), no blockers: pure stale alerts, nothing
+   verified and nothing gating them.
+8. **Wave-2 dating carried forward:** child 1's correction stands — all 16 regeneration beads are
+   2026-08-26, none on 2026-08-25. The corpus's only Aug-25 activity is *handling*, not alerting
+   (afdbc2d, bf-4833lh's investigation).
+
+**Bottom line:** every wave-1 alert maps to a genuine kill, so none is spurious *as a crash
+record*; 36 of 44 carry an explicit false-positive disposition (22 documented, 14 in the store),
+and the 8 unverified beads are dispositionally identical — their target has been closed with work
+verified complete since 2026-08-17. Nothing here reopens bf-4x12ec, and no alert has fired since
+2026-08-14.
