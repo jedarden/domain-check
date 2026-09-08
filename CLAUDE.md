@@ -82,7 +82,13 @@ tracked files.
 
 - **`.git`:** 94 MB (was ~18 GB); 169 loose objects / 1.27 MiB (normal churn,
   packed by the daily 03:00 gc), one consolidated pack (90.43 MiB), 0 garbage
-- **Integrity:** `git fsck --full` clean; `./scripts/check-repo-health.sh` passes
+- **Integrity:** `git fsck --full` clean; `./scripts/check-repo-health.sh` passes.
+  **`--full` is the integrity gate on this box:** `git fsck --no-full` on a
+  packed repo (git 2.50.1) exits 2 with ~1,008 false `invalid reflog entry`
+  errors — flag noise on packed repos, not corruption (every flagged OID
+  verifies; an unrelated healthy repo fails identically). Never "repair" the
+  reflog (`reflog expire`/`delete`) in response — that destroys real history.
+  Evidence: [bf-4x12ec report, fsck caveat](docs/crash-reports/bf-4x12ec-git-gc-crash.md)
 - **Effective gc bounds:** `./scripts/setup-git-gc-config.sh --verify` → ✅
   (worst case ≈3GiB per pack run, within the 12GiB dispatch scope)
 - **Verification record:** [bf-4yjq cleanup verification](docs/crashes/bf-4yjq-cleanup-verification.md) —

@@ -27,15 +27,17 @@
 - **Workspace / worker / session**: `/home/coding/domain-check` /
   `claude-code-glm-4.7-lab-domain-check` / session `a6dbb1fc` (agent
   `claude-code-glm-4.7`, model `glm-4.7`)
-- **Shape of the incident**: not one crash but a **64-minute retry storm over 53
-  attempts** — 44 × exit `-1` (crash loop, 38.9–115.8 s each), then 8 × exit
-  `124` (timeout loop, exactly 600.0 s each), then 1 × exit `0` (success,
-  491.8 s)
+- **Shape of the incident**: not one crash but a **retry storm over 53
+  attempts** — a **64-minute crash loop** of 44 × exit `-1` (38.9–115.8 s
+  each), then 8 × exit `124` (timeout loop, exactly 600.0 s each), then 1 ×
+  exit `0` (success, 491.8 s). The 64 minutes is the crash loop alone (10:23 –
+  11:27); the full 53-attempt span is ~2.6 h (10:21 – 12:58 UTC)
 - **Classification**: INFRASTRUCTURE — no domain-check code defect
 - **Source of record**: the primary needle event log
   `~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-14.jsonl`
   (10,138 lines; 53 claims / 53 dispatched / 53 completed), independently
-  re-derived twice
+  re-derived three times — most recently the 2026-09-08 child-5 final pass
+  against the live log
 
 All timestamps below are **UTC** unless marked EDT (local = UTC−4).
 
@@ -56,13 +58,13 @@ All timestamps below are **UTC** unless marked EDT (local = UTC−4).
 | 10:23:02.959 | `outcome.classified` — exit -1 → outcome `crash` (seq 1744) | needle log |
 | 10:23:11.219 | `HANDLING_RELEASE_DONE` heartbeat (seq 1750) — **the dispatch's recorded "crash timestamp"** | needle log |
 | **10:23:14.244** | **First alert** (`bead.released` + `outcome.handled` action=`alerted`, seq 1752–1753) — 11.3 s after the first death; earliest alert for this bead | needle log |
-| 10:23:16 → 11:27:26 | **42 more claim→crash cycles** — 44 kills total, 38.9–115.8 s each; the worker alerts, releases and re-claims every time | needle log |
+| 10:23:16 → 11:27:26 | **43 more claim→crash cycles** — 44 kills total, 38.9–115.8 s each; the worker alerts, releases and re-claims every time | needle log |
 | 10:43:35.281 | `worker.handling.timeout` — `bf sync --flush-only failed` mid-storm: the bead-store write path was also struggling (attempt #15 in flight) | needle log |
 | 10:43:58.590 | Mid-storm capture (transcript `9539f3b2`): disk 85% used / 67G free; **mem 45Gi available, swap 0B** | transcript |
 | 10:44:07 | That attempt launches gc → killed at 10:44:53 (~8 s later, exit -1) | transcript + needle log |
 | 11:28:07 | First of 3 `pluck` attempts producing **zero assistant output** → exit 124 at exactly 600 s (exits 11:38:07, 11:48:28, 11:58:51) | needle log |
 | 11:59:06 | Needle switches to the **`split` template** ("Auto-Split: Decompose This Bead", prompt_len 3896) | needle log |
-| 11:59:06 → 12:50:33 | 5 more auto-split attempts → all exit 124 at 600 s, no tool calls | needle log |
+| 11:59:06 → 12:50:14 | 5 more auto-split attempts → all exit 124 at 600 s, no tool calls (last exit verified 12:50:14.282Z; 12:50:33 is the *next* attempt's `bead.claim.succeeded`) | needle log |
 | 12:57:53 – 12:58:39 | Final attempt (transcript `31800ee3`): creates children `bf-173o7e` (gc) / `bf-5jhvpk` (repack) / `bf-im2sl1` (verify), chains them with dependencies, sets the umbrella label | transcript |
 | **12:58:45.113** | **Exit 0** after 491.8 s; `verification.passed` 11 ms later (12:58:45.126, `gates_run: 1`) — gated success, not merely exit-0 | needle log |
 | 12:58:55.502 | `bead.orphaned` — released unassigned instead of closed. This is why alerts kept regenerating until the manual close on Aug 17 | needle log |
@@ -206,7 +208,7 @@ regenerating until the manual close on 2026-08-17.
 
 ## Repository State
 
-> Filled by child 3 of the split (`domchk-0936d2db`). The parent template's
+> Contributed by child 3 of the split (`domchk-0936d2db`). The parent template's
 > Impact-block questions are answered at summary level in
 > [Impact](#impact) — repository state, whether git operations were broken, and
 > data loss. This section is the metrics record: before/after object-store
@@ -298,7 +300,7 @@ caution under [Sources](#sources-read-not-re-derived)) · fresh
 
 ## Resolution
 
-> Filled by child 4 of the split (`domchk-1ef6b252`). Assembled from outcome
+> Contributed by child 4 of the split (`domchk-1ef6b252`). Assembled from outcome
 > evidence already in the repo — the 2026-08-26 verification report, the
 > commit record, and the consolidated report — not re-derived.
 
@@ -401,7 +403,7 @@ release that kept false-positive alerts regenerating until the manual close
 
 ## Lessons Learned
 
-> Filled by child 4 of the split (`domchk-1ef6b252`). The seven-lesson source
+> Contributed by child 4 of the split (`domchk-1ef6b252`). The seven-lesson source
 > of record is
 > [`docs/crash-investigations/bf-4x12ec-final-crash-report.md`](../crash-investigations/bf-4x12ec-final-crash-report.md)
 > ("Lessons Learned"); this section carries the four **prevention**
@@ -445,6 +447,40 @@ prevention measure below attacks one of those three.
    "57-minute gc" and single-crash narratives propagated across documents
    until re-derived from the JSONL event stream.
 
+## CLAUDE.md Procedure Updates (child 5 of 5)
+
+> Contributed by child 5 of the split (`domchk-6f771e64`). The task's bar was
+> **iff**: update the repo `CLAUDE.md` / `scripts/README.md` only if this
+> incident exposed a genuinely new procedure, and record the conclusion either
+> way. This section is that record.
+
+**Conclusion: one new procedure — everything else already codified.** Each
+prevention recommendation above was checked against the repo `CLAUDE.md` and
+`scripts/README.md` as they stood at finalization (2026-09-08):
+
+| Prevention row | Already codified? | Where |
+|---|---|---|
+| 1 — gc only via `safe-git-gc.sh` + persisted `pack.windowMemory` bounds | Yes — no update | CLAUDE.md "Git Operations Safety" and the "Mechanical guard for the bare-gc path" note (`scripts/setup-git-gc-config.sh --verify`) |
+| 2 — size the work to the dispatch scope; host free RAM is not headroom | Rationale, not a separate procedure | It is the *reason* for row 1's documented bounds; the analytical lesson stays in [Root Cause](#root-cause) here rather than becoming a second procedure |
+| 3 — gate closes on `verify-work-completion.sh`; closed-bead alert filtering | Yes — no update | CLAUDE.md "Pre-Close Work Verification" and "Crash Alert System" |
+| 4 — repo-health timers, pre-commit size gate, bloat thresholds | Yes — no update | CLAUDE.md "Scheduled Maintenance" and "Repository Bloat Prevention and Detection" |
+
+**The one addition (made):** the [`git fsck` caveat](#git-fsck---no-full-invalid-reflog-entry-output-is-not-corruption)
+from this chain's *verification* leg (commit `0a61037`, bead `domchk-b037ca90`)
+was not in either file, and acting on it wrongly is destructive: `git fsck
+--no-full` on this packed repo exits 2 with ~1,008 false `invalid reflog
+entry` errors, and "repairing" the reflog in response would destroy real
+history. One rule added to the CLAUDE.md "Current Repository Health"
+integrity bullet: **`--full` is the integrity gate on this box; never
+"repair" the reflog over `--no-full` noise.** `scripts/README.md` needed no
+change — its checks already specify `git fsck --full`.
+
+**Considered and rejected:** `scripts/crash-circuit-breaker.sh` (lesson 1's
+"stop retrying deterministic failures") is real and live, but it is the
+*bf-65lsdu* chain's deliverable (commit `ad73b42`, bead `domchk-0c916ec7`),
+not a bf-4x12ec finding — bf-4x12ec's docs cite it, and its CLAUDE.md home
+belongs to that chain, not to this report's mandate.
+
 ## Sources (read, not re-derived)
 
 | Document | Contribution to this report |
@@ -460,5 +496,6 @@ single-crash framing — both superseded. `-1` is a harness sentinel, and the
 incident was 44 crashes. Cite the consolidated report.
 
 ---
-**Report date:** 2026-09-08 · Split of `domchk-f6757c18` — summary + timeline `domchk-779d1180` (child 1) · **root cause + impact `domchk-08bdde8d` (child 2)** · repository state `domchk-0936d2db` (child 3) · resolution + lessons learned `domchk-1ef6b252` (child 4) · CLAUDE.md procedures + finalization `domchk-6f771e64` (child 5)
-**Sections completed:** Summary, Incident timeline, Root Cause, Impact, Repository State, Resolution, Lessons Learned · **Pending from child 5 (`domchk-6f771e64`):** CLAUDE.md procedures + finalization
+**Report date:** 2026-09-08 · Split of `domchk-f6757c18` — summary + timeline `domchk-779d1180` (child 1) · root cause + impact `domchk-08bdde8d` (child 2) · repository state `domchk-0936d2db` (child 3) · resolution + lessons learned `domchk-1ef6b252` (child 4) · **CLAUDE.md procedures + finalization `domchk-6f771e64` (child 5)**
+**Sections complete:** Summary, Incident timeline, Root Cause, Impact, Repository State, Resolution, Lessons Learned, [CLAUDE.md Procedure Updates](#claudemd-procedure-updates-child-5-of-5)
+**Final consistency pass (child 5, 2026-09-08):** every event-log figure re-verified first-hand against the primary needle log — 53 `bead.claim.succeeded` / 53 `agent.dispatched` / 53 `agent.completed`, exits 44 × `-1` / 8 × `124` / 1 × `0`, first kill 10:23:02.958Z, last kill 11:27:26.173Z, first alert 10:23:14.244Z, last alert 11:28:04.917Z, `verification.passed` 12:58:45.126Z (`gates_run: 1`), `bead.orphaned` 12:58:55.502Z. Two slips corrected (43 post-first-kill cycles, not 42; last exit-124 12:50:14Z, not 12:50:33); the re-derivation count harmonized at three (the final pass is the third); git-history table dates re-confirmed in UTC (`git rev-list --count 00117cb..8373e5d` = 1; `bf-4x12ec` manual-close stamp 2026-08-17T14:50:41Z live). All cited documents and all cited commits (`89c66af`, `fc96211`, `0a61037`, `91e7d05`) re-checked to exist. No placeholders remain.
