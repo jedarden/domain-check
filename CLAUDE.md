@@ -207,7 +207,7 @@ When investigating crashes, follow the classification guide in `docs/crash-respo
 
 **Implemented Fixes:** Comprehensive crash alert system improvements prevent false positives and duplicate alerts (all six critical fixes, grouped by mechanism):
 
-1. **Closed bead filtering** (fixes 1 & 5): checks if target bead is CLOSED before creating alerts (prevents false positives like bf-3561g investigating completed bead bf-4k2ws)
+1. **Closed bead filtering** (fixes 1 & 5): checks if target bead is CLOSED before creating alerts (prevents false positives like bf-3561g investigating completed bead bf-4k2ws). For **ALERT beads** (`$BEAD_ID` is the alert bead itself, Open; the crash target is a different bead named in its title) the FIX 1 target-closure gate also consults the *target's* status ahead of classification and the breaker record, failing open when that status is unreadable — before domchk-cd8ec29e (2026-09-08) suppression for that shape came only from `alert-deduplication.sh`'s later target-resolution leg, so an Open ALERT bead against a Closed target generated an alert whenever that downstream gate was absent (the bf-29rca shape). Regression coverage: `scripts/test-closed-bead-filter.sh` phase 2, scenarios A–D
 2. **Duplicate detection + processed-alerts tracking** (fixes 2 & 3): prevents multiple investigation beads for the same crash event
 3. **Completion awareness + exit-code validation** (fixes 4 & 6): detects post-completion cleanup termination vs. crash during task
 4. **Alert cooldown:** 5-minute cooldown prevents alert spam during system-wide events
