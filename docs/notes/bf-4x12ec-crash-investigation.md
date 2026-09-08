@@ -1,8 +1,19 @@
 # bf-4x12ec crash investigation — consolidated record
 
-Reconstructed from primary sources 2026-09-07. Child 1 of the split of
-umbrella `domchk-c99cdf80` (bead `domchk-c1c0afd8`); later sections of this
-file are appended by the sibling children of that split.
+The deliverable for parent umbrella `domchk-c99cdf80`. Four evidence sections,
+each written from primary sources by one child of the parent's split and
+committed separately, plus the consolidator's §Consolidation at the end:
+
+| Section | Written by | Commit |
+|---|---|---|
+| §Original bead context | `domchk-c1c0afd8` (child 1), 2026-09-07 | a5c4c07 |
+| §Exit code and signal analysis | `domchk-0e707410` (child 3), 2026-09-07 | d364ff5 |
+| §Workspace and system state at crash time | `domchk-d7241598` (child 2), 2026-09-08 | 11bd848 |
+| §Files and systems involved | `domchk-6df39087` (files/systems child), 2026-09-08 | ea86db8 |
+
+Consolidated, reconciled against the three pre-existing bf-4x12ec reports, and
+mapped onto the parent's acceptance criteria by `domchk-e3ecf2a6` (child 4,
+final) on 2026-09-08 — see §Consolidation at the end of this file.
 
 ## Original bead context
 
@@ -14,7 +25,7 @@ share; each is noted per fact below.
 | Source | What it supplied |
 |---|---|
 | **Live bead store** — `.beads/beads.db` via `bead show bf-4x12ec` | Authoritative current state: title, type, priority, status, revision, and the completion notes carrying the final cleanup metrics. |
-| **Durable checkpoint** — `.beads/checkpoint/forensic.jsonl` (gitignored; read-only grep, never written) | Issue record at line 981 (`created_at`, labels, dependencies, `close_reason`) plus 195 event records mentioning the bead — including seq 2194 `assignment_cleared` (line 5635, carrying `prior_assignee`) and seq 3407 `closed` (line 6848, carrying the close reason) — and the 44 auto-minted `ALERT: Agent crash on bead bf-4x12ec` issue records. |
+| **Durable checkpoint** — `.beads/checkpoint/forensic.jsonl` (gitignored; read-only grep, never written) | Issue record for the bead (`created_at`, labels, dependencies, `close_reason`) plus 201 event records mentioning it (195 at the original dispatch) — including seq 2194 `assignment_cleared` (carrying `prior_assignee`) and seq 3407 `closed` (carrying the close reason) — and the 44 auto-minted `ALERT: Agent crash on bead bf-4x12ec` issue records (re-counted exact: 44 issue records, 44 distinct ids). **Checkpoint line numbers are flush-relative**, not stable: the 2026-09-08 00:05Z flush moved them (issue record 981→982, seq 2194 line 5635→5637, seq 3407 line 6848→6850). Locate by `grep '"origin_event_sequence":2194'`, never by line. |
 | **Prior docs** — `docs/crash-investigations/bf-4x12ec-crash-investigation.md`, `docs/crash-investigations/evidence/bf-4x12ec/crash-logs/` (README, `alert-beads-raw.jsonl`, `exit-code-timeline.txt`, the four verbatim attempt transcripts), `docs/signal-analysis-exit-code-negative-one.md` | The needle worker-log event stream (1,146 bf-4x12ec lines from `claude-code-glm-4.7-lab-domain-check-2026-08-14.jsonl`), the per-attempt transcripts, verbatim alert-bead records, and the exit-code semantics. |
 
 Two provenance caveats:
@@ -24,9 +35,25 @@ Two provenance caveats:
   the needle log's `worker_id`, not by any live field.
 - The evidence bundle under `docs/crash-investigations/evidence/bf-4x12ec/`
   was committed in 9b32085 (force-added past the repo-wide `*.jsonl` ignore).
-  As of this dispatch a co-tenant has staged **uncommitted** `git rm --cached`
-  deletions of that bundle in this shared worktree — cite the bundle by commit
-  (9b32085), not by working-tree state.
+  At the original dispatch a co-tenant had staged **uncommitted** `git rm
+  --cached` deletions of that bundle in this shared worktree; that sweep has
+  since been abandoned and the bundle is intact — all 10 files tracked
+  (re-verified 2026-09-08 00:09Z, HEAD e1d9477).
+- Line citations into
+  `docs/crash-investigations/bf-4x12ec-crash-investigation.md` are
+  **HEAD-relative**, re-pointed to HEAD `9a28b1d` by the consolidation pass
+  (`domchk-e3ecf2a6`, 2026-09-08T04:04Z; the doc is 1,040 lines there). The
+  doc is a moving target: the 8ae57ea-relative numbers of the original
+  dispatch were re-pointed once to e1d9477 (sibling commits 1beeec4, 3b2bdf9,
+  e1d9477 inserted 27 lines, none of them above §Original Work Context, then
+  line 52), the v1.10 body harmonization (bead `domchk-8c78ae8b`) inserted
+  ~32 more above it (§Original Work Context: line 84), and Addendum 7 plus
+  the in-place Summary correction took the doc to 1,040 lines. Re-verified at
+  `9a28b1d`: the pre-Addendum body citations have held steady at 4, 26, 31,
+  38, 41 throughout; Addendum 2's "Resolving the conflicting crash
+  timestamps" table is lines 299–309 with the 10:25:30 row at 306; §"Signal
+  -1, precisely" still opens at 344; Addendum 4 §3 is still 512–529; Addendum
+  5 still opens at 598. Grep the quoted text if HEAD moves again.
 
 ### The record
 
@@ -42,7 +69,7 @@ Two provenance caveats:
 | Assigned agent at crash time | worker **`claude-code-glm-4.7-lab-domain-check`** — adapter `claude-code-glm-4.7` (model glm-4.7), needle session `a6dbb1fc` | needle log `worker_id` on all 1,146 bf-4x12ec event lines; checkpoint event seq 2194 `assignment_cleared` → `prior_assignee: claude-code-glm-4.7-lab-domain-check` (2026-08-17T04:43:12Z); the auto-minted crash alerts describe the agent as `claude-code-glm-4.7`; attempt-1 transcript first-line tag `[needle:claude-code-glm-4.7-lab-domain-check:bf-4x12ec:auto]` |
 | Assignee today | empty — cleared at release/close. The store holds no assignment event earlier than 2026-08-17 for this bead (the Aug-14 claims predate the bead-forge → bead-rs migration), so the crash-time assignment rests on the worker log + `prior_assignee`, not on a live assignee field | checkpoint event seq 2194 |
 | Labels (today) | `deferred`, `split-child`, `umbrella` — the umbrella/split-child pair is residue of the Aug-14 auto-split and later release cycles (the same zero-children-label shape documented for bf-3dxljn) | live store + checkpoint:981 |
-| Dependencies | `bf-im2sl1` —blocks→ `bf-4x12ec` (the verify child). Live 2026-09-07: `bf-173o7e` (gc child) **Closed**; `bf-5jhvpk` (repack) and `bf-im2sl1` (verify) still **Open** — so this Closed bead still carries an open blocker | `bead list --json` (`bead show` hides deps) |
+| Dependencies | `bf-im2sl1` —blocks→ `bf-4x12ec` (the verify child). Live 2026-09-08T04:04Z: **all three split children Closed** — `bf-173o7e` (gc) rev 19, `bf-5jhvpk` (repack) rev 26 (its repack executed 2026-09-08T00:28Z), `bf-im2sl1` (verify) rev 4 — so the open blocker this Closed bead still carried on the 2026-09-07 reading is resolved | `bead list --json` (`bead show` hides deps), re-read at consolidation |
 | Close reason | "Git cleanup completed successfully. Repository size reduced from ~18GB to 753MB, loose objects from 4,627 to 141. All git operations working normally without OOM risk. Agent crash was recoverable - cleanup process completed despite process termination." | checkpoint:981 `close_reason` — close reasons appear only in the checkpoint, not in `bead show` |
 
 Description (core verbatim; full text in the live record and checkpoint:981):
@@ -100,7 +127,7 @@ definition.
 | What −1 means | needle's **sentinel** for a worker process that died by signal — no wait status was reaped (`ExitStatus::code()` is `None`, normalized to −1). **Not a literal signal number**; the classifier maps negative → `crash` | `docs/signal-analysis-exit-code-negative-one.md`; investigation doc Addendum 2 "Signal −1, precisely" |
 | Delivery | SIGKILL — the canonical inference from instant death, zero application error logs, and no core dumps. The −1 record alone does not identify which signal | Addendum 2 "Signal −1, precisely"; `transcript-attempt1-crash-8b2a5b0d.jsonl` ends at the `git gc --aggressive --prune=now` tool_use with no tool_result — killed mid-gc |
 | Mechanism | **memcg-OOM SIGKILL of the gc inside the 12 GiB dispatch scope** (`MemoryMax=12GiB` transient `run-p*.scope`) against 17.20 GiB / 4,649 loose objects (18G `.git`) | Addendum 3 (live scope inspection); Addendum 6 (257 `CONSTRAINT_MEMCG` git kills on 2026-08-16 at 11.7–12.6 GB anon-rss — the same cleanup window, same mechanism on full display); the mechanical-guard record in the repo CLAUDE.md |
-| Confidence | **Regime-matched, not kernel-proven for Aug-14.** The kernel journal for the crash window is unrecoverable (single surviving boot starts 2026-08-15 19:26 EDT). Host memory was NOT exhausted — 45Gi available captured mid-storm at 10:43:59Z (`transcript-midstorm-9539f3b2`); the limit hit was the scope's cgroup cap, and `oom_score_adj=200` marks these agent children preferred OOM victims | Addendum 2 "Evidence-window limitation"; Addendum 3; evidence README mechanism row |
+| Confidence | **Regime-matched, not kernel-proven for Aug-14.** The kernel journal for the crash window is unrecoverable — the single surviving boot's first entry is 2026-08-15 **19:56:33 EDT** (an older "19:26" reading, carried in this row at the original dispatch, was corrected live by the log-source inventory, `docs/crash-investigations/bf-4x12ec-log-source-inventory-domchk-a3f1f8f5-2026-09-07.md`). Host memory was NOT exhausted — 45Gi available captured mid-storm at 10:43:59Z (`transcript-midstorm-9539f3b2`); the limit hit was the scope's cgroup cap, and `oom_score_adj=200` marks these agent children preferred OOM victims | Addendum 2 "Evidence-window limitation"; Addendum 3; evidence README mechanism row; log-source inventory (e1d9477) |
 
 ### Cross-check against docs/crash-investigations/bf-4x12ec-crash-investigation.md
 
@@ -109,23 +136,32 @@ field — id, title, task/P2, purpose, created 10:17:26Z — and its §Original
 Work Context quotes the description accurately. Flagged items:
 
 1. **Line 31, "The crash occurred at 10:25:30 UTC" (v1.0/v1.1 body)** —
-   retained as historical; the doc's own Addendum 2 table (line 219) resolves
-   it as crash #2's alert heartbeat, after attempt #2 died at 10:25:01Z. The
-   stated timestamp for this child task inherits exactly that reading. Not a
-   live error, but a reader of the body alone will misread it as the kill
-   instant.
+   retained as historical; the doc's own Addendum 2 "Resolving the conflicting
+   crash timestamps" table (lines 299–309 at `9a28b1d`; the 10:25:30 row is
+   line 306) resolves it as crash #2's alert heartbeat, after attempt #2 died
+   at 10:25:01Z. The stated timestamp for this child task inherits exactly
+   that reading. Not a live error, but a reader of the body alone will misread
+   it as the kill instant.
 2. **Line 4 (Summary), "the `git gc --aggressive --prune=now` operation
-   completed on the 53rd attempt at 12:58:45Z"** — **contradicted by the
-   doc's own Addendum 4 §3 (lines 425–436), which the Summary was never
-   updated for**: the 53rd attempt executed needle's auto-split template
-   (created bf-173o7e / bf-5jhvpk / bf-im2sl1, chained them, labelled the
-   umbrella, `SPLIT_COMPLETE`); the gc itself completed under child
-   **bf-173o7e** (now Closed). This is the one substantive internal
-   inconsistency this cross-check surfaces.
-3. **Line 46, "Signal -1 = SIGKILL (Signal 9) in Linux", and line 99, "OOM
-   killer invoked SIGKILL (signal 9)"** — imprecise as written: −1 is needle's
-   sentinel, not a POSIX signal number. The doc's own Addendum 2 (lines
-   257–265) states this correctly; SIGKILL remains the inferred delivery.
+   completed on the 53rd attempt at 12:58:45Z"** — was contradicted by the
+   doc's own Addendum 4 §3 (item 3 of the addendum's numbered findings, lines
+   512–529 at `55f23db`): the 53rd attempt executed needle's auto-split
+   template (created bf-173o7e / bf-5jhvpk / bf-im2sl1, chained them, labelled
+   the umbrella, `SPLIT_COMPLETE`); the gc itself completed under child
+   **bf-173o7e** (now Closed). **Resolved since this cross-check was first
+   written:** the Summary now carries the correction in place ("attempt 53
+   executed needle's auto-split (`SPLIT_COMPLETE`), not the gc … corrected
+   2026-09-08, bead `domchk-8c78ae8b`", line 4), Addendum 5
+   ("Re-verification and Summary Correction", line 598) records the same
+   correction history, and Addendum 4's item 7 lists the loose ends. What
+   remains is the doc's own record of the error, not a live inconsistency.
+   (Addendum 4 §3 is lines 512–529 at `9a28b1d`.)
+3. **Line 65, "Signal -1 = SIGKILL (Signal 9) in Linux" (heading softened
+   2026-09-08, annotation at lines 63–64), and line 152, "OOM killer invoked
+   SIGKILL (signal 9)"** — imprecise as written: −1 is needle's sentinel, not
+   a POSIX signal number. The doc's own Addendum 2 §"Signal -1, precisely"
+   (lines 344–353 at `9a28b1d`) states this correctly; SIGKILL remains the
+   inferred delivery.
 4. **Line 38, "OOM killer active, <2GB available during git operations"
    (v1.0, carried over from parallel investigations)** — contradicted by
    direct evidence: 45Gi available captured mid-storm. The binding limit was
@@ -225,7 +261,7 @@ the tasked timestamp names — completed 10:25:01.512001992Z, exit −1, duratio
   | Checklist item | Result |
   |---|---|
   | Check the **cgroup boundary**, not just the host | ✅ host had 50 Gi available 65 s before the kill; the binding limit is the scope's `MemoryMax=12GiB`, identified from live scopes (canonical report Addendum 3) |
-  | Kernel `oom-kill`/`CONSTRAINT_MEMCG` lines in the window | ⚠️ **unrecoverable for Aug-14** — the surviving boot begins 2026-08-15 19:26 EDT. The guide's own caveat (a notice with no kernel line may be a replayed counter) applies, so the classification rests on corroboration, stated as such below |
+  | Kernel `oom-kill`/`CONSTRAINT_MEMCG` lines in the window | ⚠️ **unrecoverable for Aug-14** — the single surviving boot begins 2026-08-15 19:56:33 EDT (the "19:26" an older draft of this row carried was a stale reading, superseded by the log-source inventory, `docs/crash-investigations/bf-4x12ec-log-source-inventory-domchk-a3f1f8f5-2026-09-07.md` — reconciled at consolidation). The guide's own caveat (a notice with no kernel line may be a replayed counter) applies, so the classification rests on corroboration, stated as such below |
   | Verify task completion before classifying | ✅ completed by retry — `verification.passed` 12:58:45.126649351Z; bead closed 2026-08-17 rev 4 |
   | 30-second-rule FALSE_POSITIVE check | ✅ not applicable — per-attempt committing was not the pattern here; every kill landed inside the gc itself |
 
@@ -291,7 +327,7 @@ Attempt-2 session transcript (`session-transcript-attempt2-971486ad.jsonl`,
 | "(signal −1)" carries no signal identity | **Certain** | template arithmetic on the sentinel; no negative signal exists |
 | Outcome class INFRASTRUCTURE (Phase 2A) | **High** | every Phase 1/2A rule and checklist item points the same way |
 | Delivery = SIGKILL | **High (inferred)** | instant death, no error output, no core dump, 600 s cap never reached |
-| Mechanism = memcg-OOM at the 12 GiB scope cap | **High (regime-matched, not kernel-proven for Aug-14)** | resource-state correlation above + 257 same-mechanism kills two days later; the one thing that would settle it outright — an Aug-14 kernel line — is unrecoverable (surviving boot starts 2026-08-15 19:26 EDT) |
+| Mechanism = memcg-OOM at the 12 GiB scope cap | **High (regime-matched, not kernel-proven for Aug-14)** | resource-state correlation above + 257 same-mechanism kills two days later; the one thing that would settle it outright — an Aug-14 kernel line — is unrecoverable (the single surviving boot starts 2026-08-15 19:56:33 EDT; log-source inventory, reconciled at consolidation) |
 
 ## Workspace and system state at crash time (child 2 of the split, `domchk-d7241598`)
 
@@ -378,8 +414,8 @@ terminated the era — and it is the task whose every attempt was killed.
 **Phase 1.2 emergency repository stabilization.** The recovered bead description reads: *"Execute
 aggressive git garbage collection to pack 17.20GB of loose objects into compressed pack files,
 eliminating the OOM risk during git operations. This is Phase 1.2 from the root cause analysis
-(CRITICAL - NOT YET EXECUTED)."* — quoted in `docs/crash-investigations/bf-4x12ec-crash-investigation.md:54`
-(purpose stated at `:11`, restated at `:691-692`); `docs/crash-investigations/bf-4x12ec-final-crash-report.md:28`.
+(CRITICAL - NOT YET EXECUTED)."* — quoted in `docs/crash-investigations/bf-4x12ec-crash-investigation.md:86`
+(purpose stated at `:11`, restated at `:738-740` and `:983`); `docs/crash-investigations/bf-4x12ec-final-crash-report.md:28`.
 
 Every one of the 44 `exit −1` attempts was killed while running that same command. Attempt 2's
 transcript ends at the `git gc --aggressive --prune=now` `tool_use` with no matching
@@ -389,6 +425,7 @@ environment that killed each attempt at it — the gc could not complete inside 
 while 17.20 GiB of loose objects were what it had to read. The operation was eventually completed
 under child **bf-173o7e**, after the retry chain had ended: the task succeeded, only the dispatch
 attempts died (Addendum 4 §3; child 3 §"Resource-state correlation", item 3).
+
 ## Files and systems involved (`domchk-6df39087`)
 
 Written 2026-09-08T01:50Z by the files-and-systems child of the `domchk-c99cdf80` split. Scope:
@@ -408,7 +445,7 @@ Every path below was verified live at HEAD `b435372` (2026-09-08): existence and
 | What bf-4x12ec was dispatched to repair | The `.git` object store of **this** repository: 18G, of which **17.20 GiB / 4,649 loose objects** — the attempt-2 readings taken inside the crash window (child 2 §Repository state). ~95.7% loose, loose:packed ≈ 1,800:1 |
 | What grew it | ~237–248 MB `.beads/*.jsonl` snapshots committed 17+ times between 2026-08-01 and 2026-08-12 (bf-2ildm's GitHub-commits extraction). One environmental regime: bf-2ildm created the bloat, bf-4yjq and bf-1s6c3 died on it Aug 12–13, bf-4x12ec died on it Aug 14 **removing** it (child 2 §Parallel investigations) |
 | The operation every attempt died in | Bare `git gc --aggressive --prune=now` — the bead's own acceptance criterion, alongside `git repack -a -d --depth=250 --window=250` and a `git fsck --no-full` that had been timing out at two minutes (§Original bead context; child 2 §Repository state) |
-| Where the store stands now (measured live 2026-09-08T01:50Z) | `.git` 105M; 178 loose objects; 12,174 in-pack in a 100.25 MiB pack; `fsck` clean per the repo CLAUDE.md health record. `.beads/` is wholly gitignored (`.gitignore:66`) plus repo-wide `*.db` / `*.jsonl` (`.gitignore:68-70`), so the growth path that created the bloat cannot recur through bead state |
+| Where the store stands now (measured live 2026-09-08T01:50Z; re-measured at consolidation 2026-09-08T04:04Z, HEAD `9a28b1d`) | At 01:50Z: `.git` 105M; 178 loose objects; 12,174 in-pack in a 100.25 MiB pack. At 04:04Z: `.git` 106M; 310 loose objects / 2.10 MiB; 12,174 in-pack in the single 100.25 MiB pack; `git fsck --connectivity-only` exit 0 (dangling objects only) — ordinary churn between readings, the cleanup holding. `fsck` clean per the repo CLAUDE.md health record. `.beads/` is wholly gitignored (`.gitignore:66`) plus repo-wide `*.db` / `*.jsonl` (`.gitignore:68-70`), so the growth path that created the bloat cannot recur through bead state |
 
 ### The mitigation layer that exists because of this crash
 
@@ -515,3 +552,110 @@ prompt/template completing at attempt 53 and again under the child. Disposition 
 code changes; the mitigations are the configuration layer catalogued above. The rule-by-rule
 Phase-2A walkthrough and the confidence table are child 3 §"Crash classification" — not
 duplicated here.
+
+## Consolidation (child 4 of the split, `domchk-e3ecf2a6`)
+
+Written 2026-09-08T04:04Z at HEAD `9a28b1d` by the final child of the
+`domchk-c99cdf80` split. The four sections above are the split children's own
+deliverables, kept as committed (`a5c4c07`, `d364ff5`, `11bd848`, `ea86db8`)
+and touched only where the moving canonical report shifted a line citation or
+a live-store fact changed (Dependencies row, store-state row — both re-read
+live). This section does the three things the parent's task left to the
+consolidator: reconcile the earlier bf-4x12ec reports into one account, map
+this deliverable onto the parent's acceptance criteria, and record what was
+re-verified first-hand rather than carried over.
+
+### One account, reconciled from the earlier reports
+
+Four reports about this crash preceded this file. They disagree with each
+other only on points the primary sources have since settled; the account this
+file states is the settled one.
+
+| Earlier report | What it claims | What the record shows | Disposition |
+|---|---|---|---|
+| `docs/crash-investigation-bf-4x12ec.md` (repo root; first committed `ce0847a`, 2026-08-25) | "Crash Time: 2026-08-14T11:14:39.917375296+00:00" (`:10`); root cause "**NOT** OOM killer or memory exhaustion" — a long-running-operation timeout or capacity governance (`:17`); 51GB available, "No memory pressure" (`:27`, `:31`) | 11:14:39 is attempt #31's **alert heartbeat** (its death was 11:14:21) — one of the 44, not "the" crash (Addendum 2's timestamp table, `:309`); the 51GB reading is a correct *host* reading mis-concluded — attempts died at 39–116 s, nowhere near the 600 s timeout, and the binding limit was the dispatch scope's 12 GiB cap, not host RAM (child 3 §"Resource-state correlation") | Both conclusions superseded. Addendum 2 corrects the *mirrored* error ("OOM impossible, 51GB was available") — both framings fail identically by reading system RAM where the limit was cgroup-local (child 1's cross-check, item 4) |
+| `docs/archive/crash-investigations/crash-summary-bf-4x12ec-comprehensive.md` (2026-08-25; moved from `docs/crash-summary-bf-4x12ec-comprehensive.md` by the archive freeze, `a883044`) | Crash Timestamp "10:41:13 (initial alert) / 11:14:39 (operation crash)" (`:17`); "INVESTIGATION COMPLETE - Task succeeded despite crash" (`:6`) | Both stamps are alert heartbeats of the 44 (attempts #13 and #31 died at 10:40:53 and 11:14:21 — Addendum 2's table, `:308-309`); the success verdict is exactly right, and is the earliest report to state it | Timestamps reconciled by Addendum 2; the verdict stands and is confirmed by the live record (closed 2026-08-17 rev 4, `verification.passed` 12:58:45.126649351Z) |
+| `docs/crash-investigations/bf-4x12ec-crash-investigation.md` (canonical; v1.10 body + Addenda 1–7, 1,040 lines at `9a28b1d`) | v1.0 wrote the bead itself as **"Unknown / likely migration work"** and dated the crash 10:25:30 (`:16-19` note, `:31`); the body carried "<2GB available during git operations" (`:38`), "Signal -1 = SIGKILL (Signal 9) in Linux" (`:65`), "9 systematic crashes in 2.5 hours on bf-4yjq alone" (`:41`), and a Summary crediting the gc to attempt 53 (line 4, pre-correction) | The bead record was **recovered from the migrated live workspace** and the placeholder replaced — the doc records this itself (`:16-19`; `:259-261` "title and purpose recovered from the live bead (was "Unknown" in v1.0) — confirming the task was repository cleanup, not the migration"; description quoted at `:86`). The four remaining body figures are resolved by the doc's own addenda and, for the Summary, corrected in place (`:4`, bead `domchk-8c78ae8b`) | No live inconsistency remains; where the body and its addenda differ, the addenda carry the primary-source version (child 1's cross-check, items 1–6) |
+
+The "Unknown bead" placeholder the tasked reconciliation names is therefore
+resolved, not open: the placeholder existed because the crash **predates the
+bead-forge → bead-rs migration** (§"Files and systems involved" — the
+checkpoint's event stream starts 2026-08-16T04:21:10Z, so nothing Aug-14
+survives as an event), and the record was recovered from the migrated store
+plus the needle log. §Original bead context's "The record" table is that
+recovered record, with every field sourced and the assignee's provenance
+stated explicitly.
+
+**The one consistent account.** `bf-4x12ec` ("Execute aggressive git garbage
+collection to eliminate OOM risk", `task`/P2, created 2026-08-14T10:17:26.387856508Z,
+worked by needle worker `claude-code-glm-4.7-lab-domain-check`) was **Phase 1.2
+emergency repository stabilization**: pack down the 17.20 GiB / 4,649 loose
+objects (18G `.git`) that bf-2ildm's extraction had committed 17+ times and
+that had already killed bf-4yjq and bf-1s6c3 on Aug 12–13. Every attempt ran
+bare `git gc --aggressive --prune=now` inside needle's 12 GiB dispatch scope:
+44 memcg-OOM SIGKILLs in 64 minutes (10:23:02–11:27:26Z, 39–116 s each, all
+`exit −1`), then 8 needle-deadline timeouts (`exit 124`, exactly 600 s each),
+then attempt 53 — which executed needle's auto-split (`SPLIT_COMPLETE`) rather
+than the gc. The gc itself completed at 12:58:45Z under child **bf-173o7e**
+(753MB / 141 loose objects), and the bead closed 2026-08-17 rev 4. Every
+"crash timestamp" anywhere in the corpus is one of the 44 auto-minted alert
+heartbeats, not a distinct crash. Kernel proof for Aug-14 is unrecoverable
+(the surviving boot starts 2026-08-15 19:56:33 EDT), so the mechanism —
+memcg-OOM at the scope cap — is carried at **High (regime-matched)** on the
+mid-window resource readings, the −1/124/0 exit census, and the 257
+kernel-visible `CONSTRAINT_MEMCG` git kills of the same cleanup effort on
+2026-08-16. Classification: **INFRASTRUCTURE**; no domain-check code defect;
+the mitigations landed as configuration and scripts, not code.
+
+### Parent acceptance-criteria mapping
+
+The parent bead `domchk-c99cdf80` ("Investigate crashed bead bf-4x12ec context
+and goal") sets four acceptance criteria and one output path. Each criterion,
+and where this file satisfies it:
+
+| Parent acceptance criterion | Where satisfied | The specific facts |
+|---|---|---|
+| 1. Identify the original bead's title, description, and assigned agent | §Original bead context → "The record" | Title "Execute aggressive git garbage collection to eliminate OOM risk"; description quoted verbatim from the live store; assigned agent `claude-code-glm-4.7-lab-domain-check` (adapter `claude-code-glm-4.7`, session `a6dbb1fc`) — attested by the needle log's `worker_id` on all 1,146 event lines, checkpoint seq 2194 `assignment_cleared → prior_assignee`, the alert beads' `claude-code-glm-4.7`, and the attempt-1 transcript tag, with the reason no live assignee field exists stated in the caveats |
+| 2. Understand what task the agent was working on | §Original bead context (description + acceptance criteria + outcome); child 2 §"What the agent was attempting"; §Files and systems → "The target of the original task" | Phase 1.2 emergency stabilization: `git gc --aggressive --prune=now` + `git repack -a -d --depth=250 --window=250` against 17.20 GiB / 4,649 loose objects, targets <500MB / <100 loose, `fsck` without timeout; every attempt killed inside that exact command; completed later under bf-173o7e |
+| 3. Document the workspace state and context | Child 2 §"Workspace and system state at crash time" (repository + host tables, the two corrections, parallel investigations) | In-window: 18G `.git`, 17.20 GiB / 4,649 loose (~95.7%), loose:packed ≈ 1,800:1, 50 Gi host RAM free, swap 0 B; era brackets and the 237–248 MB × 17+ commit origin; the "<2GB available" and "OOM killer active" tasked figures traced to their sources and corrected |
+| 4. Identify any files or systems involved in the original task | Child 4's sibling §"Files and systems involved" (`domchk-6df39087`) | The `.git` object store (target), the mitigation script/config layer the crash produced, the bead-forge → bead-rs seam, the kill path (NEEDLE dispatch, systemd cgroups, kernel memcg OOM, `git pack-objects`), and every file that carries the record |
+
+The parent's output spec — `docs/notes/bf-4x12ec-crash-investigation.md`
+containing original bead context, the task being attempted, and relevant
+workspace state — is met by §Original bead context, child 2 §"What the agent
+was attempting", and child 2 §"Workspace and system state at crash time"
+respectively, with §Files and systems involved completing the fourth
+criterion. This file is the deliverable; no other file needs to exist for the
+parent's criteria to check out.
+
+### What child 4 verified first-hand (2026-09-08T04:04Z, HEAD `9a28b1d`)
+
+- **Line citations re-pointed and re-checked** against
+  `docs/crash-investigations/bf-4x12ec-crash-investigation.md` at `9a28b1d`
+  (1,040 lines): body anchors 4, 11, 26, 31, 38, 41, 63–65, 84, 86, 152, 299,
+  306, 344, 512–529, 598, 738–740, 983 — each read back and matched to its
+  quoted text. Two had drifted since the `55f23db` re-point and were corrected
+  above (the Addendum 2 timestamp table; the child-2 description-quote anchor).
+- **Live bead store** (`bead show` / `bead list --json`): `bf-4x12ec` Closed
+  rev 4, blocker `bf-im2sl1`; `bf-173o7e` Closed rev 19; `bf-5jhvpk` Closed
+  rev 26; `bf-im2sl1` Closed rev 4. The Dependencies row was updated from the
+  2026-09-07 "two children still Open" reading accordingly.
+- **Live store geometry** (`du`, `git count-objects -vH`,
+  `git fsck --connectivity-only`): 106M / 310 loose / 12,174 in-pack in one
+  100.25 MiB pack / fsck exit 0 — recorded in the store-state row.
+- **Tasked sibling docs**: `docs/crash-investigation-bf-4x12ec.md` present and
+  tracked; `docs/crash-summary-bf-4x12ec-comprehensive.md` absent at the root
+  and present at its archive path (both re-confirmed); the canonical report
+  present. All evidence-bundle paths the sections quote from re-confirmed
+  present and tracked (`docs/crashes/bf-4x12ec/`,
+  `docs/crash-investigations/evidence/bf-4x12ec/crash-logs/`,
+  `docs/signal-analysis-exit-code-negative-one.md`,
+  `docs/crash-investigations/bf-4x12ec-final-crash-report.md`).
+- **Every factual claim above carries its source inline** — a doc path (with
+  line where the claim is line-sensitive), a bead-record field (live store or
+  checkpoint, located by `origin_event_sequence`, never by flush-relative line
+  number), or an evidence-bundle file. Nothing in this file rests on an
+  unsourced assertion; where the corpus disagrees, the disagreement itself is
+  the documented finding, not a silent pick.
+- **No file under `.beads/` was written.** All store access was read-only
+  (`bead show`, `bead list --json`, grep of the checkpoint).
