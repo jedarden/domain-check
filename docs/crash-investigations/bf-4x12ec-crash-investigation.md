@@ -134,8 +134,21 @@ The crash occurred **not because of a bead implementation defect**, but because:
 **Cause:** Repository bloat triggering OOM killer
 **Impact:** Workspace-wide git operation disruption
 **Code Defect:** NONE - Bead implementation was correct
+**Domain-Check Code Defect:** NONE - see the explicit finding below
 **Reproducibility:** HIGH at the time (environmental trigger)
 **Duration:** Part of systematic crash series during migration period
+
+**No-Code-Defect Finding (made explicit 2026-09-07, bead domchk-e48b5e1b):**
+no domain-check application code defect was found or implicated. The crash
+happened in the agent dispatch infrastructure while the dispatched agent ran
+`git gc --aggressive --prune=now`; no domain-check code was executing, and
+domain-check appears in this crash only as the *name of the needle worker*
+(`claude-code-glm-4.7-lab-domain-check`). The cause is environmental only —
+memcg OOM inside the agent's transient `run-p*.scope` (`MemoryMax=12GiB`)
+over a 17–18 GB loose-object repository — so **no code change to domain-check
+is required, recommended, or implied by this investigation**, consistent with
+workspace guidance (CLAUDE.md, "Crash Prevention and Investigation": domain-check
+code has been thoroughly investigated and found to have NO defects).
 
 ## Current Status (August 17, 2026)
 
@@ -166,9 +179,16 @@ No recovery action needed. Bead bf-4x12ec crashed due to environmental factors (
 
 **The crash represents a workspace-wide infrastructure issue that has been fully resolved through repository cleanup and migration completion.**
 
+**Attribution of the cause:** environmental only. No domain-check application code
+defect was found or implicated (see the No-Code-Defect Finding under Crash
+Classification) — nothing in this report calls for a fix to domain-check code;
+the remediations it names are all infrastructure and process measures
+(repository cleanup, `.gitignore` protection, monitoring timers,
+`scripts/safe-git-gc.sh`, a bounded per-dispatch memory limit).
+
 ### Pattern Memory
 
-This investigation follows the established protocol from needle crash analysis patterns: crash-alert beads verify (don't redo) work that retry agents have already completed. The signal -1 is consistently an environment-level kill from the OOM killer, not a code execution failure.
+This investigation follows the established protocol from needle crash analysis patterns: crash-alert beads verify (don't redo) work that retry agents have already completed. The signal -1 is consistently an environment-level kill from the OOM killer, not a code execution failure. Carried forward to every addendum below: no addendum changed this attribution — each strengthens the environmental determination (memcg OOM in the agent's dispatch scope) and none implicates domain-check application code, so no code fix is required anywhere in this record.
 
 **Prevention Strategy:**
 The implemented safeguards (repository cleanup, .gitignore protection, health monitoring) provide a robust defense against future repository bloat and OOM crashes.
@@ -201,8 +221,8 @@ this report are preserved as of their original 2026-08-17 investigation date.
 **System Status:** ✅ HEALTHY — All safeguards operational and effective.
 
 **Investigation Date:** August 17, 2026
-**Last Reviewed:** September 7, 2026 (metric provenance re-check, bead domchk-791bfb2e)
-**Report Version:** 1.7 (Addenda 2–6 below; Addendum 4 re-verified by second dispatch; v1.7 corrects Addendum 4's attribution of the 753 MB final metrics from bf-173o7e to the parent bead bf-4x12ec)
+**Last Reviewed:** September 7, 2026 (no-code-defect finding made explicit for domain-check, bead domchk-e48b5e1b; prior: metric provenance re-check, bead domchk-791bfb2e)
+**Report Version:** 1.8 (Addenda 2–6 below; Addendum 4 re-verified by second dispatch; v1.7 corrects Addendum 4's attribution of the 753 MB final metrics from bf-173o7e to the parent bead bf-4x12ec; v1.8 adds the explicit "no domain-check code defect / environmental-only" finding under Crash Classification and in the Conclusion — a clarification, no prior claim was refuted)
 
 ## Addendum 2 — Primary-Source Retry-Storm Analysis (2026-09-02, bead domchk-661c2dc6)
 
