@@ -693,3 +693,50 @@ environmental and resource-related — needle's sentinel for a worker killed by
 signal (delivery SIGKILL, inferred), delivered by the kernel's memcg OOM
 killer inside the 12 GiB dispatch scope while `git pack-objects` tried to pack
 17.20 GiB of loose objects — and none was a domain-check code defect.
+
+## Verification (re-dispatch bead `domchk-7b316e8e`, 2026-09-08)
+
+Bead `domchk-7b316e8e` (created 2026-08-26, worked 2026-09-08) re-dispatched
+"Write crash investigation report" for bf-4x12ec — with the report's target
+path **blank in both the instruction and the acceptance criterion** ("Report
+saved as ␣"), the auto-split's lost-argument shape. The tasked deliverable
+already exists: [`docs/crash-reports/bf-4x12ec-git-gc-crash.md`](../crash-reports/bf-4x12ec-git-gc-crash.md),
+the canonical 501-line incident report finalized at `76bf33c` by child 5 of
+the `domchk-f6757c18` split (`domchk-6f771e64`), whose footer records every
+section complete. Per the verify-then-close rule for this crash family, this
+section records the verifying pass; a second report was deliberately **not**
+manufactured — near-identical report titles across beads are this corpus's
+main false-positive source. Everything below was re-derived first-hand at
+HEAD `908b959` (2026-09-08), not carried over.
+
+| Acceptance criterion | Where the canonical report satisfies it | What the verifying pass re-derived |
+|---|---|---|
+| Executive summary | §Summary | Present: date/bead/exit-census/classification/source-of-record, including the "−1 is a harness sentinel" decode and the 44 × −1 → 8 × 124 → 1 × 0 gradient |
+| Timeline | §Incident timeline (2026-08-14, UTC) | Present: minute-level table 10:17:26 (bead created) → 12:58:55 (`bead.orphaned`), with phase summary, git-history table, and heartbeat-vs-kill reconciliation (§Timestamp reconciliation) |
+| Root cause | §Root Cause | Present: memcg OOM inside the dispatch scope's 12 GiB `MemoryMax`; §"Why the kills were deterministic"; the corrected victim selection (`89c66af`); §Evidence limits states plainly that no Aug-14 kernel line survives |
+| Evidence | Per-section Sources tables + §Sources (read, not re-derived) | Exit census re-tallied from the primary event log `docs/crashes/bf-4x12ec/needle-events-2026-08-14-bf-4x12ec.jsonl.gz` (the exit code lives in the nested `data` object, not the event top level): **53** `agent.completed` = **44 × exit −1** (38,882–115,797 ms, 10:23:02.958Z → 11:27:26.173Z), **8 × exit 124**, **1 × exit 0** — identical to the report's figures |
+| Remediation / recurrence prevention | §Lessons Learned → prevention table (status verified live 2026-09-08) + §CLAUDE.md Procedure Updates; §Resolution | All four prevention recommendations re-checked live: safe-gc bounds resolve through the effective git-config chain, `scripts/verify-work-completion.sh` present, the 8 `domain-check-*` systemd timers installed, pre-commit 10 MB gate current |
+| Format matches existing crash reports | The report *is* the repo-format reference | It carries the standard section set (Summary / Timeline / Root Cause / Impact / Repository State / Resolution / Lessons Learned / Sources) of `docs/crash-reports/`, per `docs/crash-response-guide.md` |
+
+**False-positive determination: the bf-4x12ec alert was NOT a false
+positive.** The 44 kills were genuine kernel memcg-OOM SIGKILLs —
+classification INFRASTRUCTURE (resource), zero domain-check code defects
+across all 53 attempts. The false-positive *phenomenon* in this family is
+documented as prevention row 3: the one successful attempt released the bead
+**orphaned** instead of closing it, so FP alerts regenerated until the
+2026-08-17 manual close and again in the 2026-08-26 wave that created this
+split. The report also explicitly flags the one superseded document a reader
+could mistake for it (`docs/crash-reports/bf-4x12ec-verification-report.md` —
+single-crash framing, superseded; cite the consolidated report).
+
+Supporting live state at this pass: `bf-4x12ec` **Closed, revision 4** in the
+live store; this repo's `.git` at **107M**, 369 loose objects (2.58 MiB) — the
+18G bloat this crash died on stays packed down. No file under `.beads/` was
+written; all store access was read-only.
+
+**The tasked question, in one line:** the crash investigation report
+bf-4x12ec owes already exists as
+`docs/crash-reports/bf-4x12ec-git-gc-crash.md` — a genuine (not
+false-positive) 44-kill memcg-OOM retry storm, INFRASTRUCTURE not code, fully
+remediated and holding — so this bead ships the verifying pass, not a
+duplicate report.
