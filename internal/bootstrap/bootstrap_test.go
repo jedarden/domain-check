@@ -145,7 +145,9 @@ func TestManager_FallbackOnFetchFailure(t *testing.T) {
 }
 
 func TestManager_FallbackOnNetworkError(t *testing.T) {
-	b, err := NewManager(context.Background(), "http://127.0.0.1:1")
+	// Short retry schedule: every attempt is refused, so the interactive
+	// default would spend its full ~10s backoff budget before falling back.
+	b, err := newManagerWithRetry(context.Background(), "http://127.0.0.1:1", fastRetryConfig())
 	require.NoError(t, err)
 	defer b.Stop()
 

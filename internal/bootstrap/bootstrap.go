@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
+
+	"github.com/jedarden/domain-check/internal/resilience"
 )
 
 // defaultBootstrapURL is the IANA RDAP bootstrap file URL.
@@ -30,29 +33,40 @@ var ErrTLDNotFound = errors.New("no RDAP server found for TLD")
 
 // Manager loads, caches, and refreshes the IANA RDAP bootstrap file.
 type Manager struct {
-	mu      sync.RWMutex
-	servers map[string]string // TLD → RDAP server base URL
-	updated time.Time
-	url     string
-	client  *http.Client
-	stopCh  chan struct{}
-	stopped chan struct{}
+	mu       sync.RWMutex
+	servers  map[string]string // TLD → RDAP server base URL
+	updated  time.Time
+	url      string
+	client   *http.Client
+	stopCh   chan struct{}
+	stopped  chan struct{}
+	breakers *resilience.BreakerSet // circuit breaker for the bootstrap host
+	retryCfg resilience.RetryConfig // policy for the outbound bootstrap fetch
 }
 
 // NewManager creates a Manager that fetches the IANA bootstrap
 // file from the given URL. If url is empty, the default IANA URL is used.
 // It performs an initial fetch synchronously and starts a background refresh goroutine.
 func NewManager(ctx context.Context, url string) (*Manager, error) {
+	return newManagerWithRetry(ctx, url, resilience.DefaultInteractiveRetryConfig())
+}
+
+// newManagerWithRetry builds a Manager with an explicit retry policy. It is
+// the seam tests use to observe or shorten the retry schedule; production
+// callers go through NewManager.
+func newManagerWithRetry(ctx context.Context, url string, cfg resilience.RetryConfig) (*Manager, error) {
 	if url == "" {
 		url = defaultBootstrapURL
 	}
 
 	b := &Manager{
-		servers: make(map[string]string),
-		url:     url,
-		client:  &http.Client{Timeout: 30 * time.Second},
-		stopCh:  make(chan struct{}),
-		stopped: make(chan struct{}),
+		servers:  make(map[string]string),
+		url:      url,
+		client:   &http.Client{Timeout: 30 * time.Second},
+		stopCh:   make(chan struct{}),
+		stopped:  make(chan struct{}),
+		breakers: resilience.NewBreakerSet(resilience.BreakerConfig{}),
+		retryCfg: cfg,
 	}
 
 	// Initial fetch — use fallbacks on failure.
@@ -65,26 +79,29 @@ func NewManager(ctx context.Context, url string) (*Manager, error) {
 	return b, nil
 }
 
+// retryConfig returns the manager's retry policy, falling back to the
+// interactive default when unset (a Manager not built by newManagerWithRetry).
+func (b *Manager) retryConfig() resilience.RetryConfig {
+	if b.retryCfg.BaseDelay <= 0 {
+		return resilience.DefaultInteractiveRetryConfig()
+	}
+	return b.retryCfg
+}
+
+// breakerFor returns the circuit breaker for the bootstrap host, creating the
+// set on first use so any Manager is gated.
+func (b *Manager) breakerFor(host string) *resilience.CircuitBreaker {
+	if b.breakers == nil {
+		b.breakers = resilience.NewBreakerSet(resilience.BreakerConfig{})
+	}
+	return b.breakers.Get(host)
+}
+
 // Refresh fetches and parses the IANA bootstrap file, updating the TLD→URL map.
 func (b *Manager) Refresh(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.url, nil)
+	body, err := b.fetch(ctx)
 	if err != nil {
-		return fmt.Errorf("create bootstrap request: %w", err)
-	}
-
-	resp, err := b.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("fetch bootstrap: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("fetch bootstrap: HTTP %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
-	if err != nil {
-		return fmt.Errorf("read bootstrap body: %w", err)
+		return err
 	}
 
 	servers, err := parseBootstrap(body)
@@ -98,6 +115,82 @@ func (b *Manager) Refresh(ctx context.Context) error {
 	b.mu.Unlock()
 
 	return nil
+}
+
+// fetch performs the bootstrap HTTP GET with exponential-backoff retry and a
+// circuit breaker on the bootstrap host. Only transient conditions are
+// retried — transport errors and 408/429/502/503/504 answers; any other
+// status surfaces on the first attempt. Once the breaker is open the fetch
+// fails fast with an error wrapping ErrCircuitOpen and no network I/O, which
+// keeps a persistently unreachable IANA from stalling startup or the 24h
+// refresh loop: the caller keeps serving the last known mapping (or the
+// built-in fallbacks).
+func (b *Manager) fetch(ctx context.Context) ([]byte, error) {
+	host := bootstrapHost(b.url)
+	breaker := b.breakerFor(host)
+
+	var body []byte
+	err := resilience.Do(ctx, b.retryConfig(), func(int) error {
+		// An open circuit fails before any network I/O; its message names
+		// the bootstrap host. Classified permanent so the retry loop does
+		// not burn its budget on a source we have stopped asking.
+		if err := breaker.Allow(); err != nil {
+			return resilience.WrapPermanent(err)
+		}
+
+		data, err := b.fetchOnce(ctx)
+		if err != nil {
+			breaker.Record(err)
+			return err // already classified by fetchOnce
+		}
+		breaker.Record(nil)
+		body = data
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+// fetchOnce issues a single bootstrap GET and reads the body — one attempt of
+// fetch's retry loop. Returned errors carry their transient/permanent class.
+func (b *Manager) fetchOnce(ctx context.Context) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.url, nil)
+	if err != nil {
+		// A URL that cannot be parsed will not parse any better on retry.
+		return nil, resilience.WrapPermanent(fmt.Errorf("create bootstrap request: %w", err))
+	}
+
+	resp, err := b.client.Do(req)
+	if err != nil {
+		// Unclassified transport errors are treated as transient: a dropped
+		// connection or a refused dial is usually a blip.
+		return nil, resilience.WrapTransient(fmt.Errorf("fetch bootstrap: %w", err))
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		err := fmt.Errorf("fetch bootstrap: HTTP %d", resp.StatusCode)
+		if resilience.IsTransientStatus(resp.StatusCode) {
+			return nil, resilience.WrapTransient(err)
+		}
+		return nil, resilience.WrapPermanent(err)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	if err != nil {
+		return nil, resilience.WrapTransient(fmt.Errorf("read bootstrap body: %w", err))
+	}
+	return body, nil
+}
+
+// bootstrapHost extracts the host from a bootstrap URL for the breaker name.
+func bootstrapHost(raw string) string {
+	if u, err := url.Parse(raw); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return raw
 }
 
 // Lookup returns the RDAP server base URL for the given TLD.

@@ -15,6 +15,7 @@ import (
 	"github.com/jedarden/domain-check/internal/domain"
 	"github.com/jedarden/domain-check/internal/httpclient"
 	"github.com/jedarden/domain-check/internal/ratelimit"
+	"github.com/jedarden/domain-check/internal/resilience"
 )
 
 // RDAP errors.
@@ -23,6 +24,12 @@ var (
 	ErrRegistryError  = errors.New("RDAP registry error")
 	ErrConnection     = errors.New("RDAP connection error")
 	ErrInvalidRDAPURL = errors.New("invalid RDAP URL")
+	// ErrRegistryUnavailable reports that the RDAP registry could not be
+	// reached: transient failures persisted through the retry budget, or the
+	// registry's circuit breaker is open. This is an outage of the
+	// dependency — the answer may change once it recovers — and is reported
+	// differently from a permanent registry answer such as 404 (available).
+	ErrRegistryUnavailable = errors.New("RDAP registry temporarily unavailable")
 )
 
 // RDAPClient queries RDAP registry servers for domain availability.
@@ -33,6 +40,8 @@ type RDAPClient struct {
 	allowlist  AllowList
 	userAgent  string
 	metrics    RDAPMetrics
+	breakers   *resilience.BreakerSet // one circuit breaker per registry host
+	retryCfg   resilience.RetryConfig // policy for the outbound registry call
 }
 
 // RDAPClientConfig holds configuration for the RDAP client.
@@ -64,7 +73,27 @@ func NewRDAPClient(cfg RDAPClientConfig) *RDAPClient {
 		allowlist:  cfg.AllowList,
 		userAgent:  cfg.UserAgent,
 		metrics:    cfg.Metrics,
+		breakers:   resilience.NewBreakerSet(resilience.BreakerConfig{}),
+		retryCfg:   resilience.DefaultInteractiveRetryConfig(),
 	}
+}
+
+// retryConfig returns the client's retry policy, falling back to the
+// interactive default when unset (a client not built by NewRDAPClient).
+func (c *RDAPClient) retryConfig() resilience.RetryConfig {
+	if c.retryCfg.BaseDelay <= 0 {
+		return resilience.DefaultInteractiveRetryConfig()
+	}
+	return c.retryCfg
+}
+
+// breakerFor returns the circuit breaker for a registry host, creating the
+// set on first use so any client — including a zero-value one — is gated.
+func (c *RDAPClient) breakerFor(registry string) *resilience.CircuitBreaker {
+	if c.breakers == nil {
+		c.breakers = resilience.NewBreakerSet(resilience.BreakerConfig{})
+	}
+	return c.breakers.Get(registry)
 }
 
 // Check queries the RDAP server for the given domain and returns the result.
@@ -106,7 +135,7 @@ func (c *RDAPClient) Check(ctx context.Context, normalizedDomain string) (*domai
 
 	// Execute with rate limiting and retry.
 	resp, rdapErr = c.ratelimit.Acquire(ctx, registry, func() (*http.Response, error) {
-		return c.doRequest(ctx, rdapURL)
+		return c.doRequest(ctx, rdapURL, registry)
 	})
 
 	// Record RDAP request metrics if metrics is available
@@ -119,8 +148,10 @@ func (c *RDAPClient) Check(ctx context.Context, normalizedDomain string) (*domai
 				status = "timeout"
 			case errors.Is(rdapErr, context.Canceled):
 				status = "canceled"
-			case errors.Is(rdapErr, ratelimit.ErrServiceBusy) || strings.Contains(rdapErr.Error(), "429"):
+			case errors.Is(rdapErr, ratelimit.ErrServiceBusy) || strings.Contains(rdapErr.Error(), "HTTP 429"):
 				status = "rate_limited"
+			case errors.Is(rdapErr, resilience.ErrCircuitOpen) || resilience.IsTransient(rdapErr):
+				status = "registry_unavailable"
 			default:
 				status = "error"
 			}
@@ -148,8 +179,10 @@ func (c *RDAPClient) Check(ctx context.Context, normalizedDomain string) (*domai
 		if errors.Is(rdapErr, context.DeadlineExceeded) || errors.Is(rdapErr, context.Canceled) {
 			return nil, rdapErr
 		}
-		// Check for rate limit exhaustion.
-		if errors.Is(rdapErr, ratelimit.ErrServiceBusy) || strings.Contains(rdapErr.Error(), "429") {
+		// Check for rate limit exhaustion. Matched on the "HTTP 429" message
+		// format the ratelimit and retry layers emit — a bare "429" would
+		// also match a registry host whose port happens to contain it.
+		if errors.Is(rdapErr, ratelimit.ErrServiceBusy) || strings.Contains(rdapErr.Error(), "HTTP 429") {
 			return &domain.DomainResult{
 				Domain:     normalizedDomain,
 				TLD:        tld,
@@ -157,6 +190,20 @@ func (c *RDAPClient) Check(ctx context.Context, normalizedDomain string) (*domai
 				Source:     domain.SourceRDAP,
 				DurationMs: time.Since(start).Milliseconds(),
 				Error:      ErrRateLimited.Error(),
+			}, nil
+		}
+		// Registry outage: the retry budget ran out or the circuit breaker is
+		// open. Surface it as an availability answer that says the registry —
+		// not the domain — is the problem, so the server keeps answering
+		// requests while a registry is down.
+		if errors.Is(rdapErr, resilience.ErrCircuitOpen) || resilience.IsTransient(rdapErr) {
+			return &domain.DomainResult{
+				Domain:     normalizedDomain,
+				TLD:        tld,
+				CheckedAt:  time.Now(),
+				Source:     domain.SourceRDAP,
+				DurationMs: time.Since(start).Milliseconds(),
+				Error:      fmt.Sprintf("%s: %v", ErrRegistryUnavailable, rdapErr),
 			}, nil
 		}
 		// Connection or other errors.
@@ -177,11 +224,68 @@ func (c *RDAPClient) Check(ctx context.Context, normalizedDomain string) (*domai
 	return result, nil
 }
 
-// doRequest performs the HTTP GET request to the RDAP server.
-func (c *RDAPClient) doRequest(ctx context.Context, url string) (*http.Response, error) {
+// doRequest performs the HTTP GET request to the RDAP server, retrying
+// transient registry failures with exponential backoff and gating the
+// registry behind its circuit breaker. Only transient conditions are retried —
+// transport errors and 408/429/502/503/504 answers; a definitive registry
+// answer (200 registered, 404 available, 400 malformed) is returned on the
+// first attempt.
+//
+// The retry policy is the interactive one, sized to finish inside the server's
+// 30s request timeout. Once a registry's breaker is open the call fails fast
+// with an error wrapping ErrCircuitOpen — no network I/O — so an outage turns
+// into a clear, immediate "registry unavailable" answer instead of a storm of
+// doomed requests.
+func (c *RDAPClient) doRequest(ctx context.Context, url, registry string) (*http.Response, error) {
+	breaker := c.breakerFor(registry)
+
+	var resp *http.Response
+	err := resilience.Do(ctx, c.retryConfig(), func(int) error {
+		// An open circuit fails before any network I/O. Its message already
+		// names the registry (the breaker is keyed by host); classified
+		// permanent so the retry loop does not burn its budget on a
+		// dependency we have deliberately stopped asking.
+		if err := breaker.Allow(); err != nil {
+			return resilience.WrapPermanent(err)
+		}
+
+		r, err := c.send(ctx, url)
+		if err != nil {
+			breaker.Record(err)
+			if resilience.IsPermanent(err) {
+				return err
+			}
+			// Unclassified transport errors are treated as transient: a
+			// dropped connection or a refused dial is usually a blip.
+			return resilience.WrapTransient(fmt.Errorf("registry %s: %w", registry, err))
+		}
+		if resilience.IsTransientStatus(r.StatusCode) {
+			// The registry answered but with a retry-worthy status. Drain and
+			// close so the connection returns to the pool, then retry.
+			drainAndClose(r)
+			err := fmt.Errorf("registry %s: HTTP %d (%s)", registry, r.StatusCode, resilience.StatusReason(r.StatusCode))
+			breaker.Record(err)
+			return resilience.WrapTransient(err)
+		}
+		// A definitive answer — including 404 (available) and 400. The
+		// dependency is healthy, so the breaker must not count it as a
+		// failure.
+		breaker.Record(nil)
+		resp = r
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// send issues a single RDAP HTTP GET — one attempt of doRequest's retry loop.
+func (c *RDAPClient) send(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		// A URL that cannot be parsed will not parse any better on retry.
+		return nil, resilience.WrapPermanent(fmt.Errorf("create request: %w", err))
 	}
 
 	if c.userAgent != "" {
@@ -190,6 +294,14 @@ func (c *RDAPClient) doRequest(ctx context.Context, url string) (*http.Response,
 	req.Header.Set("Accept", "application/rdap+json, application/json")
 
 	return c.httpClient.Do(req)
+}
+
+// drainAndClose discards a response body and releases its connection.
+func drainAndClose(resp *http.Response) {
+	if resp.Body != nil {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+		_ = resp.Body.Close()
+	}
 }
 
 // parseResponse interprets the RDAP HTTP response.
