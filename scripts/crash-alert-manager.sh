@@ -337,6 +337,55 @@ if [[ -n "$TARGET_BEAD_ID" ]] && grep -q "$TARGET_BEAD_ID" "$PROCESSED_ALERTS_FI
     exit 0
 fi
 
+# CRITICAL FIX 1 (target leg): for an ALERT bead, $BEAD_ID is the alert bead
+# itself — Open, because it is the thing being investigated — and the actual
+# crash target is a different bead named in its title. The self-status gate
+# above consults $BEAD_ID only, so every ALERT bead passed FIX 1 and an alert
+# against an already-closed target travelled on toward the alert path;
+# suppression for that shape came only from alert-deduplication.sh's
+# target-resolution leg — a later gate, after classification and the breaker
+# record, and one this manager deliberately fails open around when the script
+# is missing (the bf-29rca shape: an ALERT bead for closed bf-4yjq, suppressed
+# by dedup when present, generated outright when not). Consult the target's
+# status here instead, ahead of classification and the breaker record, so the
+# chain's premise — suppress alerts whose target bead is Closed — holds for
+# the ALERT-bead shape (the dominant bead class in the trace store) without
+# depending on any downstream gate being runnable.
+#
+# The title is parsed here rather than consumed from the extraction above:
+# that block's historical `on<sep>bf-` pattern matched neither of needle's
+# real alert-title shapes ("ALERT: Agent crash on bead bf-…", "Investigate
+# agent crash on bead …" — the word "bead" sits between) and its ^bf- gate
+# excluded domchk-* alert beads, so there TARGET_BEAD_ID came back empty for
+# every real ALERT bead and a gate keyed on it would have been dead code.
+# Parsing locally keeps this gate correct whatever the extraction above
+# evolves into; when the extraction does supply a target, it wins.
+if [[ -z "$TARGET_BEAD_ID" ]]; then
+    ALERT_TITLE=$(bead show "$BEAD_ID" 2>/dev/null | grep -i "^title" || echo "")
+    if [[ "$ALERT_TITLE" =~ [Cc]rash[[:space:]]+on[[:space:]]+(bead[[:space:]]+)?((bf|domchk)-[a-z0-9]+) ]]; then
+        # BASH_REMATCH[2] is the bead id ([1] the optional "bead " prefix, [3]
+        # the bf|domchk alternation). A bead is never its own crash target.
+        if [[ "${BASH_REMATCH[2]}" != "$BEAD_ID" ]]; then
+            TARGET_BEAD_ID="${BASH_REMATCH[2]}"
+            log_alert "INFO" "Target-closure gate resolved crash target: $TARGET_BEAD_ID"
+        fi
+    fi
+fi
+
+if [[ -n "$TARGET_BEAD_ID" ]] && [[ "$TARGET_BEAD_ID" != "$BEAD_ID" ]]; then
+    TARGET_STATUS=$(bead show "$TARGET_BEAD_ID" 2>/dev/null | grep -i "^status" | head -1 || echo "unknown")
+    if [[ "$TARGET_STATUS" =~ [Cc]losed ]]; then
+        log_alert "INFO" "Crash target $TARGET_BEAD_ID is already CLOSED - no alert needed"
+        echo "Reason: Target bead $TARGET_BEAD_ID is already closed (nothing left to investigate)"
+        exit 0
+    fi
+    if [[ "$TARGET_STATUS" == "unknown" ]]; then
+        # Fail open: an unreadable target status must not stop crash alerting,
+        # the same contract the resolution tracker and dedup gates follow.
+        log_alert "WARN" "Could not read status of target bead $TARGET_BEAD_ID - target-closure gate fails open"
+    fi
+fi
+
 # Also check if this exact alert bead has been processed
 if grep -q "$BEAD_ID" "$PROCESSED_ALERTS_FILE" 2>/dev/null; then
     log_alert "INFO" "Alert bead $BEAD_ID already processed - no alert generated"
