@@ -221,8 +221,8 @@ this report are preserved as of their original 2026-08-17 investigation date.
 **System Status:** ✅ HEALTHY — All safeguards operational and effective.
 
 **Investigation Date:** August 17, 2026
-**Last Reviewed:** September 7, 2026 (no-code-defect finding made explicit for domain-check, bead domchk-e48b5e1b; prior: metric provenance re-check, bead domchk-791bfb2e)
-**Report Version:** 1.8 (Addenda 2–6 below; Addendum 4 re-verified by second dispatch; v1.7 corrects Addendum 4's attribution of the 753 MB final metrics from bf-173o7e to the parent bead bf-4x12ec; v1.8 adds the explicit "no domain-check code defect / environmental-only" finding under Crash Classification and in the Conclusion — a clarification, no prior claim was refuted)
+**Last Reviewed:** September 8, 2026 (Addendum 7: parent acceptance-criteria mapping + live completion verification, bead domchk-fe10456e; prior: no-code-defect finding made explicit for domain-check, bead domchk-e48b5e1b, 2026-09-07; metric provenance re-check, bead domchk-791bfb2e)
+**Report Version:** 1.9 (Addenda 2–7 below; Addendum 4 re-verified by second dispatch; v1.7 corrects Addendum 4's attribution of the 753 MB final metrics from bf-173o7e to the parent bead bf-4x12ec; v1.8 adds the explicit "no domain-check code defect / environmental-only" finding under Crash Classification and in the Conclusion — a clarification, no prior claim was refuted; v1.9 appends Addendum 7, the consolidation record mapping parent domchk-46a00141's three acceptance criteria to their delivering beads/commits/artifacts and re-verifying bf-4x12ec's completion status live)
 
 ## Addendum 2 — Primary-Source Retry-Storm Analysis (2026-09-02, bead domchk-661c2dc6)
 
@@ -638,3 +638,114 @@ aggressive gc itself) was the crash trigger and is complete — no retry.
 **Addendum 6 Investigation Date:** September 2, 2026
 **Addendum 6 Sources:** needle event log 2026-08-14 (primary), `journalctl -k` current-boot full scan, `journalctl --list-boots`, live bead record, live `git count-objects`/`git fsck`
 **Classification:** FALSE POSITIVE — duplicate alert; root cause memcg OOM (bloat era), resolved
+
+## Addendum 7 — Consolidation: parent acceptance-criteria mapping and completion verification (2026-09-08, bead domchk-fe10456e)
+
+This addendum is the final consolidation leg of the investigation chain run under parent
+`domchk-46a00141` ("Investigate agent crash logs for bf-4x12ec"), whose three acceptance
+criteria this record exists to satisfy:
+
+1. Crash logs retrieved and saved to `docs/crashes/`
+2. Summary of what bf-4x12ec was doing
+3. Exit signal analysis documented
+
+Nothing below re-opens the analysis. Every element was already delivered by committed,
+pushed work from the chain's children; this section binds each criterion to its delivering
+bead, commit, and on-disk artifact, and re-verifies the crashed bead's completion status
+live. It is an index into the record above and into the sibling deliverables, not a new
+determination.
+
+### Criterion 1 — Crash logs retrieved and saved to `docs/crashes/` ✅
+
+Delivered by the log-retrieval child **`domchk-4bad8e94`** (Closed): `docs/crashes/bf-4x12ec/`
+— commits `c781138` (the bundle) and `8ae57ea` (restored the section-inventory document the
+bundle commit had dropped). Verified on disk 2026-09-08: `README.md`, `MANIFEST.sha256`,
+`attempt-index.tsv`, `bracket-source-lines.tsv`,
+`needle-events-2026-08-14-bf-4x12ec.jsonl.gz` (the day's needle event stream for the bead),
+`needle-events-…-attempt2-bracket.jsonl`, `session-transcript-attempt2-971486ad.jsonl`, and
+`transcripts/` (55 files: all 53 per-attempt transcripts plus `census.tsv` and
+`MANIFEST.sha256`).
+
+Augmenting bundles delivered by the parallel `domchk-c99cdf80` split:
+
+- `docs/crash-investigations/evidence/bf-4x12ec/crash-logs/` (`9b32085`, bead
+  `domchk-48f3e34d`) — 1,146 raw needle event lines for the bead, the crash-window segment
+  with interleaved worker-state events, four verbatim attempt transcripts (attempt-1 crash,
+  mid-storm, auto-split timeout, split-success), the 44 auto-minted alert-bead records, and
+  the per-attempt exit-code timeline (44 × −1 / 8 × 124 / 1 × 0).
+- `docs/crash-investigations/evidence/bf-4x12ec/system-state.md` (`3b2bdf9`, bead
+  `domchk-40c9c99a`) — monitoring logs absent on Aug-14; host metrics show no memory, disk,
+  or load pressure at crash time.
+- Log-source inventory
+  `docs/crash-investigations/bf-4x12ec-log-source-inventory-domchk-a3f1f8f5-2026-09-07.md`
+  (`e1d9477`, bead `domchk-a3f1f8f5`), and primary-source evidence + signal −1 semantics
+  `docs/crash-investigations/bf-4x12ec-evidence-signal-semantics-domchk-15854355-2026-09-07.md`
+  (`76ad268`, bead `domchk-15854355`).
+
+### Criterion 2 — Summary of what bf-4x12ec was doing ✅
+
+Delivered by the task-context child **`domchk-520b8682`** (Closed 2026-09-07 — cascade
+close, "deliverable already rendered on origin/main"), rendered in
+`docs/notes/bf-4x12ec-crash-investigation.md` § "Original bead context" (`a5c4c07`, bead
+`domchk-c1c0afd8`) and in this document's **Crashed Bead Details** and **Original Work
+Context** sections: bf-4x12ec was **Phase 1.2 emergency repository stabilization** —
+"Execute aggressive git garbage collection to pack 17.20GB of loose objects into compressed
+pack files, eliminating the OOM risk during git operations" — created
+2026-08-14T10:17:26.387Z, first kill 10:23:02.958Z. The bead-workspace migration that v1.0
+of this report conflated with it was a separate, completed effort (`61d27ac`, 2026-08-15).
+
+### Criterion 3 — Exit signal analysis documented ✅
+
+Delivered by this bead's direct dependency, the exit/signal child **`domchk-0e707410`**
+(Closed, commit `d364ff5`): `docs/notes/bf-4x12ec-crash-investigation.md` § "Exit code and
+signal analysis", grounded in the semantics record
+`docs/signal-analysis-exit-code-negative-one.md` (present, 33.6 KB). Inside this document
+the same analysis appears in the **Signal Analysis** section, Addendum 2's "Signal −1,
+precisely", and Addendum 3's root-cause determination. The consolidated statement:
+
+- `exit_code = −1` is needle's **writer-side sentinel** for a worker that died with no wait
+  status (`status.code().unwrap_or(-1)`; any signal flattens to −1) — it is not a POSIX
+  exit status, and the alert body's "(signal −1)" is the crash handler's template
+  arithmetic on that sentinel, not a signal number.
+- The 53-attempt census from the retrieved bundle: 44 × exit −1 (`crash`, 38.9–115.8 s),
+  8 × exit 124 (`timeout`, exactly the 600 s cap), 1 × exit 0 (`success`, 491.8 s at
+  12:58:45Z) — no other exit codes appear in the stream.
+- Mechanism: **memcg OOM inside the agent's transient `run-p*.scope` (`MemoryMax=12GiB`)**
+  over the 17–18 GB loose-object repository — kernel-proven same-window via the 257 Aug-16
+  git `CONSTRAINT_MEMCG` kills at the 11–12 GB RSS ceiling (Addenda 3 and 6). Not system
+  OOM, not a harness timeout, not a code defect.
+
+### Completion status of bf-4x12ec (verified live 2026-09-08)
+
+- **Closed**, rev 4, updated 2026-08-17T14:50:41Z; the work itself completed
+  **2026-08-14T12:58:45Z** (attempt 53). Attempt 53 did not run the gc — it executed
+  needle's auto-split (Addendum 4 §3), and the `git gc --aggressive --prune=now` completed
+  under child **bf-173o7e** (Closed, rev 19).
+- Auto-split family state at consolidation time: bf-173o7e (gc) **Closed**; **bf-5jhvpk
+  (repack) Open** and actively in progress under bead `domchk-371e54d8` (the memory-capped
+  `git repack -a -d --depth=250 --window=250` leg); **bf-im2sl1 (verify) Open**. The two
+  targets the parent's completion notes marked PARTIAL (753 MB vs <500 MB; 141 vs <100
+  loose) are exactly those two children's remit — open follow-on work, not unresolved
+  defects in the gc.
+- Live repository state at 2026-09-08T00:37Z (this bead's own reading): `.git` **104 MB**,
+  **101 loose objects / 656 KiB**, 12,174 in-pack, 1 pack / 100.25 MiB, 0 garbage,
+  `git fsck --no-full` exit 0 (dangling objects only). The bloat-era state is gone and has
+  held for three weeks. The loose-object count sits at normal churn on the healthy/warning
+  rounding boundary (101 vs the <100 line); total repository size — the metric that
+  actually carried the OOM risk — is ~0.6% of the bloat-era 18 GB. No bloat signature.
+
+### Residual work (owned elsewhere, not owed by this consolidation)
+
+Body-level harmonization of this report — the section inventory's six contradictions and
+thin spots (`cafd43e`, bead `domchk-f6aba211`: the "53rd attempt" phrasing in the Summary
+and resolution step 2, the body RCA's superseded pack-figures, the Signal section's
+"Definitive Identification" wording, the superseded 2026-09-01 corpus figures under System
+State, and the unreconciled 4,627 vs 4,649 before-count) — is tasked to the
+gap-finalization bead **`domchk-8c78ae8b`** (in progress at consolidation time). Addendum 4
+§3 already corrects the 53rd-attempt narrative in place; this addendum deliberately leaves
+the body text untouched to avoid colliding with that in-flight revision.
+
+---
+**Addendum 7 Investigation Date:** September 8, 2026
+**Addendum 7 Sources:** live bead records (bf-4x12ec, bf-173o7e, bf-5jhvpk, bf-im2sl1, domchk-46a00141 and its four chain children), git history (`c781138`, `8ae57ea`, `9b32085`, `a5c4c07`, `d364ff5`, `e1d9477`, `76ad268`, `3b2bdf9`), on-disk artifact verification, live `git count-objects -vH` / `git fsck --no-full`
+**Classification:** FALSE POSITIVE — duplicate alert on a closed bead; consolidation record, no new findings
