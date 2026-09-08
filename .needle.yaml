@@ -5,6 +5,12 @@ agent:
   default: glm
   timeout: 600
 
+worker:
+  # Keep agent-created follow-up work bounded. Verification belongs in gates
+  # and no-change findings belong in bead notes, not in child beads.
+  generation_max_per_dispatch: 1
+  enforce_shipped_work: true
+
 bead_cli:
   backend: bead-rs
 
@@ -15,6 +21,12 @@ strands:
       - deferred
       - human
       - blocked
+      # Crash alerts are telemetry, not product work. The alert lifecycle is
+      # handled upstream; dispatching the historical backlog created hundreds
+      # of near-identical Markdown reports in this repository.
+      - alert
+      - crash
+      - signal--1
   explore:
     enabled: true
     workspaces:
@@ -23,14 +35,18 @@ strands:
       - /home/coding/spaxel
       - /home/coding/mta-my-way
   weave:
-    enabled: true
+    # Do not turn documentation gaps into more documentation beads. Add docs
+    # only when a human-authored task explicitly requests them.
+    enabled: false
     max_beads_per_run: 3
     cooldown_hours: 24
     doc_patterns:
       - "README*"
       - "docs/**/*"
   unravel:
-    enabled: true
+    # Alternative-generation amplified the existing crash-task graph. Keep it
+    # off in this application workspace; explicit product beads still pluck.
+    enabled: false
     max_beads_per_run: 3
     cooldown_hours: 168
   pulse:
@@ -43,8 +59,20 @@ strands:
       - name: test
         command: "go test ./... 2>&1"
 
-verification:
-  - /home/coding/.needle/hooks/verify-changes.sh
+  mitosis:
+    enabled: true
+    first_failure_only: true
+    force_failure_threshold: 0
+    repeat_interval: 0
+    max_depth: 1
+    timeout_triggered:
+      enabled: false
+
+# Do not restore /home/coding/.needle/hooks/verify-changes.sh here. That legacy
+# hook rejects valid no-change outcomes and taught workers to manufacture a
+# Markdown file to make verification pass. NEEDLE's native shipped-work gate
+# accepts a changed bead note for already-done, verification-only, and blocked
+# outcomes while still requiring real repository changes to be pushed.
 
 prompt:
   context_files:
@@ -70,6 +98,11 @@ prompt:
     - Write table-driven tests alongside implementation
     - Run `go build ./...` and `go test ./...` before closing a bead
     - Follow existing code patterns if any code already exists
+    - Documentation is opt-in. Create a new documentation file only when the task's acceptance criteria explicitly require that file or new user-facing documentation.
+    - For crash alerts, incident investigation, evidence gathering, classification, root-cause analysis, remediation review, and verification-only work: record findings in the bead notes. Do not create a per-bead report, addendum, status file, summary, evidence compilation, or verification document.
+    - If a durable incident fact genuinely changes an existing canonical incident record, update that record in place. Never create a second document for the same incident or task.
+    - If the requested work is already complete or no repository change is needed, update the bead notes with what was checked and close the bead without creating a commit.
+    - `.needle-predispatch-sha` is obsolete dispatcher metadata. Never create, stage, or commit it.
   templates:
     pluck: |
       ## Workflow
@@ -78,10 +111,16 @@ prompt:
 
       Steps:
       1. Read the task description and context below
-      2. Implement the required changes in {workspace_path}
-      3. Stage only the changed paths and commit with a brief descriptive message
-      4. Push: `git push`
-      5. Close the bead: `bead close {bead_id} --reason "brief summary of what was implemented"`
+      2. Decide whether the acceptance criteria require a real repository change
+      3. If a change is required, implement it in {workspace_path}, stage only those paths, commit, and push
+      4. If no change is required, do not manufacture a document or commit; record the finding with `bead update {bead_id} --notes "what was checked and why no repository change is needed"`
+      5. Close the bead: `bead close {bead_id} --reason "brief summary of the completed outcome"`
+
+      Documentation policy:
+      - New Markdown is allowed only when the acceptance criteria explicitly request a new file or new user-facing documentation.
+      - Crash/alert investigation, evidence, classification, root-cause, remediation-review, and verification outcomes belong in bead notes.
+      - When a canonical incident document already exists, update it in place only for a new durable fact; do not create per-bead reports, summaries, addenda, or status files.
+      - Never commit `.needle-predispatch-sha` or make a metadata-only commit.
 
       If you cannot complete the task — do NOT close the bead. It will be retried automatically.
 
