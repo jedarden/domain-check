@@ -734,6 +734,28 @@ precisely", and Addendum 3's root-cause determination. The consolidated statemen
   rounding boundary (101 vs the <100 line); total repository size — the metric that
   actually carried the OOM risk — is ~0.6% of the bloat-era 18 GB. No bloat signature.
 
+**Close-time re-verification (2026-09-08, this bead's closing dispatch).** The
+split-family bullet above is superseded in one respect: the repack leg is no
+longer pending. `domchk-371e54d8` **Closed** (rev 4, 00:35:06Z) after executing
+the bf-5jhvpk target repack at **2026-09-08T00:28:54Z** — `git repack -a -d
+--depth=250 --window=250` at full depth/window (no fallback tier), exit 0 in 3 s,
+scope peak **350.4 MB** against its 4 GB `MemoryMax` cap (no OOM in
+journalctl/dmesg), **2 packs → 1** (single 100.25 MiB pack, old packs pruned),
+`.git` 107 MB → 105 MB. "Actively in progress" was already stale when this
+addendum was published (f78d150, 00:51Z — 22 minutes after that run finished);
+the 1-pack / 100.25 MiB reading in the bullet below it *is* that run's output.
+With the repack landed, the parent's first PARTIAL target (repository size
+< 500 MB) is met at the repo level: **105 MB** at close time, ~0.6% of the
+bloat-era 18 GB. Loose objects sat at **133 / 872 KiB** at close time (up from
+101 at 00:37Z) — normal churn around the <100 line, swept by the daily 03:00 gc.
+The target bead **bf-5jhvpk itself remains Open** (rev 18) with the execution
+recorded on its agent bead, and **bf-im2sl1** (verify) remains Open — the same
+open-target/closed-executor shape this family shows throughout. Nothing in the
+AC mapping above changes: bf-4x12ec still Closed rev 4, the dependency child
+`domchk-0e707410` still Closed (rev 4, verified live 2026-09-08), and all three
+criteria still bind to the beads/commits/artifacts listed above.
+
+
 ### Residual work (owned elsewhere, not owed by this consolidation)
 
 Body-level harmonization of this report — the section inventory's six contradictions and
