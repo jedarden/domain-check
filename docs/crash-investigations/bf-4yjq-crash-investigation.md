@@ -82,6 +82,47 @@ ran once the storm ended and the repo was cleaned.
 > a **Sep-1 capture** (byte-identical to the Sep-1 `.beads/crash-bf-4yjq-summary.txt`), not an
 > Aug-12 instrument reading — no monitor log under `.beads/logs/` reaches back to Aug-12.
 
+> **Dated addendum (2026-09-08, domchk-ce45c03b) — crash-time task state, workspace
+> then-vs-now, and an independent completion re-check.** All three re-derived first-hand this
+> pass: attempts 01 and 51 extracted from the raw-logs tarball and read directly, all 56
+> transcripts scanned for remote/tip state, live commands run 2026-09-08 01:18–01:27 UTC.
+>
+> **What the agent was doing at the first and final crash.** Both endpoint runs — attempt 1
+> (dispatched 17:50:23.059Z, last transcript event 17:53:38.489Z, classified crash −1 at
+> 17:53:53.875Z, alert bead `bf-276uk`) and attempt 51 (dispatched 20:26:09.897Z, classified
+> −1 at 20:30:38.310Z, alert bead `bf-2n3ve`) — end in the identical literal command
+> **`git push origin main`** (read from the transcripts, not inferred from the 50/50 census).
+> Attempt 1's transcript captures the crash-time remote state: **`origin` already pointed at
+> `git.ardenone.com/jedarden/domain-check.git`**, alongside a second remote named `github` on
+> github.com — so the task's step 3 (repoint `origin` at Forgejo) was already in place inside
+> the window, and the leg in flight was step 2's reconciliation push: local `main` sat at
+> `199b70c`, `[origin/main: ahead 305]` against Forgejo's `63ba024`. Across the whole window
+> Forgejo's tip never moved — every transcript that captured `Forgejo origin/main:` shows
+> `63ba024` — so **50 pushes were attempted and 0 delivered**. Local `main` did advance
+> (12 distinct tips, ahead-count 305 → 324 across the transcripts; authorship per commit is
+> not attributable from transcripts on a shared worktree). Each push therefore fed a
+> multi-hundred-commit pack over the 17 GiB loose-object store inside the 12 GiB dispatch
+> scope and was killed — the push-side mechanism the reconciliation doc established, now
+> confirmed at both endpoints with the remote state it acted on.
+>
+> **Workspace state, crash time vs now.** Crash time: `.git` ≈18 GB, ≈17.2 GiB loose across
+> ~4,594 objects vs 9.6 MiB packed (§6). Re-verified live 2026-09-08: `.git` **105 MB**;
+> **150 loose objects / 1,012 KiB**; **1 pack / 100.25 MiB**; `check-repo-health.sh` exit 0
+> with the effective pack-memory bound (≈3,072 MiB worst case) verified inside the 12 GiB
+> dispatch scope. Loose count sits in the ordinary daily-churn band (364 objects / 2.44 MiB
+> at the 00:28Z repack verification the same morning) — four orders of magnitude below the
+> storm-era figure.
+>
+> **Task completion, re-verified independently.** `git remote -v`: `origin` →
+> `https://git.ardenone.com/jedarden/domain-check.git` ✅. `git ls-remote` of **both**
+> remotes: Forgejo `main` tip = GitHub `main` tip = `77057c3` ✅. The Forgejo server-side
+> push mirror is present and live (`remote_mirror_3KJHNKYU5Mw`, 8 h interval, last update
+> 2026-09-08T01:18:20Z) ✅. Local `main` was ahead of `origin/main` by 1 commit at check
+> time — a co-tenant's bf-4x12ec docs commit (`11bd848`, domchk-d7241598), not this task's
+> work, left unpushed per the never-push-a-sibling rule. The §8 residual stands unchanged: a
+> client-side remote (named `github` at crash time, `github-mirror` today) still points at
+> github.com where the convention wants server-side mirroring only.
+
 All figures below were re-derived from `.beads/checkpoint/forensic.jsonl` on 2026-09-02
 (domchk-d5dd1b33), and the headline count independently re-verified on 2026-09-02
 (domchk-4eab7c59): **50 distinct alert beads titled "ALERT: Agent crash on bead bf-4yjq"**.
