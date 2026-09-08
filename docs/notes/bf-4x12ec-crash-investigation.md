@@ -659,3 +659,37 @@ parent's criteria to check out.
   the documented finding, not a silent pick.
 - **No file under `.beads/` was written.** All store access was read-only
   (`bead show`, `bead list --json`, grep of the checkpoint).
+
+## Verification (re-dispatch bead `domchk-0c1beda9`, 2026-09-08)
+
+Bead `domchk-0c1beda9` (created 2026-08-26, worked 2026-09-08) re-dispatched
+this crash-analysis task — crash log analysis, root cause identification, and
+failure-type classification for bf-4x12ec's exit −1, into this same file. The
+split deliverable above already carries all three; per the verify-then-close
+rule for this crash family, this section records the verifying pass rather
+than a second account. Everything below was re-derived first-hand from the
+primary sources at HEAD `76bf33c` (2026-09-08), not carried over from the
+sections above.
+
+| This bead's acceptance criterion | Where this file satisfies it | What the verifying pass re-derived |
+|---|---|---|
+| Review available logs and crash artifacts | §Original bead context → "Where the record was recovered from"; §"The files that carry the record" | Both bundles present and tracked: `docs/crashes/bf-4x12ec/` (62 files incl. `transcripts/`) and `docs/crash-investigations/evidence/bf-4x12ec/` (12 files) |
+| Identify the specific cause of the crash ("signal −1") | §"What 'exit code −1' and 'signal −1' denote" | Re-read `alert-beads-raw.jsonl`: **44/44** alert beads carry both the verbatim body line `- **Exit code**: -1 (signal -1)` and the `signal--1` label — the sentinel-plus-template rendering, confirming −1 carries no signal identity |
+| Document the root cause analysis | §"Resource-state correlation"; §Consolidation → "The one consistent account" | Exit census re-tallied from `needle-events-2026-08-14-bf-4x12ec.jsonl.gz` (1,146 bf-4x12ec lines; the field is `event_type`, not `type`): **53** `agent.completed` events — **44 × exit −1** (38,882–115,797 ms, 10:23:02.958Z → 11:27:26.174Z), **8 × exit 124** (600,018–600,024 ms — the 600 s cap), **1 × exit 0** (491,784 ms). Attempt-2 transcript's final assistant record is the verbatim `git gc --aggressive --prune=now` `tool_use` (timeout 600000) with no `tool_result` — the kill landed mid-gc |
+| Determine environmental / resource / code | §"Crash classification"; §Files and systems → "Classification" | **INFRASTRUCTURE — resource-related**: memcg-OOM SIGKILL of the gc inside the 12 GiB dispatch scope (17.20 GiB of loose objects cannot pack under a 12 GiB cap). **Not code-related** — zero application errors across all 53 attempts, and the identical prompt/template succeeded at attempt 53 |
+
+Supporting live state at the verifying pass: `bf-4x12ec` **Closed, revision 4**
+in the live store (close reason per §Original bead context); this repo's
+`.git` at **107M**, 353 loose objects (2.47 MiB), one 100.25 MiB pack, 0
+garbage — the 18G bloat this crash died on stays packed down (§Files and
+systems → "The target of the original task"). Worktree note for the next
+reader: at this pass the shared index still held the **child-1-era** (a5c4c07)
+version of this file as its staged entry — a plain `git commit` here would
+have committed a 538-line deletion of the deliverable above; the verification
+commit takes this path's worktree content only.
+
+**The tasked question, in one line:** every one of the 44 `exit −1` deaths was
+environmental and resource-related — needle's sentinel for a worker killed by
+signal (delivery SIGKILL, inferred), delivered by the kernel's memcg OOM
+killer inside the 12 GiB dispatch scope while `git pack-objects` tried to pack
+17.20 GiB of loose objects — and none was a domain-check code defect.
