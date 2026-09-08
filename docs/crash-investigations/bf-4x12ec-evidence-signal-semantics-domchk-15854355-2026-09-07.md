@@ -252,3 +252,42 @@ quiet-diff exit code.
 Nothing in `.beads/logs/`, no trace slot, and no kernel record exists for this
 bead — the three absence findings in §2.3 are themselves the evidence answer
 for any later step that plans to look there.
+
+---
+
+## 5. Dated addendum 2026-09-08 — §3's doc-state snapshot has moved on
+
+This record was committed at `76ad268` against HEAD `8ae57ea`. HEAD has since
+advanced (`1beeec4`, `b8f7072`, `2e34dc8`, `fea1a62`). Everything below was
+re-verified live 2026-09-08T00:47Z against HEAD `fea1a62` (== `origin/main`,
+divergence 0/0), with line numbers from `git show HEAD:<path> | grep -n`:
+
+- **The canonical report is now v1.8, 639 lines at HEAD** (§3.1 said "v1.6,
+  592 lines"). `1beeec4` (bead `domchk-791bfb2e`) committed the §3.2
+  "uncommitted v1.7" edits (+31/−4 — the metric-provenance block resolving
+  **C6**, plus the Addendum 4 attribution correction); `b8f7072` (bead
+  `domchk-e48b5e1b`) added v1.8's explicit "no domain-check code defect /
+  environmental-only" finding.
+- **§3.2's worktree-divergence hazard is closed for that file**: the worktree
+  copy is byte-identical to HEAD (blob `38935f97` both). Its §3.2 headline
+  ("partially executed, **uncommitted**") is therefore historical.
+- **C1 / C2 / C4 are still uncorrected in the body** — re-grepped at v1.8:
+  Summary L4 still reads "completed on the 53rd attempt", Resolution step 2
+  L64 still reads "completed on retry", and L45–46 still reads
+  "Signal -1 = **SIGKILL (Signal 9)**". Addendum 4 (HEAD L481–482) remains the
+  only correction of C1, and Addendum 2 the only correction of C4. Cite the
+  addenda, not the body, on all three — unchanged guidance, now confirmed
+  against v1.8.
+- **Two more bf-4x12ec docs landed after this record's snapshot**, both
+  2026-09-07: `crash-investigations/bf-4x12ec-alert-inventory.md` (`fea1a62`,
+  bead `domchk-f05d6f91` — alert-layer census: 44 wave-1 alerts, 102-bead core
+  inventory, independently corroborating §2.2's "44 alert beads" figure) and
+  `crash-investigations/evidence/bf-4x12ec/operation-summary.md` (`2e34dc8`,
+  bead `domchk-dfce2360` — names the killed operation as
+  `git gc --aggressive --prune=now`, issued 10:24:08.660Z as the final
+  `Bash` `tool_use`, kill 52.9 s later at 10:25:01.512Z, matching §2.4's
+  transcript finding).
+
+§1 and §2 — the signal semantics, the 53-attempt census, the timestamps and
+the record locations — are unaffected by any of the above and stand as
+written.
