@@ -292,3 +292,100 @@ Attempt-2 session transcript (`session-transcript-attempt2-971486ad.jsonl`,
 | Outcome class INFRASTRUCTURE (Phase 2A) | **High** | every Phase 1/2A rule and checklist item points the same way |
 | Delivery = SIGKILL | **High (inferred)** | instant death, no error output, no core dump, 600 s cap never reached |
 | Mechanism = memcg-OOM at the 12 GiB scope cap | **High (regime-matched, not kernel-proven for Aug-14)** | resource-state correlation above + 257 same-mechanism kills two days later; the one thing that would settle it outright — an Aug-14 kernel line — is unrecoverable (surviving boot starts 2026-08-15 19:26 EDT) |
+
+## Workspace and system state at crash time (child 2 of the split, `domchk-d7241598`)
+
+Written 2026-09-08 by the workspace/system-state child of the `domchk-c99cdf80` split. Scope:
+the repository and host conditions inside which all 44 `exit −1` kills landed (10:23:02.958Z →
+11:27:26.174Z — child 3 §"What the retrieved logs record"), each with its source. The
+attempt-2-local readings are already in child 3's §"Resource-state correlation"; this section
+carries the era-level telemetry, and it separates **contemporaneous measurement** from **later
+reconstruction**, because the tasked figures mix the two and quoting them undifferentiated
+reintroduces errors this doc's cross-check list already resolved.
+
+### Repository state at crash time
+
+| Metric | Value | Source |
+|---|---|---|
+| `.git` size | **18G** | **Read inside this crash's window** — attempt 2's own `du -sh .git/` at 10:23:43.210Z (`session-transcript-attempt2-971486ad.jsonl`, child 3 §"Resource-state correlation"). Era brackets agree: `docs/crash-analysis/bf-4yjq-system-state-snapshot-2026-09-01.txt` ("Total Repository Size: 18 GB"); `docs/archive/crash-investigations/system-state-investigation-bf-173o7e-2026-08-14.md` ("domain-check/.git: 18 GB total") |
+| Loose objects | **17.20 GiB / 4,649 objects** | **Read inside this crash's window** — attempt 2's `git count-objects -vH` at 10:23:26.221Z (child 3 §"Resource-state correlation") |
+| Loose objects, era readings | 17.16 GiB / 4,482 unpacked; 17.20 GB / 4,515 | `docs/crash-analysis/bf-4yjq-system-state-snapshot-2026-09-01.txt` (Aug-12 era); `docs/research/git-gc-oom-crash-analysis.md:66` region (cleanup-era count, credited there to `docs/cleanup-resolution-2026-08-17.md` and `docs/crash-artifacts-bf-4yjq-raw.md`) |
+| Loose share of the repo | **~95.7%** | `docs/archive/crash-investigations/system-state-investigation-bf-173o7e-2026-08-14.md:52` ("17.16 GB (95.7% of repository)"); `docs/analysis/agent-signal-minus1-root-cause-analysis.md:61` and `docs/reports/bf-4yjq-comprehensive-crash-report.md:281` ("17.20 GB (95.7% of total repository size)"); `docs/research/git-gc-oom-crash-analysis.md:66` renders the same figure as a loose:packed ratio |
+| Packed side | 9.60 MiB in 1 pack, 4,081 in-pack — loose:packed ≈ 1,800:1, inverted | bf-4yjq snapshot `git count-objects -v` transcription; the same inverted-ratio wording in `docs/archive/crash-investigations/system-state-investigation-bf-173o7e-2026-08-14.md` ("critically inverted ratio") |
+| Committed bloat | ~237–248 MB `.beads/*.jsonl` × **17+ commits** | `docs/crash-investigation-bf-4yjq.md:143` ("17+ commits each carrying a ~237–248 MB `.beads/*.jsonl` snapshot from bead bf-2ildm's extraction"); `docs/crash-analysis/repository-bloat-root-cause-analysis-2026-08-12.md:27-31` (the three 237 MB file paths) |
+| `git fsck` | timed out after 2 minutes | bf-4yjq snapshot ("`git fsck --no-full`: Times out after 2 minutes"); `docs/crash-investigation-bf-4yjq.md` §5 |
+
+The loose-object counts differ across the bloat era (4,482 → 4,515 → 4,594 → 4,649) because the
+bloat was still growing and because the interrupted/retried repacks added loose objects of their
+own — `docs/research/git-gc-oom-crash-analysis.md` states that feedback loop explicitly ("the
+memory-intensive gc attempts that crashed were themselves large git operations, and
+interrupted/retried repacks added further loose objects before cleanup"). The **18G / 17.20 GiB /
+4,649** triple is the one measured *inside* this crash's window; the rest are the era's brackets
+and are the reason the bead description's "17.20GB" and the older body text's "17.16GB" are both
+correct (cross-check item 6).
+
+### Host state during the window
+
+| Metric | Value | Source, and what kind of source it is |
+|---|---|---|
+| Load average | **15–17 on 12 cores** | `docs/crash-investigation-bf-4yjq.md:168` — bf-4yjq-era telemetry (Aug 12). Contemporaneous for that storm; **not re-measured in the bf-4x12ec window** |
+| Disk | **84% full, ~71 GB free** (350 GB / 444 GB used) | `docs/crash-investigation-bf-4yjq.md:170`; `docs/crash-root-cause-bf-4yjq.md:109`; `docs/crash-data-extraction-bf-4yjq.md:148` — era-level, Aug 12 |
+| Available memory during git ops | **"<2GB"** | `docs/crash-investigation-bf-1s6c3-2026-09-01.md:107,200,211`. **Later reconstruction, and contradicted for this crash** — caveat 1 below |
+| OOM killer | **active**, delivering SIGKILL | `docs/crash-investigation-bf-1s6c3-2026-09-01.md:203` ("OOM Killer: Active - delivered SIGKILL events"). **Inference, not an Aug-14 observation** — caveat 2 below |
+| Kernel records for the window | **none survive** | `journalctl` on the surviving boot starts 2026-08-15 19:56:33 EDT (`docs/crash-investigation-bf-4yjq.md` §2.3; the older "19:26" reading was corrected by `docs/crash-investigations/bf-4x12ec-log-source-inventory-domchk-a3f1f8f5-2026-09-07.md`) |
+| Swap | 0 B used of 24 Gi | attempt 2's `free -h` at 10:23:56.490Z (child 3 §"Resource-state correlation") — read inside this window |
+
+**Two corrections the tasked figures need before they can be quoted.** Both are already in this
+doc's cross-check list; they are restated here because the acceptance criteria for this child
+carry the uncorrected forms verbatim, and an undifferentiated table would undo that work.
+
+1. **"<2GB available during git operations" is a reconstruction from the Aug-12/16 corpus, not a
+   reading from this window — and the direct evidence for this window says the opposite.** Attempt
+   2 read **50 Gi available** at 10:23:56.490Z, 65 s before the kill, and a mid-storm capture read
+   **45 Gi** at 10:43:59Z (`transcript-midstorm-9539f3b2`). The host was never exhausted on
+   Aug 14. What bound the gc was the dispatch scope's `MemoryMax=12GiB` cgroup cap: 17.20 GiB of
+   loose objects cannot be packed under it with `--aggressive`'s large pack windows. The `<2GB>`
+   figure describes a real mechanism (git loading the loose-object store) observed on *other*
+   days of the bloat era; it does not describe the memory state at this crash. Cross-check item 4
+   already resolved this; this section records the figure only so the tasked criterion is traceable
+   to its source and to its correction.
+2. **"OOM killer active" is an inference from the death signature, not an Aug-14 kernel
+   observation.** The line that would prove it cannot exist — the journal for Aug 12–14 is gone.
+   The same corpus that asserts it also overstates its own census ("9 systematic crashes",
+   superseded to 76 dispatches / 71 kills for bf-1s6c3 and 50 for bf-4yjq — cross-check item 5).
+   What carries the mechanism to the recorded confidence is later, kernel-visible corroboration:
+   **257 `CONSTRAINT_MEMCG` git kills on 2026-08-16** at 1.2–11.97 GB anon-rss inside the same
+   transient `run-p*.scope` memcgs (Addendum 3, Addendum 6) — the same cleanup effort, two days
+   later, with logging available. Child 3's confidence table records this as "High
+   (regime-matched, not kernel-proven for Aug-14)"; that is the correct strength, and this section
+   does not upgrade it.
+
+### Parallel investigations that establish these conditions
+
+| Investigation | What it establishes for this section | Canonical record |
+|---|---|---|
+| **bf-4yjq** — Aug 12, 50 consecutive dispatch deaths, all exit −1, 17:53:53Z → 20:30:38Z | The era's system-state table (repo ~18 GB, loose 17.16–17.20 GiB, packed 9.60 MiB, load 15–17, disk 84% / ~71 GB free, `fsck` timeout), the inverted-ratio framing, and the log-source coverage table proving no kernel record exists for Aug 12 | `docs/crash-investigation-bf-4yjq.md` §2.3 and §5 |
+| **bf-2ildm** | **The origin of the bloat.** Its GitHub-commits extraction wrote the ~237 MB `.beads/*.jsonl` files that were committed 17+ times between 2026-08-01 and 2026-08-12, growing the repo from ~500 MB to 18 GB. Its 2026-09-07 re-investigation independently states the kill mechanism (kernel memory-cgroup OOM after the 12 GiB `MemoryMax` per-dispatch scope was exceeded) and records that no memory or disk telemetry survives for its own window | `docs/crash-analysis/repository-bloat-root-cause-analysis-2026-08-12.md:20-31`; `docs/investigations/investigation-report-bf-2ildm-2026-09-07.md:22-23, 207-208` |
+| **Aug-12 storm / bf-1s6c3** | The `<2GB available` / ">50GB git RSS" / "94.71% memory pressure" reconstruction and the "OOM Killer: Active" assertion — i.e. the source of the tasked memory figures, and the source of the superseded "9 crashes" census | `docs/crash-investigation-bf-1s6c3-2026-09-01.md:95-115, 195-215`; corrected by `docs/crash-analysis-bf-1s6c3-2026-09-06.md` and the repo CLAUDE.md |
+
+These are one environmental regime, not three separate causes: **bf-2ildm created the bloat,
+bf-4yjq and bf-1s6c3 died on it across Aug 12–13, and bf-4x12ec died on the same bloat on
+Aug 14 while trying to remove it.** The task bf-4x12ec was dispatched to perform is what
+terminated the era — and it is the task whose every attempt was killed.
+
+### What the agent was attempting
+
+**Phase 1.2 emergency repository stabilization.** The recovered bead description reads: *"Execute
+aggressive git garbage collection to pack 17.20GB of loose objects into compressed pack files,
+eliminating the OOM risk during git operations. This is Phase 1.2 from the root cause analysis
+(CRITICAL - NOT YET EXECUTED)."* — quoted in `docs/crash-investigations/bf-4x12ec-crash-investigation.md:54`
+(purpose stated at `:11`, restated at `:691-692`); `docs/crash-investigations/bf-4x12ec-final-crash-report.md:28`.
+
+Every one of the 44 `exit −1` attempts was killed while running that same command. Attempt 2's
+transcript ends at the `git gc --aggressive --prune=now` `tool_use` with no matching
+`tool_result`; the kill landed 52.9 s after the last transcript record (child 3 §"Resource-state
+correlation", item 1). The environment the task was meant to repair is therefore the same
+environment that killed each attempt at it — the gc could not complete inside a 12 GiB scope
+while 17.20 GiB of loose objects were what it had to read. The operation was eventually completed
+under child **bf-173o7e**, after the retry chain had ended: the task succeeded, only the dispatch
+attempts died (Addendum 4 §3; child 3 §"Resource-state correlation", item 3).
