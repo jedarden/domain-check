@@ -185,6 +185,31 @@ for attempt in $(seq 1 $max_retries); do
 done
 ```
 
+### Prevention Validation and Per-Alert-Type Runbooks (2026-09-08)
+
+**A prevention claim is only as current as its last validation.** Before citing any
+"prevention in force" statement in a report or bead note, re-run the applicable layer from
+[docs/crash-prevention-validation.md](docs/crash-prevention-validation.md) — per-layer
+procedures (repo/gc bounds → monitoring timers → alert pipeline → surge/dispatch gates →
+integration wiring), the one-command battery, failure-attribution rules for this shared
+worktree, and the dated verification record. Full battery all-green 2026-09-08
+(domchk-82c1ff9a): 13 live checks + 19 tracked suites, 0 failures.
+
+```bash
+# Smallest useful re-check (read-only, ~1 min)
+./scripts/check-repo-health.sh && ./scripts/setup-git-gc-config.sh --verify \
+  && ./scripts/preflight-health-check.sh \
+  && ./scripts/system-event-mode.sh check && ./scripts/crash-circuit-breaker.sh status
+```
+
+**Responding to an alert:** `docs/crash-response-guide.md` → "Operational Runbooks by
+Alert Type" — one runbook per class (A: crash/exit −1, B: max-turns, C: service 503/502,
+D: resource, E: repo-health/bloat, F: crash surge, G: breaker/deferral), each with the
+commands, close criteria, and escalation threshold. Start every crash alert with the
+target-resolution + dedup gate, not the investigation: most alerts point at work another
+worker already finished. Only **tracked** suites are canon when validating
+(26 of 52 on-disk `scripts/test-*.sh` at 2026-09-08 — the rest are in-flight sibling work).
+
 ### Crash Investigation Guidance
 
 When investigating crashes, follow the classification guide in `docs/crash-response-guide.md`:

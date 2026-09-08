@@ -332,6 +332,37 @@ The crash was caused by external service unavailability, not by any defect in th
 
 ---
 
+## Solution — Service-Availability Safeguards Implemented Since (2026-09-08)
+
+This report's long-term recommendations (retry logic, gateway monitoring, pre-flight
+checks) were design asks on 2026-09-01. All four are now implemented and validated;
+the validation procedure is
+[`docs/crash-prevention-validation.md`](crash-prevention-validation.md) (Layer 2/4,
+all-green 2026-09-08, bead domchk-82c1ff9a).
+
+| This report's recommendation | Now implemented as | Validation (2026-09-08) |
+|------------------------------|--------------------|-------------------------|
+| "Monitor inference gateway" | `scripts/service-monitor.sh` on the 2-minute `domain-check-service-monitor.timer` — gateway health + load, alerts to `.beads/logs/service-monitor.log` | `service-monitor.sh --once` → exit 0, `PRE-FLIGHT CHECK PASSED`; timer future-triggered |
+| "Service health checks — pre-flight checks before agent tasks" | `scripts/preflight-health-check.sh` — gateway, memory, disk, load, repo health, and the open-crash-breaker check (Check 4); a failed preflight defers the bead instead of dispatching into a dead gateway | `preflight-health-check.sh` → exit 0, 5/5 checks; `test-preflight-breaker-check.sh` 22/22 |
+| "Implement retry logic — exponential backoff for 503 errors" | `scripts/retry-with-backoff.sh`, `scripts/check-service-with-retry.sh`, `scripts/api-call-with-retry.sh`; the documented policy (transient vs permanent classes, backoff, circuit breaker) is [`docs/notes/service-availability-retry-strategy.md`](notes/service-availability-retry-strategy.md) (bead domchk-cae6d07e), with the `healthcheck` subcommand (`domchk-41e398fb`) exposing transient/permanent exit codes for the domain-check binary itself | policy doc at HEAD; `retry-with-backoff.sh` in scripts/ |
+| "Fallback mechanisms" (partial) | No second gateway exists, so failover (gap G-4 in [`docs/crash-prevention-requirements.md`](crash-prevention-requirements.md) §4) remains **open** — but dispatch-time protection now exists: `scripts/needle-with-limiter.sh` gates dispatch through the crash-storm circuit breaker and `scripts/system-event-mode.sh`, so a failing-infrastructure window *defers* work (exit 75) instead of letting agents die into it | `test-needle-with-limiter-gate.sh` 25/25; `test-system-event-mode.sh` 32/32 |
+
+**Operational corrections this crash's own record contributed:**
+
+- **Probe with `curl -skf`, not `-sf`.** The gateway serves a self-signed certificate, so
+  plain `-sf` exits curl 60 ("Gateway down") while the gateway is actually fine — a false
+  alarm that has bitten operators following the older snippets. All live procedures now
+  specify `-skf`.
+- **Exit-code semantics:** this crash was `exit 1` (application-level, service 503), never
+  `exit -1` — the runbook distinction that routes it to "retry with backoff" rather than
+  "infrastructure event" is now codified in
+  [`docs/crash-response-guide.md`](crash-response-guide.md) (classification table +
+  Runbook C) and `scripts/crash-classifier.sh` (SERVICE_FAILURE).
+- **No code changes** — the original conclusion stands: domain-check code was not
+  involved, and no investigation before or since has found a domain-check defect.
+
+---
+
 **Analysis Status:** ✅ COMPLETE  
 **Evidence:** Trace files, metadata, system state, error patterns  
 **Classification:** INFRASTRUCTURE ISSUE - Service availability failure  

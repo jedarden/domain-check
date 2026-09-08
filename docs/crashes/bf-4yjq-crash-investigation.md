@@ -177,3 +177,32 @@ from surviving evidence and inconsistent with the verified re-dispatch-kill cade
 **Related investigations:** bf-1s6c3 (repository bloat, same storm),
 bf-173o7e (gc execution), bf-2ildm (bloat source), bf-4x12ec / bf-198ne / bf-1ea4g (the
 kernel-verified later members of the same death class).
+
+## 6. Solution — the prevention stack that closed this crash class
+
+Every causal element of §4 now has a deployed countermeasure, and each countermeasure has
+a validation command with a dated result. This is the "solution section" for the report:
+not "what we would do" but "what is in force and how you can re-prove it." Procedure:
+[`docs/crash-prevention-validation.md`](../crash-prevention-validation.md); battery
+all-green **2026-09-08** (domchk-82c1ff9a, 13 live checks + 19 tracked suites).
+
+| Causal element (§4) | Safeguard now in force | Validation (2026-09-08) |
+|---------------------|------------------------|--------------------------|
+| ~237 MB `.beads/` JSONL snapshots committed → the bloat source | **`.beads/` fully gitignored** (plus repo-wide `*.jsonl`/`*.db`); bead state cannot re-enter the object store | `git ls-files .beads \| wc -l` → **0** |
+| The bloat surviving to 18 GB unnoticed | 10 MB pre-commit hook (blocks any staged file > 10 MB; per-clone, installer tracked + self-tested); repo-health thresholds (>1 GB total / >500 MB loose) | `./scripts/setup-git-hooks.sh --check` → exit 0, byte-identical; `./scripts/check-repo-health.sh` → exit 0 |
+| Any single gc/push able to exhaust the 12 GiB dispatch scope | Persistent git config bounds **every** pack-objects — bare `git gc`, `git push`, or scripted: `pack.windowMemory=2g`, `pack.deltaCacheSize=1g`, `pack.threads=1` → ≈3 GiB worst case (repo-local **and** global) | `./scripts/setup-git-gc-config.sh --verify` → exit 0, ≈3072 MiB worst case |
+| Unbounded remediation when bloat *is* found | `scripts/safe-git-gc.sh` (memory-capped, checkpoint/resume, pre-flight checks); daily 03:00 incremental + Sun 04:00 full gc under `MemoryMax=4G` | `test-safe-git-gc-limits.sh` 33/33; `auto-gc-trigger.sh --dry-run` → "GC not needed" |
+| Deaths recurring on every re-dispatch with nothing noticing | Monitoring timers (resource 5 min, monitoring 10 min, repo-health daily 02:00) + crash-pattern detector at 3-in-5-minutes, workspace-wide | 8/8 timers future-triggered; `crash-pattern-detection.sh` exit 0 (stable) |
+| The bf-1ea4g push-side variant (commit-ahead backlog the size thresholds never see) | `check-unpushed-backlog.sh` telemetry (WARN ≥50 / CRITICAL ≥200) wired into the daily 02:00 health check | `test-unpushed-backlog-wiring.sh` 11/11; `check-unpushed-backlog.sh` → CLEAR, 0 ahead |
+| The amplifier: re-dispatch into the same kill (bf-4x12ec's 44 identical kills) | Crash-storm circuit breaker + concurrency limiter gating dispatch via `scripts/needle-with-limiter.sh`; surge gate `system-event-mode.sh` (exit 75 = defer) consulted by preflight | `test-needle-with-limiter-gate.sh` 25/25; `test-preflight-breaker-check.sh` 22/22; `test-system-event-mode.sh` 32/32; breaker status `{}` |
+| Alert fan-out burying the signal (50 alerts for one cause) | Dedup gate + 7-day crash-history window + 5-min cooldown; closed-bead filtering before any investigation starts | `test-alert-dedup-check.sh` 41/41; `test-alert-dedup-history.sh` 13/13; `test-closed-bead-filter.sh` 7/7 |
+| The strongest proof available: re-running the actual death operations | `test-gc-memory-bounds.sh` replays bf-1ea4g's bounded push and bf-4x12ec's pack-objects inside a 768 MiB cgroup | **17/17** — push peak RSS 232,416 KB, pack-objects 320,532 KB, ~40× under the 12 GiB scope |
+
+**Residual risk (named, not hand-waved):** §3's recurrence row stands — the class
+recurs only if a trigger returns. The two triggers this repo owns (bloat via tracked bead
+state, unbounded pack memory) are mechanically closed. The residuals that remain are
+outside this repo and outside the battery: NEEDLE's retry-loop stop-condition (H-1) and
+per-scope memory telemetry (M-2), per
+[`docs/crash-prevention-gaps-bf-1ea4g.md`](../crash-prevention-gaps-bf-1ea4g.md) — any
+future relaxation of the deployed layers above (re-tracking `.beads/`, unpinning
+`pack.threads`, removing the hook) reopens this crash class at the next 18 GB.
