@@ -208,9 +208,12 @@ Companion documents already in the tree that this summary sits between: the
 canonical report [`bf-4x12ec-crash-investigation.md`](bf-4x12ec-crash-investigation.md)
 (`b366d86`, mechanism + Addenda), the signal-sentinel semantics note
 [`bf-4x12ec-evidence-signal-semantics-domchk-15854355-2026-09-07.md`](bf-4x12ec-evidence-signal-semantics-domchk-15854355-2026-09-07.md)
-(`50ae4a6`), and the alert inventory
+(`50ae4a6`), the alert inventory
 [`bf-4x12ec-alert-inventory.md`](bf-4x12ec-alert-inventory.md) (`fea1a62`, the
-44 storm alert beads `bf-fmg2cw` → `bf-5x69lm` plus 16 regeneration beads).
+44 storm alert beads `bf-fmg2cw` → `bf-5x69lm` plus 16 regeneration beads), and
+the kernel/systemd extraction
+[`evidence/bf-4x12ec/kernel-systemd-messages.md`](evidence/bf-4x12ec/kernel-systemd-messages.md)
+(`55f23db`, `domchk-ad80e265` — landed while this addendum was in flight).
 
 ### 9.2 Dated corrections to §1–§8
 
@@ -248,7 +251,12 @@ canonical report [`bf-4x12ec-crash-investigation.md`](bf-4x12ec-crash-investigat
    later** — the Aug-16 census holds 257 `CONSTRAINT_MEMCG` git kills inside
    `run-p*.scope` memcgs at anon-rss median 11.73 GiB / max 11.97 GiB (99.8 %
    of the 12 GiB cap). For Aug-14 itself the class remains **regime-matched,
-   not kernel-proven** (§5.3 of child 3), exactly as §1.3 states.
+   not kernel-proven** (§5.3 of child 3), exactly as §1.3 states. The
+   kernel/systemd extraction (`55f23db`) independently confirms both halves:
+   no Aug-14 record survives (the window precedes the single surviving boot by
+   ~36.5 h across three reboots), and of the 525 kernel memcg kills in the
+   surviving journal, 375 sit at exactly usage == limit == 12582912 kB — the
+   12 GiB dispatch cap.
 
 ### 9.3 Resolution status as of 2026-09-08
 
