@@ -159,6 +159,12 @@ uptime                     # Load: Should be < 10 on 1min average
 
 **Retry Strategy for Transient Failures:**
 
+> The shell sketch below is the operator-side convention. domain-check implements
+> this in code — exponential backoff, circuit breakers, transient/permanent error
+> classes and the `healthcheck` subcommand — see
+> [docs/notes/service-availability-retry-strategy.md](docs/notes/service-availability-retry-strategy.md)
+> for the implemented policy and operator recovery procedures.
+
 ```bash
 # Exponential backoff for HTTP 503/502 errors
 max_retries=5
