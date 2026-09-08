@@ -205,6 +205,59 @@ else
 fi
 echo ""
 
+# Check 4: Crash-storm circuit breaker
+# The breaker (scripts/crash-circuit-breaker.sh) trips a per-bead OPEN after
+# BREAKER_THRESHOLD (3) consecutive infrastructure crashes (exit -1 / 137) and
+# backs off instead of letting the release-and-retry loop re-dispatch a doomed
+# task — the bf-4x12ec shape (44 identical memcg-OOM kills, 2026-08-14) and
+# bf-65lsdu before it (127 dispatches in 2.5 h). Nothing in the live path
+# looked at breaker state before this check (remediation-plan GAP-4), so a
+# manual preflight could green-light work while a storm backoff was active.
+# Warn, never fail: the remedy is per-bead (defer that bead), not a box-wide
+# stop, and load-shedding is check 0's job. Enforcement lives where the state
+# is written — scripts/needle-with-limiter.sh, the sanctioned dispatch entry
+# point; this check is the visibility half.
+echo -e "${BLUE}Crash-Storm Circuit Breaker${NC}"
+CIRCUIT_BREAKER="$SCRIPT_DIR/crash-circuit-breaker.sh"
+if [[ -f "$CIRCUIT_BREAKER" ]]; then
+  BR_RC=0
+  BREAKER_STATUS=$(bash "$CIRCUIT_BREAKER" status 2>&1) || BR_RC=$?
+  if [[ $BR_RC -ne 0 ]]; then
+    # Fail open: an unreadable breaker must not block the preflight itself.
+    echo -e "   ${YELLOW}⚠${NC} Breaker state unreadable (exit $BR_RC) — skipping check"
+    echo "$BREAKER_STATUS" | sed 's/^/   /'
+    ((CHECKS_PASSED+=1))
+  else
+    # `.beads` is an object keyed by bead id (beads[]? iterates its values).
+    OPEN_COUNT=$(printf '%s' "$BREAKER_STATUS" | jq -r '[.beads[]? | select(.state == "open")] | length' 2>/dev/null) || OPEN_COUNT=""
+    if [[ -z "$OPEN_COUNT" ]]; then
+      echo -e "   ${YELLOW}⚠${NC} Breaker state not parseable — skipping check (fail-open)"
+      ((CHECKS_PASSED+=1))
+    elif [[ "$OPEN_COUNT" -eq 0 ]]; then
+      TRACKED_COUNT=$(printf '%s' "$BREAKER_STATUS" | jq -r '[.beads[]?] | length' 2>/dev/null || echo 0)
+      if [[ "$TRACKED_COUNT" -gt 0 ]]; then
+        echo -e "   ${GREEN}✓${NC} No open breakers ($TRACKED_COUNT bead(s) tracked, none tripped)"
+      else
+        echo -e "   ${GREEN}✓${NC} No open breakers"
+      fi
+      ((CHECKS_PASSED+=1))
+    else
+      echo -e "   ${YELLOW}⚠${NC} $OPEN_COUNT breaker(s) OPEN — crash-storm backoff active; defer, do not re-dispatch"
+      # Detail render is best-effort: the open-count query above already parsed
+      # this same bytes, but this check's contract is to never abort the
+      # preflight, so the render is guarded against a partial/odd entry rather
+      # than trusted not to fail under set -e / pipefail.
+      printf '%s' "$BREAKER_STATUS" | jq -r '.beads | to_entries[] | select(.value.state == "open") |
+        "     \(.key): \(.value.consecutive_crashes) consecutive crashes (last exit \(.value.last_exit_code)), retry_after \(.value.retry_after // "?")"' 2>/dev/null || true
+      echo "     Action: scripts/crash-circuit-breaker.sh defer <bead-id>; dispatch through scripts/needle-with-limiter.sh"
+      ((CHECKS_PASSED+=1))
+    fi
+  fi
+else
+  echo -e "${YELLOW}⚠${NC} crash-circuit-breaker.sh not found (skipping)"
+fi
+echo ""
+
 # Summary
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}Summary${NC}"

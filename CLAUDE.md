@@ -319,6 +319,14 @@ if [ $AVAILABLE_MEM -lt 10 ]; then
 fi
 ```
 
+**Dispatch entry point (remediation-plan GAP-4):** start agent dispatches through
+`./scripts/needle-with-limiter.sh` — it gates `needle run`/`needle supervise` through the
+crash-storm circuit breaker (`scripts/crash-circuit-breaker.sh`) and the concurrency
+limiter, so a bead in storm backoff is deferred out of the ready frontier instead of being
+re-dispatched into the same crash (the bf-4x12ec shape: 44 identical kills → 44 alert
+beads). `./scripts/preflight-health-check.sh` Check 4 surfaces any OPEN breaker at preflight
+time.
+
 ### Repository Bloat Prevention and Detection
 
 **Critical:** Repository bloat caused the worst infrastructure crashes in this workspace: bf-1s6c3 and bf-4yjq (2026-08-12) ran an ~18GB repository with ~17GB of loose objects — **17+ identical 237MB `.beads/*.jsonl` snapshots had been committed** — so every significant git operation memcg-OOM'd (76 dispatches / 71 kills for bf-1s6c3 alone over ~4.5 h, plus 50 kills in bf-4yjq the same evening — all exit -1). It is repaired as of 2026-09-06 (see Current Repository Health above); this section is what keeps it from coming back.
