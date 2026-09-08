@@ -243,6 +243,40 @@ condition you can re-create.** Any future spike of sub-3-minute exit-code -1 re-
 deaths across multiple beads should be treated as a resource-exhaustion regime and triaged at
 the environment level (repo size, memory, load) before any per-bead debugging.
 
+### Re-verification 2026-09-08 (domchk-c73c65bb)
+
+§7's verdict was re-tested first-hand against the live repo and the bead store five days after
+the §8 readings; it stands unchanged.
+
+**Current repo state** (a later measurement, not a correction of §8):
+
+| Check | 2026-09-02 (§8) | 2026-09-08 |
+|-------|-----------------|------------|
+| `du -sh .git` | 92 MB | **106 MB** |
+| `git count-objects -vH` | 20 loose / 168 KiB, 1 pack (90.18 MiB) | **289 loose / 1.95 MiB, 1 pack (100.25 MiB), 0 garbage** |
+| Repo health | — | `check-repo-health.sh` exit 0; effective pack-memory bound ≈3072 MiB worst case, inside the 6 GiB ceiling |
+| Remotes | `origin` → Forgejo | unchanged (§8's `github-mirror` client-remote observation still stands) |
+
+Loose-object churn (20 → 289 objects) is five days of normal multi-worker activity; the whole
+store remains ~1% of the 500 MB healthy limit and ~0.6% of the ≈18 GB trigger. **The bloat
+condition is gone and has stayed gone.**
+
+**Crash-response-guide false-positive tests, applied first-hand — all three:**
+
+| Guide test | Result | Evidence (re-derived this pass) |
+|------------|--------|--------------------------------|
+| Completion timing (commit < 30 s before crash → FALSE_POSITIVE) | **Not a false positive** | All 50 deaths fall in 2026-08-12 17:54–20:30 UTC; bf-4yjq closed 2026-08-17 00:14 UTC — ≈4 days *after* the last death, not seconds before any of them. Nothing was completing at kill time (§3 addendum: 50 pushes attempted, 0 delivered, Forgejo `origin/main` static at `63ba024` through the window) |
+| Retry-then-success (crash → retry → success = self-healed transient) | **Does not apply** | 50/50 re-dispatches inside the window died with the identical `signal--1` sentinel — zero successes to point at. The operation first succeeded on 2026-08-17, only after the trigger was removed on Aug 13–14. A condition-dependent failure, not a self-healing transient — which is exactly what makes "deterministic while the trigger existed" the right verdict rather than "transient bad luck" |
+| Storm detection (10+ crashes in 10 min → INFRASTRUCTURE EVENT) | **Threshold crossed, workspace-wide** | bf-4yjq alone peaks at 5 per rolling 10 min; across all targets the same day reaches **11 per 10 min**, over 455 distinct crash-alert beads on 6 targets (bf-31mno 350, bf-4yjq 50, bf-1s6c3 49, bf-2xygo 4, bf-23n 1, bf-5d18 1) running 19–45 alerts/hour from ~05:36 to 23:57 UTC — a system-wide event, not a per-bead defect |
+
+The 50-bead window, the 191.9 s mean cadence, and the zero exit-code variation re-derived this
+pass match §11's indicator inventory exactly (independent re-count from
+`.beads/checkpoint/forensic.jsonl`).
+
+**Verdict, unchanged: INFRASTRUCTURE — a transient environmental failure that was
+deterministic while the 18 GB bloat existed and is not reproducible today; not a false
+positive.**
+
 ---
 
 ## 8. Current State Verification (2026-09-02)
