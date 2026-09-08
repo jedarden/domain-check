@@ -234,7 +234,8 @@ committed by their own authors and are not part of the step-4 batch. Documents d
 
 - `docs/crash-investigations/bf-4x12ec-final-crash-report.md` - **Canonical bf-4x12ec report** (2026-09-02; consolidated synthesis of the artifacts doc, log review, and Addenda 1-3 — 53-attempt retry storm, cgroup-scoped OOM root cause, work verified complete; cite this one, superseding the individual bf-4x12ec documents)
 - `docs/crash-investigations/bf-4x12ec-root-cause.md` - **bf-4x12ec root-cause determination** (2026-09-02; formal statement — memcg SIGKILL of `git gc --aggressive` in a `run-*.scope`, ~12 GiB ceiling, panic/timeout/SIGHUP/code-defect ruled out, reproducibility 44/44 then, not now; all figures independently re-derived from the event log + live journal)
-- `docs/crash-investigations/bf-4yjq-crash-investigation.md` - **Canonical bf-4yjq report** (2026-09-02; verified 50 crashes, storm context, reproducibility assessment — supersedes the 9-crash figures in the reports below)
+- `docs/crashes/bf-4yjq-crash-investigation.md` - **Canonical bf-4yjq report** (2026-09-08, domchk-8b3c1c69; consolidated entry point covering the parent deliverables — crash summary, logs/error indicators, reproducibility assessment — plus the split-child findings table; supersedes the 9-crash figures in the reports below)
+- `docs/crash-investigations/bf-4yjq-crash-investigation.md` - Detailed bf-4yjq investigation record (2026-09-02, domchk-4eab7c59; 11 sections — full evidence chain, §11 formal classification, §7 reproducibility re-verification; governs at figure level via its dated corrections)
 - `docs/crashes/bf-4yjq-crash-report.md` - Comprehensive crash report (partially superseded; see banner)
 - `docs/crashes/bf-4yjq-crash-evidence-summary.md` - Evidence summary
 - `docs/crashes/bf-4nmj66-duplicate-alert-resolved-bf-4x12ec-crash.md` - Duplicate alert
