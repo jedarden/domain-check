@@ -45,6 +45,7 @@ Thumbs.db
 *.tmp
 *.bak
 *.log
+.needle-predispatch-sha
 memory-test-results/
 load-test-results/
 
