@@ -771,3 +771,101 @@ the body text untouched to avoid colliding with that in-flight revision.
 **Addendum 7 Investigation Date:** September 8, 2026
 **Addendum 7 Sources:** live bead records (bf-4x12ec, bf-173o7e, bf-5jhvpk, bf-im2sl1, domchk-46a00141 and its four chain children), git history (`c781138`, `8ae57ea`, `9b32085`, `a5c4c07`, `d364ff5`, `e1d9477`, `76ad268`, `3b2bdf9`), on-disk artifact verification, live `git count-objects -vH` / `git fsck --no-full`
 **Classification:** FALSE POSITIVE — duplicate alert on a closed bead; consolidation record, no new findings
+## Addendum 8 — Crash-Window Resource Timeline and Safe-Operating-Limits Verdict (2026-09-08, bead domchk-5f3ec6e1)
+
+Split child 2 of 4 of umbrella `domchk-4adc1a55`; scope: correlate resource
+conditions with the crash window using the timestamps child 1 established
+(domchk-15854355: 44 × exit −1, 2026-08-14 10:23:02Z → 11:27:26Z). Every figure
+below was re-derived first-hand this dispatch from the cited primary sources;
+where a figure also appears in `evidence/bf-4x12ec/system-state.md` (bead
+domchk-40c9c99a) the independent derivation agrees. All times UTC.
+
+### The monitoring layer named in the task did not exist yet
+
+| Source named in the task | Earliest record | Aug-14 coverage |
+|--------------------------|-----------------|-----------------|
+| `.beads/logs/resource-monitor.log` | 2026-09-02T01:50:47Z (line 2; line 1 is a `--quiet` argv error from a first manual run) | none — `grep -c "2026-08"` = 0 |
+| `.beads/logs/resource-metrics.log` | 2026-09-01T22:49:42Z | none — `grep -c "2026-08"` = 0 |
+| journalctl (OOM killer / memcg / disk) | single boot, first entry **2026-08-15 19:56:33 EDT** | none — `journalctl --since @1786701191 --until @1786707480` (the whole 09:53:11Z–11:38:00Z window) returns **0 lines**; zero lines matching `Aug 14` exist anywhere in the journal |
+
+The resource-monitoring layer was installed 2026-09-01, eighteen days after the
+crash, and the box rebooted between the crash and the current boot. No
+monitoring-layer record of this window can exist. What survives is
+contemporaneous telemetry captured inside the window by other systems.
+
+### Resource timeline, crash #1 through resolution
+
+Sources: `crashes/bf-4x12ec/attempt-index.tsv` (kill instants/durations/exit
+codes), `crash-logs/transcript-midstorm-9539f3b2.jsonl` (in-window host
+readings), `~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-14.jsonl`
+(`fleet.cpu_saturated` load series, 383 events that day).
+
+| Time (2026-08-14) | Event | Resource reading |
+|-------------------|-------|------------------|
+| 08:23:02Z | — | day's 1-minute load maximum **55.98** — no crash or kill follows it (2 h before the storm) |
+| 09:53:11–10:21:06Z | pre-storm | 5 load samples, 8.77–22.51, mean 15.18 |
+| 10:21:06Z | attempt 1 dispatched | load 13.13 |
+| 10:21:23.336Z | attempt 1 runs `git count-objects -vH` | **4,649 objects / 17.20 GiB loose**, size-pack 9.60 MiB |
+| 10:23:02.958Z | **kill #1** — exit −1 after **115,797 ms** | (host gauges: none captured) |
+| 10:23:02 → 11:27:26Z | **44 kills**, exit −1 each, cadence one per ~90–100 s | durations 38,882–115,797 ms, **mean 64,645 ms**; load samples n=44, **10.37–30.92, mean 14.47** |
+| 10:43:38.687Z | attempt 15 dispatched | load 19.66 |
+| 10:43:49.108Z | attempt 15 re-runs `count-objects` | **byte-identical** to 10:21:23 — no gc had completed; repo still 17.20 GiB |
+| 10:43:59.438Z | attempt 15 runs `df -h / && free -h` — **the only in-window host reading** | disk `/` 444G total, 355G used, **67G free (85 %)**; mem 62Gi total, 16Gi used, 24Gi free, 22Gi buff/cache, **45Gi available**; **swap 0 B used** |
+| 10:44:07.643Z | attempt 15 issues `git gc --aggressive --prune=now` | — |
+| 10:44:53.202Z | **attempt 15 killed**, exit −1 after 74,285 ms | 46 s into the gc, 54 s after the healthy host reading |
+| 11:27:26Z | kill #44 — last exit −1 | storm's max load 30.92 recorded 11:21:25Z, six minutes earlier |
+| 11:38–12:50Z | 8 × exit 124, mean 600,020 ms | the 600 s timeout cap — the gc no longer died fast, it hung |
+| 12:50:33Z | attempt 53 dispatched | exits **0** at 12:58:45Z after 491,784 ms — needle's auto-split (`SPLIT_COMPLETE`, Addendum 4 §3), not the gc |
+
+### Readings against the repo CLAUDE.md safe-operating-limits table
+
+| Resource | Healthy / Warning / Critical | Crash-window reading | Verdict |
+|----------|------------------------------|----------------------|---------|
+| Available memory | 20 GB / 10 GB / 5 GB | **45 Gi available**, 0 B swap (10:43:59Z, mid-storm) | **healthy** — 2.25× the healthy floor, 9× the critical line |
+| Disk space | 50 GB / 30 GB / 20 GB free | **67 G free** (85 % used on 444 G) | **healthy** — above even the healthy minimum |
+| CPU load (1 min) | < 5 / < 10 / > 15 | 44 storm samples 10.37–30.92, mean 14.47; pre-storm mean 15.18 | **exceeds the warning and critical lines — but uncorrelated with the kills** (see below) |
+| Git GC memory | 1 GB / 2 GB / 4 GB | killed `git` processes at **11.73–11.97 GiB anon-rss against the 12 GiB dispatch-scope `MemoryMax`** (Aug-16 same-regime kernel records, below) | the binding limit was the *scope cap*; the gc-script bounds postdate the crash |
+
+On load: the series is threshold-gated (`fleet.cpu_saturated` emits only above
+0.8 × 9 reported cores = 7.2), so all 44 samples being well above the floor
+proves load was *persistently* elevated and flat — 14.47 storm mean vs 15.18
+pre-storm mean is no ramp, and the largest excursion of the day (55.98) came
+two hours before the storm and killed nothing. A host entering swap-death or
+allocator thrash shows escalating load; this one never trends. The kills are
+one per ~90–100 s with 39–116 s lifetimes — a deterministic, per-attempt
+cadence, not the irregular signature of system-wide resource collapse.
+
+### Kernel evidence for the mechanism (post-window, same regime)
+
+No Aug-14 kernel record survives, but the current boot holds the same kill
+under the same conditions: **257** `oom-kill:constraint=CONSTRAINT_MEMCG …
+task=git` events on Aug-16 (first-hand recount; Addendum 6's figure confirmed),
+with killed `git` processes at `anon-rss` 12,301,364–12,555,188 kB
+(**11.73–11.97 GiB**, i.e. pressed against the scope's 12 GiB cap) and
+`oom_memcg` naming a `user@1001.service/app.slice/run-*.scope` needle dispatch
+scope. (The Sep-02/06/07 memcg kills in the same grep are synthetic
+test-scope events, not live agent work.) This is corroboration by regime
+match, not observation of the Aug-14 window — consistent with Addendum 2 §
+Evidence-window limitation.
+
+### Explicit resource verdict
+
+**OOM — cgroup-local, not host. Disk normal. Load elevated but uncorrelated.**
+The crash correlates with memcg exhaustion *inside the 12 GiB dispatch scope*:
+each attempt's `git gc --aggressive --prune=now` drove its own cgroup over the
+scope cap in 39–116 s, while the host itself held 45 Gi available, untouched
+swap, 67 G disk free, and flat chronically-elevated load. No host-level gauge
+in the CLAUDE.md limits table was in a state that predicts a kill; a scope-local
+memcg kill is invisible to them, which is exactly why the host readings look
+healthy through 44 consecutive deaths. Disk did not contribute — the 17.20 GiB
+of loose objects was repository bloat (the very thing the gc was meant to fix),
+not disk exhaustion. Load did not contribute — flat, chronic, and uncorrelated
+with kill instants.
+
+Limits of this verdict: no per-cgroup telemetry existed on Aug-14, so the
+scope watermark is not directly measured for this window; the verdict rests on
+excluding host exhaustion (the only in-window reading), the deterministic kill
+cadence, and the Aug-16 kernel records of the same mechanism at the same cap.
+
+**Addendum 8 Sources:** `.beads/logs/resource-monitor.log` + `resource-metrics.log` (absence, greps run this dispatch); journalctl (boot list, epoch-bounded window query, `journalctl -k` memcg recount); `docs/crashes/bf-4x12ec/attempt-index.tsv`; `docs/crash-investigations/evidence/bf-4x12ec/crash-logs/transcript-midstorm-9539f3b2.jsonl`; `~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-14.jsonl`; `docs/crash-investigations/evidence/bf-4x12ec/system-state.md` (independent derivation, agreeing); repo CLAUDE.md safe-operating-limits table
+**Addendum 8 version note:** appended at HEAD `e0b70dab` (version line still 1.9/1.10 in flight — the v1.10 body-harmonization of bead domchk-8c78ae8b was uncommitted in the worktree and is intentionally not carried by this addendum); no version bump claimed by this addendum.
