@@ -2,6 +2,8 @@
 
 **Gather leg:** domchk-b06e87d4 ("Extract crash details and context from logs" / "Gather Crash
 Evidence") — executed 2026-09-09.
+**Classify leg:** domchk-7345947c ("Determine Crash Category") — executed 2026-09-09; appends §10
+(applies the `docs/crash-response-guide.md` framework to the §1–§9 evidence).
 **Subject bead:** `bf-4yjq` — *"Git origin remote points to GitHub directly; Forgejo mirror has
 diverged/gone stale"* (P2, task, **Closed** rev 2).
 **Workspace:** `/home/coding/domain-check`, worker `claude-code-glm-4.7-lab-domain-check`,
@@ -269,4 +271,169 @@ Pairing rule for §3.1: each alert-bead creation line follows its `Crash(-1)` ou
 - Classification record: `docs/crashes/bf-4yjq-crash-investigation.md` §11 /
   commit `5d8f474` (INFRASTRUCTURE, repository-bloat regime).
 
+## 10. Classification — the `docs/crash-response-guide.md` framework applied (classify leg)
+
+Classify leg domchk-7345947c, 2026-09-09. Every figure below was re-derived first-hand this
+dispatch from the same primary sources as §6 (worker-log slot `.log.2`, the committed transcript
+bundle, the live bead store and journal) — not copied from §1–§9 — plus new transcript-level
+checks the gather leg did not run (full 50/50 death-command census, sliding-window surge math,
+the exit-0 attempt's complete command list, per-timeout tool-activity counts).
+
+### 10.1 Primary classification
+
+**INFRASTRUCTURE — repository-bloat sub-type.** The kills were genuine mid-task infrastructure
+deaths; the alert layer they minted is stale-by-closure (§10.3). This is the canonical
+classification (§9), here formally derived from the guide's framework.
+
+Exit-code analysis against the guide's Quick Reference table (census re-derived live; same
+figures as §1):
+
+| Outcome (n=56 claims) | Count | Guide row | Disposition |
+|---|---|---|---|
+| `exit_code=-1` `Crash(-1)` | **50** | −1 → **Infrastructure**; and the second −1 row — "fixed-cadence re-dispatch deaths, `.git` > 5GB" — → **Infrastructure: Repository bloat** | the storm; every death |
+| `exit_code=124` `Timeout` | 4 | 124 → Workflow: dispatch-cap timeout | storm tail; 2 attempts show tool activity (52: 8 calls, 55: 2 — task too slow), 2 show none (53, 54 — the guide's "agent never started" reading) |
+| `exit_code=1` `Failure` | 1 | not `error_max_turns`, not HTTP 5xx | attempt 2, ended at `git add -A && git commit …` (re-verified from its transcript) — workflow-class noise inside the storm, not a separate cause |
+| `exit_code=0` `Success` | 1 | — | attempt 56, terminal — see the Rule 2 analysis in §10.3 |
+
+Rationale, element by element:
+
+1. **Row match.** 50/56 claims died `exit -1` with **zero exit-code variation** across the whole
+   window. Guide note 2 (sentinel semantics — `-1` is not a signal number) uses bf-4yjq as its
+   named example.
+2. **Sub-type.** Fixed cadence (kill→kill gap median 155.5 s, re-computed) plus `.git` = 18 GB at
+   crash time satisfies the table's repository-bloat row verbatim — the sub-type the guide
+   separates from generic memory pressure (note 1) precisely because it recurs on every
+   re-dispatch until the repo is cleaned.
+3. **Not SERVICE_FAILURE.** No HTTP 503/502 signature anywhere in the surviving telemetry (§4);
+   the guide's exit-1 service row never occurs.
+4. **Not CODE_DEFECT.** No stack trace, no core dump, no application error output anywhere in the
+   chain (§4 absences); the killed work is a git operation, not domain-check code — consistent
+   with the corpus-wide zero-defect finding.
+5. **Death point.** All 50 crash transcripts end at `git push origin main` — re-verified this
+   dispatch as a **full 50/50 census** of the extracted bundle (the gather leg spot-checked
+   attempts 1 and 50; this census closes the set). Pattern 3's "routine git operations trigger
+   OOM," with the push-side mechanism later kernel-proven at bf-198ne (2026-08-16).
+
+### 10.2 Pattern match — Pattern 3 signature checklist
+
+| Pattern 3 symptom | bf-4yjq value (re-derived live) | Match |
+|---|---|---|
+| Zero exit-code variation across events | 50/50 `exit -1` | ✅ |
+| Fixed-cadence re-dispatch deaths | gap min 75.6 s / median 155.5 s / mean 191.9 s / max 576.8 s (n=49) over a 2.61 h window | ✅ |
+| Repository size > 5 GB | 18 GB — 36× the threshold | ✅ |
+| Loose objects > 1 GB | 4,594 objects / 17.20 GiB, inverted against 9.60 MiB packed | ✅ |
+| Routine git operations trigger OOM | 50/50 deaths at `git push origin main` | ✅ |
+| Multiple crashes over a short period | 50 kills of one bead in 2 h 37 m | ✅ |
+
+6/6. Surge math against the committed detector (`scripts/crash-pattern-detection.sh`,
+`CRASH_SURGE_THRESHOLD=3` per 5 minutes): the 50 instants contain a **3-kill 300-s sliding
+window** (from 18:18:13Z) and a **5-kill 600-s window** — the latter confirming the guide's
+Rule 3 statement that bf-4yjq peaked "near 5 per 10 minutes." The infrastructure-event verdict
+would have fired. The same detector run today reports **STABLE, 0 crashes/24 h** (live,
+2026-09-09), and the repo sits at 106 MB / 87 loose objects / 0 garbage — the regime is gone.
+Per Rule 3's corollary this was **one environmental regime shared with bf-1s6c3's same-evening
+storm** (one 18 GB repo, two beads' worth of kills), not 50 independent task failures — which
+is Runbook F triage (stop load, triage the environment), and is in fact how it was eventually
+fixed.
+
+### 10.3 False-positive checks (guide §"False Positive Detection Heuristics")
+
+- **Rule 1 (30-s gap / post-completion): negative — these are NOT post-completion deaths.** All
+  50 kills land mid-task: the last substantive command in every crash transcript is the task's
+  own push step. The deliverable-in-storm-window corollary (the bf-1s6c3 Rule 1 caveat) is also
+  negative — the remote reconciliation was **not** satisfied anywhere in the window, so unlike
+  bf-1s6c3, no re-dispatch ran against already-completed work. Every retry genuinely still had
+  the task open.
+- **Rule 2 (crash → retry → success = self-healed?): surface match only, and the caveat bites.**
+  The exit-0 attempt (56) issued **zero git operations** — its 14 substantive commands are all
+  `bf`-CLI split bookkeeping (5 child-bead creates, 5 `dep add`s, 1 label, 3 shows; full list
+  re-derived this dispatch). It survived by abandoning the death operation — a task-shape
+  change, the bf-1s6c3 attempt-76 pattern — not because the environment improved: the store was
+  still 18 GB on 2026-08-12; the repair came 2026-09-01. Per the decision tree's
+  exit-0-after-storm branch, the storm must **not** be recorded as self-healed.
+- **Alert-layer false positives: yes, and already dispositioned.** The 50 alert beads target a
+  bead that Closed 2026-08-17. Re-census live this dispatch (later the same day as §3.2's
+  count, which it drifts from): **36 Closed / 12 Open / 2 InProgress** — `bf-2j99a` and
+  `bf-vcsxj` were claimed by concurrent workers between the two counts, i.e. the stale pool is
+  actively being dispositioned right now. That is a statement about the *alerts*, not the
+  crashes: Runbook A's target-resolution step retires the alert; it does not un-kill the
+  workers. The 50 kills were genuine.
+- **Rule 3 (system-wide event): positive** — see the surge math in §10.2. Fixed-cadence
+  workspace-wide death waves are an environmental regime by the guide's own definition.
+
+### 10.4 Work-completion status (guide §"Work Completion Verification"; Runbook A steps 1–2)
+
+| Check | Result (live, 2026-09-09) |
+|---|---|
+| `.beads/state/work-completion/bf-4yjq.json` | **absent** — the marker system postdates the storm by three weeks; per the guide, fall through to the checklist (done: §10.1–§10.3) |
+| Target bead state | **Closed, rev 2, 2026-08-17T00:14:14Z**, verbatim close reason recording the completed reconciliation (origin → Forgejo, mirror synced 00:11:34Z, both remotes at `a245b38`) — re-read live this dispatch |
+| Did the task finish before the crash? | **No — and that is the point.** Completion came five days *after* the storm (the split child `bf-2xygo` closed the same evening, 21:30:57Z — it does exist in the live store, re-read live). Mid-task kills + eventual completion = genuine infrastructure crash, **zero work lost**, alert layer stale |
+| Post-storm recurrence | none — repair verified (`docs/crashes/bf-4yjq-cleanup-verification.md`); the precondition (18 GB store) is structurally ruled out today (§5) |
+
+### 10.5 Secondary contributing factors
+
+1. **Re-dispatch loop with no stop-condition (the amplifier — the guide's H-1 residual).** Needle
+   re-claimed a median 155.5 s after each kill and minted one alert per kill (50/50, §3.1):
+   alerts scaled with kills, not with the single cause. This is what converted one undrainable
+   repository condition into a 2.6-hour storm.
+2. **Auto-split churn in the tail.** `failure_count` 3/4/5 triggered three SPLIT-template events
+   (§3); the split-shaped attempt (56) is the one that survived (§10.3, Rule 2). This sharpens
+   §3's parenthetical: the split *did* land children — `bf-2xygo` exists (created 21:12:00Z,
+   Closed 21:30:57Z) — so "no child beads resulted in the store" is accurate only if read as
+   scoped to the three needle-side trigger events themselves, as distinct from the agent's own
+   creates inside attempt 56.
+3. **Load 15–17 was co-symptomatic, not causal** — the kernel selects OOM victims on memory
+   alone, and the violated bound was the dispatch scope's `MemoryMax`, not host memory (Phase
+   2A's cgroup-boundary check; the bf-4yjq class is named in that checklist bullet).
+4. **The four 124s and the one exit-1 are storm concomitants** (dispatch-cap timeouts during the
+   tail; one workflow-class failure), classified per their own guide rows in §10.1 — separate
+   outcomes, not separate causes.
+
+### 10.6 Confidence
+
+**HIGH on the classification; MODERATE-HIGH on the specific mechanism, capped by evidence loss.**
+
+- **Classification — high.** Every element of the Pattern 3 signature re-verified first-hand
+  (§10.2, 6/6); the exit-code record structurally excludes the service class (no 5xx row occurs)
+  and the code-defect class (no application error output anywhere in the chain); and the guide
+  itself uses bf-4yjq as the worked example in note 2, the Phase 2A checklist, Pattern 3, and
+  Rule 3.
+- **Mechanism — moderate-high by regime match, not kernel-proven for this bead.** The Aug-12
+  kernel records are unrecoverable: journal floor re-read live this dispatch at 2026-08-15
+  20:01:33 EDT (single boot `52309698`; §1's 19:46:33 EDT floor has advanced slightly with
+  rotation — conclusion unchanged, no Aug-12 coverage). No signal is asserted from `-1` (note
+  2). The regime match is strong — uniform death point 50/50, the 18 GB precondition measured
+  contemporaneously, sibling storms of the same era and repo kernel-proven (bf-198ne,
+  bf-4x12ec) — but the residual stands: no Aug-12 kernel line exists for bf-4yjq.
+- **Measurement caveat, restated from §2:** a transcript's last recorded tool call is not proof
+  of the killed process (the agent is not sampled between calls). 50/50 uniformity on the
+  identical command makes an alternative death point implausible, but not logically excluded.
+
+### 10.7 Guide references
+
+| Framework element | Section in `docs/crash-response-guide.md` | Used at |
+|---|---|---|
+| Quick Reference classification table + notes 1–2 | Quick Reference: Crash Classification | row match and sub-type (§10.1); −1 sentinel semantics (§10.6) |
+| Phase 2A: Infrastructure Event checklist | Investigation Checklist | infrastructure path; cgroup-boundary framing (§10.5.3) |
+| Pattern 3: Repository Bloat Crashes | Common Crash Patterns | signature checklist (§10.2) — bf-4yjq is that pattern's own evidence block |
+| False-Positive Rules 1–3, with both storm caveats | False Positive Detection Heuristics | all three rules run (§10.3); the Rule 2 caveat decides the exit-0 reading |
+| Runbook A / Runbook F | Operational Runbooks by Alert Type | target resolution + marker check (§10.4); surge triage framing (§10.2) |
+| Quick Decision Tree | Key Learnings Summary | exit-−1 branch; exit-0-after-storm branch (§10.3) |
+| INFRASTRUCTURE classification row | Automated Crash Alert System → Classification Types | the taxonomy label (§10.1) |
+| When to Escalate | When to Escalate | **not triggered** — no corruption, no unknown exit codes, no data loss |
+
+### 10.8 Acceptance criteria
+
+| Criterion | Where satisfied |
+|---|---|
+| Exit code analyzed against classification guide | §10.1 outcome table + rationale |
+| Crash type identified (infrastructure / workflow / service / code defect) | §10.1 — INFRASTRUCTURE (repository-bloat sub-type); service, code-defect, and workflow-as-cause explicitly excluded |
+| False positive checks performed | §10.3 — Rules 1, 2, 3 plus the alert-layer disposition |
+| Work completion status verified | §10.4 — target Closed 2026-08-17; kills were mid-task; zero work lost |
+| Pattern matching against known crash signatures | §10.2 — Pattern 3 checklist 6/6 + detector surge math |
+
 *Gather leg domchk-b06e87d4, 2026-09-09 — docs-only; no code touched; no new cause claim.*
+
+*Classify leg domchk-7345947c, 2026-09-09 — docs-only; no code touched; applies the existing
+framework to the §1–§9 evidence and lands on the canonical classification (§9) with quantified
+confidence; no new cause claim.*
