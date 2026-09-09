@@ -217,3 +217,14 @@ The crash on bead bf-3hivb was caused by **severe repository bloat (18GB) trigge
 - **bf-1jlln-alert-resolution.md**: bf-1s6c3 alert resolution
 
 **Pattern Identified**: Repository bloat is causing systematic agent crashes across all git operations, with consistent SIGKILL (exit code -1) OOM killer intervention during 2026-08-12 to 2026-08-13 period.
+
+---
+
+## ERRATUM (2026-09-09, domchk-c2227cb9)
+
+Two items in this report are superseded:
+
+1. **§ Recommendations → Immediate Actions #1 ("Run aggressive git garbage collection: `git gc --aggressive --prune=now`") — do not follow.** The bare form of that exact command caused the 2026-08-14 crash storm (bf-4x12ec: memcg-OOM SIGKILL, 129 killed attempts). The bounded replacement is `./scripts/safe-git-gc.sh`, and the recommendation is moot anyway: the bloat was packed down 2026-09-01 and is verified holding (`.git` 105 MB, 14 loose objects, `check-repo-health.sh` exit 0, re-verified 2026-09-09).
+2. **"signal -1 (SIGKILL)"** — `exit code -1` is needle's abnormal-child-death sentinel, not a signal number; the era mechanism is memcg-OOM (kernel-proven for the era-class via the 2026-08-16 journal, chain-inferred MEDIUM-HIGH for bf-3hivb specifically, whose kill predates the journal's first readable entry 2026-08-15 19:56:33 EDT).
+
+Every recommendation in this report is mapped to its current implementation status in the follow-up deliverable: [bf-48wvu-fix-recommendations-domchk-c2227cb9-2026-09-09.md](bf-48wvu-fix-recommendations-domchk-c2227cb9-2026-09-09.md). The "⚠️ CRITICAL / cleanup required" system status no longer applies — the repository is repaired and holding.
