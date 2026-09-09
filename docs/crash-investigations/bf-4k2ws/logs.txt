@@ -1,0 +1,406 @@
+================================================================================
+bf-4k2ws — AGENT LOG / TRANSCRIPT EXTRACTION
+Author bead: domchk-b6563736 ("Find and Extract Relevant Logs")
+Target bead: bf-4k2ws "Analyze divergent Forgejo and GitHub branch states"
+Written: 2026-09-09 · All timestamps UTC unless marked EDT
+================================================================================
+
+WHAT THIS FILE IS
+-----------------
+The dispatch asked for agent logs/outputs for claude-code-glm-4.7 "around the
+crash timestamp 2026-08-13T07:04:00Z", with excerpts saved here. This file is a
+LOG EXTRACTION ONLY. It is subordinate to the canonical record:
+
+  - docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md
+  - docs/crash-investigations/bf-4k2ws/README.md
+  - prior legs: docs/crash-investigation/bf-4k2ws-crash-context.md (gather),
+    bf-4k2ws-root-cause.md, bf-4k2ws-severity.md, bf-4k2ws-investigation-report.md,
+    docs/crash-investigations/bf-4k2ws/bead-metadata.txt
+
+Every figure below was re-derived first-hand this session from the primary
+worker log and — new relative to the prior legs — from the Claude Code
+per-attempt session transcripts, which SURVIVE on disk and were not in the
+gather leg's surviving-artifact inventory. No new cause claim is made; the
+transcript evidence CORROBORATES the canon's kill mechanism for this
+specific bead and does not change its resolution state (RESOLVED — retry
+neither owed nor permitted; FP confined to the alert layer).
+
+
+TEMPLATE-PREMISE CORRECTIONS (read first — canon lesson 10)
+-----------------------------------------------------------
+1. "2026-08-13T07:04:00Z" is NOT a kill instant. First-hand re-derivation:
+   it is the creation stamp of alert bead bf-2a9de
+   (created 2026-08-13T07:04:00.881467545Z, title "ALERT: Agent crash on bead
+   bf-4k2ws", labels alert/crash/deferred/failure-count:4/signal--1/
+   split-child/umbrella/verification-failed) — the LAST of the 55 ALERT beads,
+   closing the storm window that opened with bf-19b99
+   (created 2026-08-13T02:03:40.617547219Z).
+   The kill bf-2a9de documents is ATTEMPT 60: agent.completed
+   2026-08-13T07:03:53.920907594Z (worker-log seq 8450) — 6.96 s before the
+   alert write, inside the canon's 5.1–9.8 s heartbeat window.
+
+2. The source-alert chain (bf-4xlwo) maps to a DIFFERENT kill: ATTEMPT 57,
+   death 2026-08-13T06:34:29.204954348Z (seq 8367). bf-4xlwo's own body
+   timestamp (06:34:35.805234687Z) is the seq-8376 heartbeat stamp, not the
+   death — corrected in the gather leg and re-confirmed here.
+
+3. "exit -1 (signal -1)" is needle's unrecorded-signal sentinel. No such
+   signal number exists; the alert template's wording is not a signal.
+
+Both kills this dispatch's timestamp could mean are therefore covered below,
+and BOTH transcripts survive.
+
+
+ACCEPTANCE CRITERIA — ANSWERS
+-----------------------------
+* Search for agent transcripts around 2026-08-13T07:04:00Z
+    -> DONE. The instant itself is an alert-bead creation stamp (correction 1).
+       The transcripts bracketing it and the source-alert kill are:
+         attempt 57: ~/.claude/projects/-home-coding-domain-check/
+                     7aa88123-84ab-4443-ae7a-7dbc080b712a.jsonl   (SURVIVES)
+         attempt 60: ~/.claude/projects/-home-coding-domain-check/
+                     6e6b9cc7-9217-4295-8c3d-2f5a2992b1ac.jsonl   (SURVIVES)
+* Identify the workspace and repository context
+    -> /home/coding/domain-check (repo jedarden/domain-check, Forgejo origin).
+       Stated INSIDE the transcripts ("cwd": "/home/coding/domain-check",
+       entrypoint sdk-cli) — no longer an inference from the alert's "Workspace: ."
+       Worker: claude-code-glm-4.7-lab-domain-check; needle session 8446529e;
+       dispatch template pluck/pluck-default; prompt_len 70932,
+       sha256:894ca1279376b01747c03529443bac74c413e627da898173cecbbd7eb58d5a74.
+* Extract relevant log excerpts showing the crash
+    -> Sections 4 and 5 below (verbatim JSONL + transcript entries).
+* Note any error messages, stack traces, or anomaly signals
+    -> Section 6. Zero stack traces / panics / OOM text in the transcripts
+       (a memcg SIGKILL leaves none). The only error text is environmental
+       noise (missing .ccdash hook scripts) plus one benign tool_use_error.
+       exit -1 is the sentinel; fleet.cpu_saturated warnings precede dispatches.
+* Identify what operation was being performed
+    -> Both attempts died INSIDE `git push` of the bead's deliverable doc,
+       15–16 s after issuing the push, with the push's tool_result never
+       returning. Details in Sections 5 and 7.
+
+
+1. WHERE THE LOGS LIVE (surviving artifacts, re-verified live 2026-09-09)
+-------------------------------------------------------------------------
+SURVIVING
+  - Primary worker log (needle side, untouched):
+      ~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl
+      3,111,314 bytes · 12,131 events · mtime 2026-08-13 19:59 EDT
+      62 bf-4k2ws claims and 62 matching completions (786 all-bead claims that
+      day — per-bead attempt numbers below are bf-4k2ws-filtered).
+  - Claude Code per-attempt session transcripts (NEW evidence — 8,303 session
+    files in ~/.claude/projects/-home-coding-domain-check/). Needle's
+    "session 8446529e" is the needle-side session id; EACH attempt got its own
+    Claude Code transcript UUID. Transcripts located by first timestamped
+    entry falling in [claim, claim+120 s]:
+      attempt 55  cd84aa7f-…   first 06:19:07Z   last tool "git push origin main"
+      attempt 56  fb7f525d-…   first 06:23:10Z   last tool "git push"
+      attempt 57  7aa88123-…   first 06:29:09Z   last tool "git push"
+      attempt 58  3ff423f2-…   first 06:34:41Z   last tool "git merge-base HEAD origin/main"
+      attempt 59  13cdd262-…   first 06:44:52Z   (no tool_use ever completed)
+      attempt 60  6e6b9cc7-…   first 06:55:05Z   last tool "git push origin main"
+      attempt 61  60ad6931-…   first 07:04:07Z   last tool Edit docs/branch-divergence-analysis.md
+      attempt 62  3e0354ff-…   first 07:14:28Z   exit 0 (the second verified success)
+  - Committed extract of the worker log:
+      docs/crash-artifacts-bf-4k2ws/2026-09-07T0823Z-needle-log-extract-bf-4k2ws-aug13.txt
+  - Alert-bead bodies: .beads/checkpoint/ snapshots (bf-4xlwo, bf-19b99,
+    bf-2a9de re-read live this session).
+
+NOT SURVIVING (so nobody re-searches — from the gather leg, unchanged)
+  - Dispatch trace (single-slot; oldest surviving trace dir postdates the crash
+    by three days), kernel memcg-OOM lines (boot boundary: current boot begins
+    2026-08-15 19:56:33 EDT), journald records (same boundary), core dumps
+    (zero 2026-08-13 entries; a memcg SIGKILL produces no core), memory/disk
+    samples at kill time (health collector starts 2026-08-15).
+  - The loop's per-attempt local commits — 6fa9bb1, b7337a8, 940177a, b2a71f7 —
+    are gone from today's object store (`git cat-file -t` fails for all four):
+    the 2026-08-16 squash c27899f ("chore: catch up lab work onto origin
+    (squashed)") and the later repack pruned the pre-squash history. The
+    transcript tool_results quoting them (Sections 5/6) are the surviving
+    witness that those commits were created.
+
+CHECKPOINT-CHURN CAVEAT: while this session was reading .beads/checkpoint/
+objects/, the content-addressed object files were rewritten twice under us by a
+co-tenant flush (same records, different hashes). Cite storm-era records by
+BEAD ID + timestamp, never by checkpoint object hash.
+
+
+2. THE TWO KILLS THIS DISPATCH'S TIMESTAMP COULD MEAN
+------------------------------------------------------
+                                   ATTEMPT 57                ATTEMPT 60
+  source alert bead                bf-4xlwo (Open rev 20)    bf-2a9de (the last of 55)
+  claim (bead.claim.succeeded)     06:29:08.909680204Z       06:55:04.655393484Z
+                                   seq 8355                  seq 8439
+  agent.dispatched                 06:29:08.919987765Z       (seq 8447)
+  death (agent.completed)          06:34:29.204954348Z       07:03:53.920907594Z
+                                   seq 8367 · exit -1        seq 8450 · exit -1
+                                   319,831 ms (5 m 19.8 s)   528,854 ms (8 m 48.9 s)
+  last transcript write            06:34:28.781Z (file mtime) 07:03:53.544Z (file mtime)
+                                   = 423 ms before death      = 377 ms before death
+  last tool issued                 git push @ 06:34:13.179Z  git push origin main @ 07:03:38.569Z
+                                   -> no tool_result         -> no tool_result
+  push->death gap                  16.03 s                   15.35 s
+  outcome.classified               crash (seq 8370)          crash (seq 8453)
+  HANDLING_RELEASE_DONE heartbeat  06:34:35.805222217Z       07:04:00.874503173Z
+                                   (seq 8376 = bf-4xlwo's    (seq 8459 = 6.96 ms before
+                                   body timestamp, +12.47 us) bf-2a9de's creation stamp)
+  alert bead written               06:34:35.811234404Z       07:04:00.881467545Z
+  bead.released                    06:34:38.234212909Z       07:04:03.300100742Z
+  outcome.handled                  {"action":"alerted"}      {"action":"alerted"}
+  next claim                       06:34:40.411374321Z       07:04:06.003033881Z
+                                   (attempt 58)              (attempt 61)
+
+
+3. WORKER-LOG EXCERPTS (verbatim JSONL, primary: ~/.needle/logs/…-2026-08-13.jsonl)
+------------------------------------------------------------------------------------
+Abbreviation: every record also carries
+  "worker_id":"claude-code-glm-4.7-lab-domain-check","session_id":"8446529e"
+(omitted below after the first full record; nothing else is elided except
+whitespace).
+
+--- ATTEMPT 57: dispatch (06:29:08.9Z) ----------------------------------------
+{"timestamp":"2026-08-13T06:29:08.909680204Z","event_type":"bead.claim.succeeded","worker_id":"claude-code-glm-4.7-lab-domain-check","session_id":"8446529e","sequence":8355,"bead_id":"bf-4k2ws","data":{"bead_id":"bf-4k2ws","priority":2,"strand":"auto"}}
+{"timestamp":"2026-08-13T06:29:08.913416631Z","event_type":"fleet.cpu_saturated", …,"sequence":8361, …,"data":{"core_count":9,"load_average":11.65,"threshold":0.8}}
+{"timestamp":"2026-08-13T06:29:08.919987765Z","event_type":"agent.dispatched", …,"sequence":8364,"bead_id":"bf-4k2ws","data":{"agent":"claude-code-glm-4.7","bead_id":"bf-4k2ws","prompt_hash":"sha256:894ca1279376b01747c03529443bac74c413e627da898173cecbbd7eb58d5a74","prompt_len":70932,"template_name":"pluck","template_version":"pluck-default"}}
+{"timestamp":"2026-08-13T06:29:08.939617828Z","event_type":"transform.started", …,"sequence":8365, …,"data":{"agent":"claude-code-glm-4.7","bead_id":"bf-4k2ws","transform_binary":"needle-transform-claude"}}
+
+[The next bf-4k2ws event is 5 m 20 s later — the kill. Nothing is logged in
+between: needle logs lifecycle, not agent activity.]
+
+--- ATTEMPT 57: the kill (06:34:29.2Z) ----------------------------------------
+{"timestamp":"2026-08-13T06:34:28.911379687Z","event_type":"transform.completed", …,"sequence":8366,"bead_id":"bf-4k2ws","data":{"bead_id":"bf-4k2ws","duration_ms":319951,"events_written":63},"duration_ms":319951}
+{"timestamp":"2026-08-13T06:34:29.204954348Z","event_type":"agent.completed","worker_id":"claude-code-glm-4.7-lab-domain-check","session_id":"8446529e","sequence":8367,"bead_id":"bf-4k2ws","data":{"agent":"claude-code-glm-4.7","bead_id":"bf-4k2ws","duration_ms":319831,"exit_code":-1,"model":"glm-4.7"},"duration_ms":319831}
+{"timestamp":"2026-08-13T06:34:29.207023780Z","event_type":"outcome.classified", …,"sequence":8370,"bead_id":"bf-4k2ws","data":{"bead_id":"bf-4k2ws","exit_code":-1,"outcome":"crash"}}
+
+--- ATTEMPT 57: handling -> alert -> release (06:34:33–38Z) -------------------
+{"timestamp":"2026-08-13T06:34:33.461946764Z","event_type":"heartbeat.emitted", …,"sequence":8373, …,"data":{"bead_id":"bf-4k2ws","state":"HANDLING_FLUSH_DONE"}}
+{"timestamp":"2026-08-13T06:34:35.805222217Z","event_type":"heartbeat.emitted", …,"sequence":8376, …,"data":{"bead_id":"bf-4k2ws","state":"HANDLING_RELEASE_DONE"}}
+    [seq 8376 is the record behind alert bf-4xlwo's body timestamp
+     06:34:35.805234687Z — a 12.47 us delta; the heartbeat, not the death]
+{"timestamp":"2026-08-13T06:34:38.234212909Z","event_type":"bead.released", …,"sequence":8377,"bead_id":"bf-4k2ws","data":{"bead_id":"bf-4k2ws","reason":"release_success"}}
+{"timestamp":"2026-08-13T06:34:38.236100365Z","event_type":"outcome.handled", …,"sequence":8378,"bead_id":"bf-4k2ws","data":{"action":"alerted","bead_id":"bf-4k2ws","outcome":"crash"}}
+{"timestamp":"2026-08-13T06:34:40.411374321Z","event_type":"bead.claim.succeeded", …,"sequence":8383,"bead_id":"bf-4k2ws","data":{"bead_id":"bf-4k2ws","priority":2,"strand":"auto"}}
+    [attempt 58 — the loop re-dispatches 2.2 s after the alert; no cooldown]
+
+--- ATTEMPT 60: the kill behind the dispatch's 07:04:00Z stamp ----------------
+{"timestamp":"2026-08-13T07:03:53.617137394Z","event_type":"transform.completed", …,"sequence":8449, …,"data":{"bead_id":"bf-4k2ws","duration_ms":528916,"events_written":60}}
+{"timestamp":"2026-08-13T07:03:53.920907594Z","event_type":"agent.completed", …,"sequence":8450, …,"data":{"agent":"claude-code-glm-4.7","bead_id":"bf-4k2ws","duration_ms":528854,"exit_code":-1,"model":"glm-4.7"}}
+{"timestamp":"2026-08-13T07:03:53.923090140Z","event_type":"outcome.classified", …,"sequence":8453, …,"data":{"bead_id":"bf-4k2ws","exit_code":-1,"outcome":"crash"}}
+{"timestamp":"2026-08-13T07:04:00.874503173Z","event_type":"heartbeat.emitted", …,"sequence":8459, …,"data":{"bead_id":"bf-4k2ws","state":"HANDLING_RELEASE_DONE"}}
+    [+6.96 s: alert bead bf-2a9de is written at 07:04:00.881467545Z — the
+     dispatch template's "crash timestamp", 6.96 ms after this heartbeat]
+{"timestamp":"2026-08-13T07:04:03.300100742Z","event_type":"bead.released", …,"sequence":8460, …,"data":{"bead_id":"bf-4k2ws","reason":"release_success"}}
+{"timestamp":"2026-08-13T07:04:03.300110975Z","event_type":"outcome.handled", …,"sequence":8461, …,"data":{"action":"alerted","bead_id":"bf-4k2ws","outcome":"crash"}}
+{"timestamp":"2026-08-13T07:04:06.008521211Z","event_type":"fleet.cpu_saturated", …,"sequence":8472, …,"data":{"core_count":9,"load_average":10.3,"threshold":0.8}}
+    [attempt 61 is dispatched into a saturated box 12 s later; it hits the
+     600 s cap at 07:14:06.478552489Z (seq 8478, exit 124)]
+
+
+4. TRANSCRIPT EXCERPT — ATTEMPT 57 (the bf-4xlwo kill) — WHAT THE AGENT WAS DOING
+----------------------------------------------------------------------------------
+File: ~/.claude/projects/-home-coding-domain-check/7aa88123-84ab-4443-ae7a-7dbc080b712a.jsonl
+154 entries · first timestamped entry 06:29:09.700Z (0.78 s after dispatch) ·
+30 tool_use blocks · last timestamped entry 06:34:13.179Z · file last written
+06:34:28.781Z (= 06:34:28.781 EDT+4h; 423 ms before the kill record).
+Workspace recorded inside the transcript: "cwd": "/home/coding/domain-check".
+
+The attempt's shape: read the previous attempts' commits, update the bead's
+divergence-analysis deliverable (commit-count bump 436 -> 437), add, commit,
+push. Verbatim sequence of the final four minutes:
+
+06:29:19.628Z  tool_result (git log read) — sees PRIOR ATTEMPTS' commits:
+    "b7337a8 docs: add branch divergence analysis for bead bf-4k2ws - documents
+     436 local commits ahead of synchronized Forgejo and GitHub remotes with
+     comprehensive state assessment"
+    and, at 06:29:40.039Z, also
+    "6fa9bb1 docs: complete branch divergence analysis for bead bf-4k2ws -
+     documents 435 local commits ahead …"
+    -> the loop had been committing the same deliverable once per attempt.
+
+06:32:18.732Z  Edit docs/branch-divergence-analysis-bf-4k2ws.md
+    (updates "**Latest commit:** 2026-08-13 02:22:40 -0400 / Duration: ~3 days")
+06:32:44.865Z  Edit … "After pushing to Forgejo origin: 1. Forgejo main: Will
+    advance from `63ba024` to `6fa9bb1` (436 commits) 2. GitHub main: Will
+    automatically sync to `6fa9bb1` via se…"
+06:33:05.017Z  Edit … "## Conclusion … This is a **straightforward push
+    operation** with no complications. The 436 local commits can be safely
+    pushed to Forgejo…"
+06:33:16.336Z  Edit … "## Pre-Push Checklist - [x] Verify remote synchronization
+    status … - [x] Confirm no remote-only commits …"
+06:33:29.473Z  Edit … "## Notes … the **436 local commits represent ~3 days of
+    isolated development** since the last push…"
+    -> five edits in 71 s; the analysis itself was already written by an
+       earlier attempt — this attempt was refreshing its numbers.
+
+06:33:40.286Z  Bash: {"command":"git add docs/branch-divergence-analysis-bf-4k2ws.md","description":"Stage updated branch divergence analysis"}
+06:33:50.934Z  Bash: {"command":"git commit -m \"docs: update branch divergence analysis for bead bf-4k2ws - documents 437 local commits ahead of synchronized Forgejo and GitHub remotes with current state assessment\"","description":"Commit updated branch divergence analysis"}
+06:33:51.204Z  tool_result: "[main 940177a] docs: update branch divergence
+    analysis for bead bf-4k2ws - documents 437 local commits ahead …
+    1 file changed, 15 insertions(+), 15 deletions(-)"
+    -> local commit 940177a CREATED. (The object no longer exists — see
+       Section 1. The transcript is its witness.)
+
+06:34:12.835Z  assistant thinking: "The user wants me to complete the bead
+    task. Let me review what I've done: 1. ✅ Read the task description and
+    context 2. ✅ Analyzed the current br…"
+06:34:13.179Z  assistant tool_use — THE LAST TIMESTAMPED ENTRY:
+    {"type":"tool_use","id":"call_3fc3d36e073445b690a61123","name":"Bash",
+     "input":{"command":"git push","description":"Push updated analysis to Forgejo"}}
+    NO tool_result for this call exists. The transcript ends here; the file's
+    last physical write is 06:34:28.781Z. The needle worker records
+    agent.completed exit -1 at 06:34:29.204954348Z — 16.03 s after the push
+    was issued, with the push still in flight.
+
+    The agent died inside `git push` against the then-unpacked ~18 GB object
+    store — the same push-side death bf-198ne later proved at kernel level
+    (memcg OOM SIGKILL inside the 12 GiB dispatch scope) and the canon
+    chain-infers for this bead. Nothing in the transcript contradicts that;
+    a SIGKILL leaves no in-transcript trace to find.
+
+
+5. TRANSCRIPT EXCERPT — ATTEMPT 60 (the kill behind the 07:04:00Z stamp)
+-------------------------------------------------------------------------
+File: ~/.claude/projects/-home-coding-domain-check/6e6b9cc7-9217-4295-8c3d-2f5a2992b1ac.jsonl
+143 entries · first timestamped entry 06:55:05.383Z · 27 tool_use blocks ·
+last timestamped entry 07:03:38.569Z · file last written 07:03:53.544Z
+(377 ms before the kill record).
+
+Same shape as attempt 57, one file over (docs/branch-divergence-analysis.md —
+each attempt wrote its own variant):
+
+06:59:08.838Z  tool_result (git log read) — attempt 57's commit is now the tip:
+    "940177a docs: update branch divergence analysis for bead bf-4k2ws -
+     documents 437 local commits ahead …"
+    -> attempt 57's work SURVIVED its kill locally; the loop built on it.
+06:59:24.128Z  tool_result also shows b7337a8 (the earlier attempt's commit).
+07:00:42.065Z  tool_use_error: "File has not been read yet. Read it first
+    before writing to it."   [benign; retried after a Read]
+07:03:06.438Z  Bash: head -20 /home/coding/domain-check/docs/branch-divergence-analysis.md
+    tool_result shows the refreshed header: "**Analysis Date:** 2026-08-13
+    05:54:00 -0400 … **Local main:** 438 commits ahead of both remotes"
+07:03:23.184Z  Bash: {"command":"git add docs/branch-divergence-analysis.md && git commit -m \"docs: complete branch divergence analysis for bead bf-4k2ws - documents 438 local commits ahead of synchronized Forgejo and GitHub remotes with current state assessment\"", …}
+07:03:23.491Z  tool_result: "[main b2a71f7] docs: complete branch divergence
+    analysis for bead bf-4k2ws - documents 438 local commits ahead …
+    1 file changed, 33 insertions(+), 33 deletions(-)"
+07:03:38.569Z  assistant tool_use — LAST TIMESTAMPED ENTRY:
+    {"type":"tool_use","id":"call_ac6e5d52e0f74581a6c82839","name":"Bash",
+     "input":{"command":"git push origin main","description":"Push updated analysis to Forgejo origin"}}
+    NO tool_result. agent.completed exit -1 at 07:03:53.920907594Z — 15.35 s
+    after the push was issued. Alert bead bf-2a9de written 6.96 s after that.
+
+
+6. ERROR MESSAGES, STACK TRACES, ANOMALY SIGNALS
+-------------------------------------------------
+* exit_code -1 — needle's unrecorded-signal sentinel. NOT a signal number;
+  "signal -1" in the alert bodies is template wording. Night census for this
+  bead (first-hand, 62 completions): 55 x -1 (SIGKILL-class kills),
+  5 x 124 (the 600 s dispatch cap — attempts 16, 17, 58, 59, 61 — NOT
+  max-turns), 2 x 0 (attempt 33, 04:48:09.546532879Z; attempt 62,
+  07:17:41.039398822Z, 193,380 ms — both verified successes that were then
+  orphaned by the loop instead of closing the bead).
+* Stack traces / panics: NONE. Exhaustive census of both transcripts for
+  "stack trace", "panic:", "SIGKILL", "signal: killed", "OOM", "out of
+  memory" — zero matches. Consistent with an uncatchable SIGKILL (the memcg
+  OOM killer leaves the victim no opportunity to report). The absence of
+  application error text is itself evidence: the agent was mid-`git push`,
+  healthy, when it died.
+* In-transcript error text (all environmental noise, none fatal):
+    - hook_non_blocking_error attachments throughout both transcripts:
+        "Failed with non-blocking status code: /bin/sh: line 1:
+         /home/coding/.ccdash/hooks/{session-start,prompt-submit,pre-tool-use,
+         post-tool-use}.sh: cannot execute: required file not found"
+      (the .ccdash hook scripts did not exist on this box; explicitly
+      non-blocking, unrelated to the kill)
+    - one benign tool_use_error: "File has not been read yet. Read it first
+      before writing to it." (attempt 60, 07:00:42.065Z; retried successfully)
+* Anomaly signals in the needle log:
+    - fleet.cpu_saturated warnings at dispatch instants: load 11.65 on 9 cores
+      6.6 ms before attempt 57's dispatch (seq 8361); load 10.3 before
+      attempt 61's (seq 8472). The era's tooling recorded these and acted on
+      none of them.
+    - No cooldown: attempt 58 is re-claimed 2.2 s after attempt 57's alert
+      (seq 8383), attempt 61 12 s after attempt 60's alert (seq 8466).
+    - The 600 s cap attempts (58, 59) wrote almost nothing to their
+      transcripts (58: one last tool at 06:35:15Z then silence for 9.5 min;
+      59: zero tool_use) — the agents hung before making progress, then
+      exited 124.
+* No stderr capture, no core dump, no kernel record survives for either kill
+  (Section 1) — the per-kill record is the sentinel -1 plus
+  outcome.classified: crash.
+
+
+7. WHAT OPERATION WAS BEING PERFORMED (summary)
+------------------------------------------------
+The bead's task was nominally READ-ONLY analysis of Forgejo/GitHub branch
+divergence ("No merge operations are performed in this bead"). But the pluck
+dispatch template instructs the agent to commit and push its deliverable —
+so every attempt ended in the same sequence:
+
+    refresh deliverable numbers (Edit) -> git add -> git commit -> git push
+
+and the push is where the night's kills landed. Across the six transcript-
+mapped attempts in the final hour:
+
+    attempt 55  last tool "git push origin main"  -> exit -1  (died in push)
+    attempt 56  last tool "git push"              -> exit -1  (died in push)
+    attempt 57  last tool "git push"              -> exit -1  (died in push; bf-4xlwo)
+    attempt 58  last tool "git merge-base …"      -> exit 124 (hung to cap)
+    attempt 59  no tool_use completed             -> exit 124 (hung to cap)
+    attempt 60  last tool "git push origin main"  -> exit -1  (died in push; bf-2a9de)
+    attempt 61  editing the deliverable at cap    -> exit 124
+    attempt 62  succeeded (exit 0), orphaned
+
+Four of the night's kills are DIRECTLY WITNESSED mid-`git push` (last tool
+issued, push's tool_result never returned, death 15–16 s later). This
+corroborates the canon's mechanism for this bead — git-remote-heavy work
+against the then-~18 GB store inside the 12 GiB dispatch scope — which was
+chain-inferred here and is kernel-proven for siblings bf-4x12ec (gc-side) and
+bf-198ne (push-side). It does not change the resolution state: the target
+closed 2026-08-16 with 8/8 criteria met, deliverables on origin/main, no work
+lost; retry neither owed nor permitted; the alerts were real kills but stale
+and multiplied at the alert layer.
+
+Side observation for the record (no action owed here): the pushes that died
+were pushes of DOCS-ONLY deliverable commits whose messages bump a
+"local commits ahead" counter (436 -> 437 -> 438) that the act of pushing
+would immediately invalidate — the loop re-derived the same report ~60 times.
+The committed deliverables (docs/branch-divergence-analysis*.md) describe that
+resolved pre-squash state, as already recorded in the corpus.
+
+
+8. METHOD (so the extraction is repeatable)
+--------------------------------------------
+* Worker log: JSON-parse (do not grep) — events keyed timestamp/event_type/
+  sequence/bead_id/data. Per-bead attempt numbers = bf-4k2ws-filtered
+  bead.claim.succeeded ordinals (786 all-bead claims that day).
+* Transcripts: 8,303 session files under ~/.claude/projects/-home-coding-
+  domain-check/; matched each attempt's claim instant to the file whose first
+  timestamped entry falls in [claim, claim+120 s]. Needle session 8446529e is
+  needle-side; Claude Code transcript UUIDs are per-attempt.
+* mtimes are LOCAL (this box: EDT, UTC-4 in August). E.g. attempt 57's
+  transcript stat-mtime "Aug 13 02:34:28" = 06:34:28.781Z. Needle log and
+  transcript timestamps are UTC.
+* Alert-bead stamps read from .beads/checkpoint/objects/ (bf-19b99, bf-2a9de);
+  note the churn caveat in Section 1.
+* bf-4xlwo's current status (Open rev 20) is quoted from the gather leg —
+  not re-verified this session.
+
+
+9. SOURCES
+----------
+Primary, read this session:
+  - ~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl
+    (seqs 8355-8383, 8439-8476 quoted)
+  - ~/.claude/projects/-home-coding-domain-check/7aa88123-84ab-4443-ae7a-7dbc080b712a.jsonl  (attempt 57)
+  - ~/.claude/projects/-home-coding-domain-check/6e6b9cc7-9217-4295-8c3d-2f5a2992b1ac.jsonl  (attempt 60)
+  - ~/.claude/projects/-home-coding-domain-check/{cd84aa7f,fb7f525d,3ff423f2,13cdd262,60ad6931,3e0354ff}-*.jsonl (attempts 55-56, 58-59, 61-62)
+  - .beads/checkpoint/objects/ (bf-19b99, bf-2a9de snapshots)
+Canon (cited, not re-derived):
+  - docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md
+  - docs/crash-investigations/bf-4k2ws/README.md
+  - docs/crash-investigation/bf-4k2ws-crash-context.md · -root-cause.md ·
+    -severity.md · -investigation-report.md
+  - docs/crash-investigations/bf-4k2ws/bead-metadata.txt
+  - docs/crash-artifacts-bf-4k2ws/ (2026-09-07 evidence bundle)
+
+— end of extract —
