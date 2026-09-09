@@ -1,0 +1,140 @@
+=======================================================================
+Bead metadata record: bf-4k2ws
+=======================================================================
+Retrieved:      2026-09-09, by bead domchk-621a7327
+Primary source: `bead show bf-4k2ws`  (bead-rs CLI)
+Supplementary:  `bead list --json` -- the only interface that surfaces
+                labels and dependency edges (`bead show` omits both,
+                and omits close-reason context).
+Store:          .beads/ workspace in this repo (bead-rs; SQLite live
+                store + git-tracked checkpoint/). Directory is fully
+                gitignored; 0 tracked files.
+
+-----------------------------------------------------------------------
+1. CORE FIELDS (from `bead show bf-4k2ws`, verbatim values)
+-----------------------------------------------------------------------
+
+ID:             bf-4k2ws
+Title:          Analyze divergent Forgejo and GitHub branch states
+Status:         Closed          (revision 2; effective_status: closed)
+Priority:       P2
+Type:           task
+Assignee:       claude-code-glm-4.7-lab-domain-check
+Created:        2026-08-13T01:57:53.592871267Z
+Last updated:   2026-08-16T15:35:42.024203483Z
+Notes:          (empty)
+Comments:       none
+
+Description (verbatim from the bead):
+
+    ## Child Bead: Analyze Divergent Branch States
+
+    Pre-merge analysis to understand the current state of both Forgejo
+    and GitHub branches and identify unique commits on each side.
+
+    ## Acceptance Criteria
+    - Current local main branch state is documented (commit SHA, branch tip)
+    - Remote Forgejo origin state is documented (commit SHA, branch tip)
+    - Remote GitHub mirror state is documented (commit SHA, branch tip)
+    - List of commits unique to Forgejo is identified
+    - List of commits unique to GitHub is identified
+    - Point of divergence is identified
+    - Analysis is written to a file for reference during merge
+    - No merge operations are performed in this bead
+
+    ## Scope
+    This bead is READ-ONLY. It only gathers information about the
+    current state. Do not create any merge commits or modify any
+    branches.
+
+-----------------------------------------------------------------------
+2. LABELS AND DEPENDENCIES (from `bead list --json`; hidden by `bead show`)
+-----------------------------------------------------------------------
+
+Labels:         deferred, umbrella
+
+Dependencies:   bf-574w1 --blocks--> bf-4k2ws
+                (bf-574w1 is the blocker; this bead was gated on it.)
+
+Blocker bead:   bf-574w1 -- "Analyze divergent Forgejo and GitHub branch
+                states" -- Closed, labels deferred+umbrella.
+                NOTE THE TRAP: the blocker's title is word-for-word
+                IDENTICAL to bf-4k2ws's title. Near-identical artifact
+                titles across beads are the documented main source of
+                false positives in this workspace's crash corpus --
+                always match on bead ID, never on title.
+
+manual_blocked: false
+
+-----------------------------------------------------------------------
+3. CRASH TIMESTAMP (as specified by the dispatching template)
+-----------------------------------------------------------------------
+
+Task-specified crash timestamp:  2026-08-13T07:04:00Z
+
+Provenance (canon correction -- this value is NOT a distinct kill
+instant): 07:04:00.881Z is the CREATION TIMESTAMP of the last of the 55
+"ALERT: Agent crash on bead bf-4k2ws" beads, i.e. the heartbeat closing
+the alert-creation window (55 alert beads created 02:03:40.617Z -->
+07:04:00.881Z). Dispatch-named crash instants in this corpus are
+heartbeats, never the kill itself. The actual death window for the
+mapped kill (attempt 57) was 2026-08-13T06:34:29.204954348Z
+(agent.completed, exit -1); the storm as a whole ran 2026-08-13
+02:01-07:17Z: 62 attempts = 55 x exit -1 kernel kills + 5 x 600 s-cap
+timeouts (exit 124) + 2 verified successes, all one session (8446529e).
+
+Sources: docs/crash-investigations/bf-4k2ws/README.md (sec. 3.3, line
+138 for the alert window; chronology for the attempt table);
+docs/crash-investigation/bf-4k2ws-crash-context.md (heartbeat vs. death
+bracketing); docs/crash-investigation/bf-4k2ws-root-cause.md.
+
+-----------------------------------------------------------------------
+4. CURRENT RESOLUTION STATE (why this record requires no new
+   investigation)
+-----------------------------------------------------------------------
+
+- Target bead bf-4k2ws is CLOSED at revision 2. Closure timestamp
+  2026-08-16T15:35:42Z (the bead's updated_at; matched to the second by
+  the canon's chronology line), with all 8 acceptance criteria met and
+  deliverables entered git in the same-day squash c27899f. The storm
+  window itself (2026-08-13) holds zero commits.
+- Root cause determination (canon): INFRASTRUCTURE -- the
+  repository-bloat-era kill regime. Git-remote-heavy work against the
+  then-~18 GB store inside the 12 GiB per-dispatch cgroup scope; memcg
+  OOM SIGKILL recorded as exit -1. Severity verdict REAL problem,
+  MEDIUM-HIGH; remediation R1-R4 landed and verified holding.
+- Final synthesis verdict (domchk-e396d000, 2026-09-08): RESOLVED --
+  retry neither owed nor permitted (the target is Closed 8/8; a retry
+  would be post-completion re-work, the class that accounted for 25 of
+  the 55 kills).
+- The false positives live in the ALERT layer only: pre-0.4.2 needle
+  emitted one alert bead per kill (55 beads, no fingerprint/dedup/
+  cooldown), and every alert after the 2026-08-16 closure additionally
+  fired against an already-closed bead. The kills were real; the work
+  was never lost.
+
+-----------------------------------------------------------------------
+5. CANON CROSS-REFERENCES
+-----------------------------------------------------------------------
+
+Canonical report (current record for this crash):
+  docs/crash-investigations/bf-4k2ws/README.md
+    (domchk-aea1baca, HEAD e13c7fd -- all other files in this directory
+     predate the 2026-09-07 reclassification and carry SUPERSEDED
+     banners)
+
+Determination and synthesis chain (docs/crash-investigation/, singular):
+  docs/crash-investigation/bf-4k2ws-crash-context.md   (domchk-6ba3b2af)
+  docs/crash-investigation/bf-4k2ws-root-cause.md      (domchk-541f1089)
+  docs/crash-investigation/bf-4k2ws-severity.md        (domchk-5a0a456a)
+  docs/crash-investigation/bf-4k2ws-investigation-report.md
+                                                       (domchk-e396d000)
+
+Related stale-alert handling:
+  The 55 ALERT beads targeting this bead are the false-positive layer;
+  the source alert for attempt 57 is bead bf-4xlwo.
+
+=======================================================================
+End of record. Values captured live 2026-09-09 via bead-rs; nothing in
+this file is a template inference except where explicitly annotated.
+=======================================================================
