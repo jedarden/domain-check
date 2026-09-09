@@ -384,9 +384,13 @@ exit-code record").
 
 - bf-4k2ws's first claim landed at **02:01:29.710Z — 7.1 s after** bf-1s6c3's last
   `agent.completed` in the same log (02:01:22.561Z, exit 0), on the **same worker**. The
-  predecessor's 71-kill storm (Aug-12 21:31Z → Aug-13 02:01Z) IS kernel-verified memcg OOM
-  inside the dispatch scope on the same then-~18 GB repository
-  (`docs/crash-analysis-bf-1s6c3-2026-09-06.md`).
+  predecessor's 71-kill storm (Aug-12 21:31Z → Aug-13 02:01Z) is **chain-inferred** memcg
+  OOM inside the dispatch scope on the same then-~18 GB repository — no Aug-12/13 kernel
+  record survives (the Aug-14 16:39 reboot destroyed them), so the mechanism is
+  kernel-proven only for the later gc/push siblings (`bf-4x12ec`, `bf-198ne`)
+  (`docs/crash-analysis-bf-1s6c3-2026-09-06.md`). [Wording corrected 2026-09-08
+  (domchk-474e649d) per the erratum recorded in §4 of
+  `docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md`.]
 - The task itself is git-remote-heavy (fetch / ls-remote / rev-list against Forgejo and
   GitHub) — exactly the operation class the bloat era turned into deterministic kills.
 
