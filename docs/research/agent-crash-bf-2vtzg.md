@@ -121,3 +121,66 @@ Six conditions, in causal order. (1)–(3) are the mechanism; (4)–(6) are the 
 | Mechanism canon (kernel-proven siblings) | bf-4k2ws (55 memcg kills), bf-1ea4g (`docs/crash-inventory-bf-1ea4g-summary.md`), bf-4x12ec (gc-side), bf-198ne (push variant) |
 
 **Bottom line:** bf-2vtzg was a small, read-only Forgejo-state documentation task that ran into the bloat-era repository and the 12 GiB dispatch scope at the worst hour of the fleet's worst day. Nine identical dispatches died mid-run in post-commit git work over an ~18 GB object store — `exit −1` being needle's sentinel for the kernel's uncatchable memcg-OOM SIGKILL — and the tenth, into an unchanged repo, succeeded and closed the bead. Every condition that produced the kills has since been mechanically removed, the deliverable shipped, and the alert surface it seeded is tested closed.
+
+## 8. Root cause determination (`domchk-cf22b1af`, 2026-09-09)
+
+Renders this chain's second dispatch — *"Identify the root cause of the signal −1 crash"* — whose four acceptance criteria are phrased in signal terms. The verdict is the canon's (§11.1), restated at the precision the signal phrasing demands; **no new cause claim**. Every load-bearing figure below was re-verified first-hand this session (§8.5).
+
+### 8.1 The specific signal: SIGKILL, delivered by the kernel's memcg OOM killer
+
+**SIGKILL — signal 9 — kernel-issued, uncatchable, therefore never observable by the dying process or its harness.** The alert template's `signal -1` is a rendering of needle's sentinel, not a signal identifier:
+
+- No signal has value −1. `exit_code = -1` is needle's abnormal-child-death sentinel, emitted because the agent process never returned an exit status (§2.1). The alert beads (e.g. `bf-37jbh`) carry the line `**Exit code**: -1 (signal -1)` verbatim — re-read from the store this session.
+- The primary log records **no signal at all**: `grep -ci '"signal'` across all 12,131 events of the day's worker log returns **0** (re-verified this session). The harness never observed which signal fired — with SIGKILL it cannot.
+- The signal is therefore identified **by mechanism, not by number**: the kernel's memory-cgroup OOM killer. The kernel's own record of the identical kill shape, from the journal-covered push-storm era: `Memory cgroup out of memory: Killed process 3322486 (git) total-vm:13847248kB, anon-rss:12301364kB, … oom_score_adj:200` with `oom-kill:constraint=CONSTRAINT_MEMCG`, inside `run-p*.scope` (first of **540** surviving records, 2026-08-16 00:27:35 EDT).
+
+### 8.2 The code path / condition that triggered it
+
+**No domain-check code is in the path** (§4). The triggering condition chain, in code-path terms — each link verified first-hand this session:
+
+```
+git (post-commit follow-on work: status/fetch/push)          ← 8 of 9 kills landed 22–56 s after committing the deliverable (§11.2)
+  → git pack-objects, UNBOUNDED                              ← no pack.windowMemory on 2026-08-13; bound applied 2026-09-02 (§3 item 3)
+    → over the bloat-era object store (~18 GB .git, ~17 GB loose, §3 item 1)
+      → RSS exceeds the dispatch scope ceiling               ← run-p*.scope MemoryMax = 12 GiB (re-read live: 12884901888)
+        → kernel CONSTRAINT_MEMCG OOM kill → SIGKILL         ← kernel-proven shape: git at anon-rss 12.30 GB pinned at the cap, oom_score_adj 200
+          → process dies with no exit status
+            → needle sentinel exit_code = -1                 ← agent.completed {exit_code: -1} (re-extracted, all 10 attempts)
+              → alert template renders "signal -1"           ← the string that named this crash
+```
+
+The kill instant is therefore not any single line of code but the *conjunction*: the loop's post-commit git work supplied the load, the bloat-era store made that load ~18 GB-shaped, the unbounded pack-objects converted it into RSS, and the 12 GiB cgroup converted the RSS into a kill. Remove any one link and attempt 10's survival is what all ten attempts would have looked like — which is what the repaired repo delivers today.
+
+### 8.3 Resource issue, deadlock, or external signal?
+
+**A resource issue — cgroup-constrained memory (memcg OOM).** The three-way template choice collapses once the terms are fixed:
+
+- **Not a deadlock.** Every attempt made forward progress — eight of the nine killed attempts committed a finished deliverable before dying (§11.2); lifetimes 88–255 s are uncorrelated and far under the 600 s dispatch cap (a deadlocked dispatch pins at its cap or hangs silently); and attempt 10 succeeded against an *unchanged* repository. Deterministic hangs fail identically; this failed probabilistically — the signature of shared-resource contention (§11.3 step 7).
+- **Not an administratively issued external signal.** No surviving record shows anything signalling this worker: the primary log contains **zero** signal references (verified), and no Aug-13 kernel record exists at all (§8.4's boot boundary). The exit-code shape also discriminates: across the day's 395 `agent.completed` events (344 × −1, 22 × 124, 18 × 0, 11 × 1) there is **not one** caught-signal-shaped status (129/SIGHUP, 143/SIGTERM, 130/SIGINT) — whatever killed 344 dispatches was never observed or handled, which is SIGKILL-class, not a delivered-and-caught signal. And the kills arrive at nine uncorrelated mid-run instants on one bead inside a 344-kill day whose same-worker regime is kernel-proven as memcg OOM for the operation class — not at a boundary an operator action or fleet trim would mark. (The August corpus's SIGHUP-cascade framing is explicitly superseded by the September kernel records.)
+- **The precise rendering.** SIGKILL *is* externally delivered — its sender, the kernel's OOM killer, sits outside the dying process, which is exactly why no handler saw it and why the sentinel exists. But the *cause class* is resource exhaustion: the kernel killed the process because the cgroup's memory was spent, not because anyone chose to signal it. "External signal" in the template's sense — a deliberate act by an operator or supervisor — is excluded; "resource issue" is the answer, with the kernel as its delivery mechanism.
+
+### 8.4 Precision note on "kernel-proven siblings" (§3 item 6 / canon §11.3)
+
+§3 item 6 and canon §11.3 call the same-day siblings (bf-4k2ws, bf-1ea4g) "kernel-proven". The wording is looser than the evidence and this dispatch's signal-phrased criteria force the fix:
+
+- The journal has a **single boot beginning 2026-08-15 19:56:33 EDT** (re-run: `journalctl --list-boots`), and the **first surviving `CONSTRAINT_MEMCG` record is 2026-08-16 00:27:35 EDT**. No Aug-13 kernel record can exist for bf-2vtzg **or** for bf-4k2ws/bf-1ea4g — canon §1 and the committed bf-4k2ws determination both say exactly this.
+- The **kernel-proven element is the mechanism class** — `git` inside `run-p*.scope` dispatch scopes pinned at the 12 GiB cap, killed by `CONSTRAINT_MEMCG` — established by the journal-covered 2026-08-16 push-storm era (540 records re-counted this session; the era census — 414 on Aug 16, 257 of them git kills at anon-rss 12.30–12.56 GB, `oom_score_adj` 200, `oom_memcg=run-p*.scope` — per the committed bf-4k2ws determination). The same-day siblings are **log-proven** (exit −1 plus the identical four-event chain, 344 kills re-counted from the primary log), not kernel-proven.
+- This tightens the wording to what canon §11.6 already asserts as the confidence basis ("the only reason it is not HIGH is that Aug-13 kernel proof is *impossible to exist*"). Classification INFRASTRUCTURE and mechanism confidence **MEDIUM-HIGH are unchanged**; append-only here per the freeze policy — the closed sections' text stands.
+
+### 8.5 Verification record — re-run first-hand this session (2026-09-09)
+
+| Claim | How verified | Result |
+|---|---|---|
+| Target state | `bead show bf-2vtzg` | Closed, rev 1, closed 09:42:58.663Z, never reopened |
+| Alert wording | `bead show bf-37jbh` | `**Exit code**: -1 (signal -1)` verbatim |
+| 10-attempt loop | re-extraction from the primary worker log (187 bf-2vtzg events) | 10 dispatches / 10 completions; 9 × exit −1 (88.0–254.6 s) + 1 × exit 0 (172.0 s) |
+| Per-kill event chain | events within 30 s of each kill | `agent.completed {exit_code:-1}` → `outcome.classified {outcome:"crash"}` → `bead.released` → `outcome.handled {action:"alerted"}` |
+| No signal ever recorded | `grep -ci '"signal'` over all 12,131 events | **0** |
+| No memory telemetry exists | distinct event types in the day's log | 28 types; **no memory-named type** (only `fleet.cpu_saturated`, 602) — memory-at-kill unverifiable, which is *why* the mechanism stays chain-inferred |
+| Exit-code shape day-wide | all 395 `agent.completed` events | 344 × −1, 22 × 124, 18 × 0, 11 × 1 — **zero** caught-signal statuses (129/143/130) |
+| Journal boot boundary | `journalctl --list-boots` | single boot, first entry 2026-08-15 19:56:33 EDT |
+| First surviving kernel memcg record | `journalctl -k \| grep -c CONSTRAINT_MEMCG` + first lines | **540**; first 2026-08-16 00:27:35 EDT — `Killed process 3322486 (git) … anon-rss:12301364kB … oom_score_adj:200`, `oom_memcg=run-p*.scope` |
+| Dispatch scope ceiling | `cat /sys/fs/cgroup/<own in-flight scope>/memory.max` | `12884901888` = 12 GiB exactly, `needle.slice/run-p*.scope` |
+| Recurrence closed today | `./scripts/check-repo-health.sh`; `git rev-list --count` both directions | exit 0, no unpushed backlog; `origin/main…HEAD` 0/0 |
+
+**Root cause, one line:** the kernel's memcg OOM killer delivered SIGKILL (signal 9) to unbounded `git pack-objects` over the bloat-era ~18 GB object store inside the 12 GiB `MemoryMax` dispatch scope; the process died without a status, needle recorded the `exit_code = -1` sentinel, and the alert template rendered it as "signal -1" — a resource issue, not a deadlock and not a signalled process, with the mechanism chain-inferred for this bead (no Aug-13 kernel record can exist) and kernel-proven for the operation class via the 2026-08-16 journal records.
