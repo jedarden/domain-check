@@ -194,14 +194,20 @@ if task_complete:
 
 ### Priority 3: Repository Bloat Prevention (HIGH)
 
-**Addresses:** Repository bloat causing OOM crashes (incident bf-4yjq: 9 crashes from 18GB repo)
+**Addresses:** Repository bloat causing OOM crashes (incident bf-4yjq — figures corrected
+2026-09-09 by bead domchk-834ded2c: the "9 crashes" first recorded here was a sampling
+undercount; canon is [`docs/crashes/bf-4yjq-report.md`](crashes/bf-4yjq-report.md) §8)
 
-**Evidence from bf-4yjq (2026-08-12):**
-- 9 crashes over 2.5 hours, all exit code -1 (SIGKILL from OOM)
+**Evidence from bf-4yjq (2026-08-12; re-derived first-hand at the 2026-09-09 report leg):**
+- 50 kills across 56 dispatches over 2h37m (9,404s), all `exit_code=-1` at fixed cadence
+  (kill-to-kill gap median 155.5s) — `-1` is needle's no-wait-status sentinel, not a recorded
+  signal, and the push-side memcg-OOM mechanism is regime-matched (kernel-proven only for the
+  sibling storms bf-198ne / bf-4x12ec; the Aug-12 kernel records are unrecoverable)
 - Repository: 18GB with 17GB loose objects (should be <500MB)
 - `.beads/issues.jsonl`: 248MB (should be <5MB)
 - Root cause: Bead bf-2ildm committed 17+ identical 237MB JSONL files
-- Any significant git operation triggered OOM due to repository bloat
+- Any significant git operation triggered the kills — 50/50 crash transcripts end at
+  `git push origin main`
 
 #### Proposal 3.1: Repository Size Monitoring and Alerts (CRITICAL)
 
@@ -758,8 +764,11 @@ The crash analysis revealed that domain-check code is **NOT defective**. The cra
 3. **Agent Workflow Limitations (20%)**: Max turns exhaustion, bead closing issues
 4. **Code Defects (2%)**: Actual application errors
 
-**Critical Finding from bf-4yjq Incident:**
-Repository bloat (18GB with 17GB loose objects) caused 9 OOM crashes over 2.5 hours. This was caused by bead bf-2ildm committing 17+ identical 237MB `.beads/*.jsonl` files to git history. Any significant git operation on the bloated repository triggered OOM killer intervention.
+**Critical Finding from bf-4yjq Incident** (figures corrected 2026-09-09, bead
+domchk-834ded2c — the "9 OOM crashes" first stated here was a sampling undercount; see
+[`docs/crashes/bf-4yjq-report.md`](crashes/bf-4yjq-report.md)):
+Repository bloat (18GB with 17GB loose objects) caused 50 `exit -1` kills across 56
+dispatches over 2h37m. This was caused by bead bf-2ildm committing 17+ identical 237MB `.beads/*.jsonl` files to git history. Any significant git operation on the bloated repository triggered the kills — every crash transcript ends at `git push origin main` (`-1` is the worker's no-wait-status sentinel; the memcg-OOM mechanism is regime-matched for bf-4yjq itself and kernel-proven for the sibling storms bf-198ne / bf-4x12ec).
 
 **Recommendation:** 
 1. **CRITICAL:** Implement repository monitoring and automated gc scheduling (Priority 3 - IMMEDIATE)
@@ -879,8 +888,8 @@ changed in the script — re-tuning the threshold belongs to an implementation b
 
 ---
 
-**Document Version:** 2.3  
+**Document Version:** 2.4  
 **Created:** 2026-09-01  
-**Updated:** 2026-09-07 (v2.3 appended the domchk-4e8821ca live re-verification + the repo-health-monitor pack-count calibration note; v2.2 verified the Rollback subsection live — uninstall round-trip + 27-assertion test suite — and added `--uninstall` itself; v2.1 added the bf-1s6c3 Implementation Status section)  
+**Updated:** 2026-09-09 (v2.4 corrected the bf-4yjq figures in the Priority 3 evidence block and the Conclusion to the canon report — 50 kills / 56 dispatches, `-1` sentinel + regime-matched mechanism — superseding the 2026-09-01-era "9 OOM crashes" count; v2.3 appended the domchk-4e8821ca live re-verification + the repo-health-monitor pack-count calibration note; v2.2 verified the Rollback subsection live — uninstall round-trip + 27-assertion test suite — and added `--uninstall` itself; v2.1 added the bf-1s6c3 Implementation Status section)  
 **Author:** Claude Code Agent  
 **Review Status:** Priorities 1–4 implemented; Priority 3 fully closed as of 2026-09-06
