@@ -1,0 +1,430 @@
+================================================================================
+bf-4k2ws — SYSTEM-LEVEL DIAGNOSTICS
+(kernel logs / journal / cgroup limits / resource warnings / signals)
+Author bead: domchk-8501ec30 ("Check System Logs and Resource State")
+Target bead: bf-4k2ws "Analyze divergent Forgejo and GitHub branch states"
+Written: 2026-09-09, all commands re-run live this session
+================================================================================
+
+TIMEZONE CONVENTION
+-------------------
+journald/coredumpctl/systemd timestamps are LOCAL (America/New_York, EDT =
+UTC−4). Needle worker-log timestamps are UTC. Every timestamp below is marked.
+The bf-4k2ws storm window 2026-08-13 02:03–07:04 UTC = Aug-12 22:03 → Aug-13
+03:04 EDT LOCAL — both sides of it precede the journal's first entry.
+
+WHAT THIS FILE IS
+-----------------
+The dispatch asked for system-level logs and resource state for the bf-4k2ws
+kill storm. This is a LOG EXTRACTION + live re-verification, subordinate to the
+canonical record; it makes NO new cause claim and does not change the
+resolution state (RESOLVED — retry neither owed nor permitted; the
+false-positive element is confined to the alert layer):
+
+  - docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md
+  - docs/crash-investigations/bf-4k2ws/README.md (domchk-aea1baca)
+  - sibling legs in this directory: logs.txt (domchk-b6563736),
+    bead-metadata.txt (domchk-621a7327)
+
+HEADLINE ANSWERS (the five acceptance criteria)
+-----------------------------------------------
+1. Kernel OOM killer entries for bf-4k2ws's kills: **NONE SURVIVE — and none
+   can.** The box has exactly one readable journal boot whose first entry is
+   2026-08-15 19:56:33 EDT; the storm window sits ~2.7 days before it. A
+   date-bounded journal query for Aug-13 returns "No entries". For bf-4k2ws
+   itself the kill mechanism is therefore CHAIN-INFERRED (canon confidence
+   MEDIUM-HIGH). The kernel proof exists for the SIBLING events: 540
+   CONSTRAINT_MEMCG OOM records survive from 2026-08-16 00:27:35 EDT onward,
+   309 of them killing `git` inside `run-p*.scope` dispatch scopes.
+
+2. Memory/CPU at crash time: **CPU survives, memory does not.** The needle
+   worker log for Aug-13 (present first-hand, 3,111,314 bytes) contains NO
+   memory telemetry of any kind; its only resource signal is
+   `fleet.cpu_saturated` — 602 events that day, load 7.23–41.85 (avg 11.32)
+   on core_count 9, i.e. saturated all day, 57 events inside the storm window
+   (load 7.63–18.51). Memory-at-kill is only observable for the Aug-16
+   sibling era: kernel records show the killed `git` processes at anon-rss
+   12.30–12.56 GB, i.e. sitting ON the scope's 12 GiB cap at the moment of
+   death.
+
+3. Cgroup limit violations: **confirmed, both live and from the kernel
+   record.** The dispatch-scope cap re-read live THIS session from my own
+   running scope: `memory.max = 12884901888` = exactly 12 GiB. 100% of the
+   540 surviving OOM events are `constraint=CONSTRAINT_MEMCG` with the
+   violated cgroup named (`oom_memcg=`) — 377 in `app.slice/run-p*.scope`,
+   37 in `needle.slice/run-p*.scope` (both systemd-run dispatch-scope
+   shapes), the rest in named `safe-git-gc-run-*.scope` synthetic test
+   scopes. **Zero non-MEMCG-constraint OOM events exist** — the host itself
+   was never out of memory; every recorded kill was cgroup-scoped.
+
+4. Resource limit warnings: **two layers.** (a) Worker layer: 602
+   `fleet.cpu_saturated` warnings on Aug-13. (b) Host layer: systemd-oomd
+   (active on this box) performed 43 kills from 2026-08-15 23:25 EDT onward,
+   each citing /user.slice memory pressure of 90.60–93.82% against an 80%
+   threshold — including 22 dispatch scopes. The repo's own
+   `.beads/logs/` resource monitors begin 2026-09-01 and give zero Aug-13
+   coverage.
+
+5. System signals sent to the process: **SIGKILL via the kernel memory-cgroup
+   OOM killer — uncatchable, which is why needle records it as `exit_code =
+   -1` (the unrecorded-signal sentinel), never as a signal number.**
+   First-hand bf-4k2ws census re-derived byte-exact from the worker log:
+   62 attempts = 55 × exit −1 + 5 × exit 124 (600 s cap) + 2 × exit 0; kill
+   instants 2026-08-13T02:03:33.620221603Z → 07:03:53.920907594Z; kill
+   durations 123,571 / 252,874 (median) / 528,854 ms. Zero SIGHUP/SIGTERM
+   kills exist anywhere in the surviving kernel record (0 grep hits; 0
+   exit-129 events), ruling out the old SIGHUP-cascade framing. SIGKILL
+   leaves no core, and indeed no coredump exists for any agent kill — the
+   only git coredump on this boot is a SIGBUS on a `git rebase` from
+   2026-08-25, unrelated to this storm.
+
+TEMPLATE-PREMISE CORRECTIONS (canon lesson 10 — read before using this file)
+----------------------------------------------------------------------------
+1. "Verify memory/CPU usage at crash time" is only half-executable: CPU load
+   telemetry survives (worker log); memory usage at the Aug-13 kill instants
+   does not survive in ANY record. The nearest memory evidence is the
+   sibling-era kernel anon-rss at kill (§3.2). Anything claiming an exact
+   Aug-13 RSS figure is fabricated.
+2. The dispatch's implied "crash timestamp" 2026-08-13T07:04:00Z is NOT a
+   kill instant — it is the creation stamp of alert bead bf-2a9de, the LAST
+   of the 55 ALERT beads (a heartbeat 6.96 s after the final kill). The real
+   kill instants are the 55 `agent.completed` death events, 02:03:33.620Z →
+   07:03:53.920Z (canon README §2; re-derived byte-exact this session, §6).
+3. Kernel proof attaches to the SIBLINGS (bf-4x12ec gc-side, bf-198ne
+   push-side), not to bf-4k2ws. For this bead the mechanism is chain-inferred
+   on the strength of: same box, same dispatch-scope shape, same exit −1
+   sentinel, same git-remote-heavy death shape witnessed in the surviving
+   per-attempt transcripts (logs.txt), and 257 kernel-proven `git` memcg
+   kills in the same scope shape 3 days later (§2).
+4. Two distinct SIGKILL layers — do not conflate: kernel memcg OOM
+   (constraint=CONSTRAINT_MEMCG; the mechanism that killed the git attempts)
+   vs systemd-oomd (a userspace responder killing WHOLE scopes/services when
+   /user.slice PSI pressure crosses 80%; 43 kills in the post-reboot era,
+   §5). oomd was not running its kill path during the Aug-13 window — its
+   first recorded action is 2026-08-15 23:25:00 EDT, after the reboot.
+5. Boot boundary, first-hand precision: kernel btime says the CURRENT boot
+   began 2026-08-15 14:04:22 UTC (10:04:22 EDT); the journal's first entry is
+   2026-08-15 19:56:33 EDT (a ~9.9 h journald lag behind the kernel boot).
+   The canon README's "Aug-14 reboot" phrasing cannot be pinned from
+   surviving records (the readable-record gap spans Aug-13 → Aug-15); what
+   matters and is verified is that NOTHING readable predates 2026-08-15
+   19:56:33 EDT.
+
+================================================================================
+§1 JOURNAL COVERAGE BOUNDARY — why Aug-13 kernel records cannot exist
+================================================================================
+
+One boot is readable; the storm predates it. All outputs verbatim:
+
+  $ journalctl --list-boots
+  IDX BOOT ID                          FIRST ENTRY                 LAST ENTRY
+    0 52309698918d4ec1b8cf2680af8cbcb8 Sat 2026-08-15 19:56:33 EDT Wed 2026-09-09 02:22:02 EDT
+
+  $ journalctl --since "2026-08-13 00:00:00" --until "2026-08-13 23:59:59"
+  -- No entries --
+
+  $ journalctl -b -1
+  No journal boot entry found for the specified boot (-1).
+
+  earliest entry across the whole store:
+  Aug 15 19:56:33 lab socat[2994323]: ... N starting data transfer loop ...
+
+  $ awk '/btime/{print $2}' /proc/stat   → 1786802662
+    = 2026-08-15T14:04:22 UTC = 2026-08-15 10:04:22 EDT (kernel boot)
+
+Journal store inventory: /var/log/journal/7a972da797484700baa6cb3782546e05/
+holds 55 files, ~4 GB ("Archived and active journals take up 4G"), 80 MB
+rotated segments named `system@…` / `user-1001@…` plus the active
+`user-1001.journal`. The store is persistent NOW but holds only current-boot
+entries; whether Aug-13-era records were never persisted across that reboot
+or were subsequently removed is indeterminable from what survives — what
+matters for this investigation is that nothing predating 2026-08-15 19:56:33
+EDT is readable, so no system-level Aug-13 record exists to find.
+`journalctl --disk-usage` confirms the 4 GB store holds only the current
+boot's entries.
+
+Consequence: for the bf-4k2ws kill instants there is NO kernel line, NO oomd
+action, NO coredump, and NO pid 1 notice. Every Aug-13 "system-level" fact in
+the canon rests on the needle worker log + the checkpoint/forensic bead record
++ kernel-proven siblings — not on system logs.
+
+================================================================================
+§2 KERNEL OOM RECORDS — WHAT DOES SURVIVE (mechanism-era proof, siblings)
+================================================================================
+
+Counts (whole readable journal, current boot):
+
+  oom-kill:constraint=CONSTRAINT_MEMCG events .... 540
+  "Memory cgroup out of memory: Killed process" ... 539
+  OOM events with a NON-MEMCG constraint (host-wide)  0      ← host never OOM
+  Kernel-recorded SIGHUP/SIGTERM kill text ....... 0
+
+By date (all LOCAL):
+
+  2026-08-16   414   ← the bf-198ne push-storm era (canon's kernel-proven sibling)
+  2026-09-02    15
+  2026-09-06    33
+  2026-09-07    63
+  2026-09-08    15
+
+Killed-task tally across those events: git 309, bash 73, python3 1.
+The 2026-09-06..08 bash kills are dominated by named `safe-git-gc-run-*.scope`
+cgroups — the safe-gc test suite's own deliberate small-ceiling negative test
+(repo docs: asserted OOM kills, synthetic; do not cite them as live crashes).
+The fleet census in CLAUDE.md agrees: post-reboot kernel memcg kills are
+synthetic test/gc scopes, plus the Aug-16 git storm.
+
+Violated cgroup paths named by the kernel (`oom_memcg=`, shape-normalized):
+
+  377  …/user@1001.service/app.slice/run-p<NNNN>-i<NNNN>.scope
+   37  …/user@1001.service/needle.slice/run-p<NNNN>-i<NNNN>.scope
+   n   …/app.slice/safe-git-gc-run-<pid>-<stamp>.scope   (synthetic tests)
+
+Both run-p* shapes are `systemd-run --scope` dispatch scopes — the same
+mechanism class as the live cap re-read in §4.
+
+Three verbatim Aug-16 records (LOCAL time; the sibling-era mechanism proof —
+same shape the chain-inference for bf-4k2ws rides on):
+
+  Aug 16 00:27:35 lab kernel: git invoked oom-killer: gfp_mask=0xcc0(GFP_KERNEL), order=0, oom_score_adj=200
+  Aug 16 00:27:35 lab kernel: oom-kill:constraint=CONSTRAINT_MEMCG,nodemask=(null),cpuset=user.slice,mems_allowed=0,oom_memcg=/user.slice/user-1001.slice/user@1001.service/app.slice/run-p3295453-i208789885.scope,task_memcg=…,task=git,pid=3322486,uid=1001
+  Aug 16 00:27:35 lab kernel: Memory cgroup out of memory: Killed process 3322486 (git) total-vm:13847248kB, anon-rss:12301364kB, file-rss:4764kB, shmem-rss:0kB, UID:1001 pgtables:24432kB oom_score_adj:200
+
+  Aug 16 00:28:37 … Killed process 3331821 (git) … anon-rss:12329416kB … scope run-p3323575-i208818007
+  Aug 16 00:31:35 … Killed process 3348071 (git) … anon-rss:12323744kB … scope run-p3333894-i208828326
+
+Aug-16 git-kill statistics (257 git kills that day): peak anon-rss observed
+12,555,188 kB ≈ 11.97 GiB; every one of the 414 kills that day carried
+`oom_score_adj=200` — the dispatch layer deliberately marks its payloads as
+preferred OOM victims. The killed processes die while pinned at the scope's
+12 GiB budget — the exact "scope budget exhausted" mechanism the canon
+infers for bf-4k2ws.
+
+================================================================================
+§3 CPU / MEMORY AT CRASH TIME
+================================================================================
+
+§3.1 CPU — SURVIVES (needle worker log, UTC)
+
+Primary source, verified present first-hand:
+  ~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl
+  (3,111,314 bytes, mtime Aug 13 19:59 LOCAL — written the day of the storm,
+  untouched since)
+
+All-day telemetry (2026-08-13): `fleet.cpu_saturated` × 602, load_average
+min 7.23 / avg 11.32 / max 41.85 on `core_count: 9` (threshold field 0.8,
+normalized) — the box was CPU-saturated effectively all day.
+
+Inside the bf-4k2ws storm window [02:03:40Z → 07:05:00Z]: 57
+`fleet.cpu_saturated` events, load 7.63–18.51. Verbatim anchors (the same two
+the canon/logs.txt cite, re-extracted byte-exact):
+
+  {"timestamp":"2026-08-13T06:29:08.913416631Z","event_type":"fleet.cpu_saturated","worker_id":"claude-code-glm-4.7-lab-domain-check","session_id":"8446529e","sequence":8361,"data":{"core_count":9,"load_average":11.65,"threshold":0.8}}
+    → 6 ms before ATTEMPT 57's DISPATCH (the attempt later died 06:34:29.20Z —
+      the kill the bf-4xlwo alert chain anchors to; the warning precedes the
+      dispatch, not the death)
+  {"timestamp":"2026-08-13T07:04:06.008927920Z",…,"sequence":8472,…,"load_average":10.3,…}
+    → 12 s after the final kill (ATTEMPT 60, seq 8450)
+  window maximum: 2026-08-13T05:45:25.848280148Z, load 18.51, seq 8108
+
+Interpretation guard: CPU saturation is CORRORELATIVE (the attempts were
+competing for a loaded box), not the kill mechanism — the kills are memory
+(cgroup) deaths. It is nonetheless the only host-resource telemetry that
+survives from the window, and it falsifies any "the box was idle" framing.
+
+§3.2 MEMORY — DOES NOT SURVIVE FOR AUG-13
+
+The Aug-13 worker log's complete event-type census contains NO memory
+telemetry of any kind (no gauge, no RSS, no pressure event):
+
+  heartbeat.emitted 3490 · worker.state_transition 2353 · agent.routing_decision 786
+  fleet.cpu_saturated 602 · transform.started 400 · agent.dispatched 400
+  transform.completed 395 · agent.completed 395 · rate_limit.allowed 393
+  build.heartbeat 393 · bead.claim.succeeded 393 · bead.claim.attempted 393
+  outcome.classified 390 · outcome.handled 387 · bead.released 372
+  worker.launch.deferred 223 · init.step.started/completed 124 · worker.booting 72
+  verification.passed 14 · bead.completed 8 · bead.orphaned 6
+  worker.handling.timeout 4 · worker.boot.timeout 4 · bead.mitosis.evaluated 4
+  worker.started 3 · bead.quarantined 2 · bead.release.failed 1
+
+(.beads/logs/ resource monitors begin 2026-09-01 — also zero Aug-13 coverage.)
+
+Nearest surviving memory evidence = the Aug-16 sibling-era kernel records
+(§2): killed `git` processes at anon-rss 12,301,364 → 12,555,188 kB
+(≈ 11.7–12.0 GiB) against `memory.max = 12884901888` (12 GiB), i.e. dying ON
+the cap. For Aug-13 itself no RSS figure exists; the per-attempt transcripts
+(logs.txt) show the same death SHAPE — death 15–16 s into `git push`, no
+tool_result returning, no stack trace (SIGKILL leaves none).
+
+§3.3 PRESENT STATE (for contrast; 2026-09-09 02:22 EDT, live)
+
+  load average 4.33 · Mem 62Gi total / 6.6Gi used / 55Gi available ·
+  swap 24Gi, 0B used · PSI memory some/full avg10 = 0.00 · disk 23G free ·
+  kernel uptime 24 days (btime above)
+
+No memory pressure anywhere on the box today; the regime that killed the
+storm-era attempts (≈18 GB unpacked object store inside a 12 GiB scope) is
+gone (repo .git ≈ 105 MB, R1–R4 verified holding).
+
+================================================================================
+§4 CGROUP / CONTAINER LIMIT VIOLATIONS
+================================================================================
+
+Live re-read THIS session from my own in-flight dispatch scope (the same cap
+the storm-era attempts ran under; matches the canon's live read of
+2026-09-09 and the README's `12884901888`):
+
+  $ cat /proc/self/cgroup
+  0::/user.slice/user-1001.slice/user@1001.service/needle.slice/run-p4085420-i255711232.scope
+
+  /sys/fs/cgroup/<that path>/memory.max      → 12884901888   (= 12 GiB exactly)
+  …/app.slice/memory.max                     → max           (no ancestor cap
+  …/memory.swap.max                          → max            below the scope)
+
+i.e. the ONLY enforced memory ceiling between an agent attempt and the host
+is the per-dispatch scope's 12 GiB — which is precisely the boundary at which
+the kernel kills (CONSTRAINT_MEMCG, §2). `systemd-oomd` is also active
+(userspace layer, §5).
+
+Historical violations named by the kernel: every one of the 540 surviving OOM
+events names its violated cgroup and every one is CONSTRAINT_MEMCG (§2
+tally). No container-level (Docker/K8s) limit violations appear anywhere in
+the record — the crash regime on this box is systemd cgroup (user.slice →
+run-p*.scope), not container runtime.
+
+Note the shape migration: Aug-16 kills sit under `app.slice/run-p*.scope`
+(377 events); today's dispatch scopes instantiate under
+`needle.slice/run-p*.scope` (37 events). Same mechanism class, different
+slice — do not treat the slice name as a discrepancy.
+
+================================================================================
+§5 RESOURCE LIMIT WARNINGS
+================================================================================
+
+Worker layer (Aug-13, UTC): 602 `fleet.cpu_saturated` warnings — the
+telemetry detailed in §3.1. This is the "named preceding warning" class the
+root-cause leg flagged: the era's tooling emitted it and consumed nothing.
+
+Host layer (post-reboot era, LOCAL): systemd-oomd, 43 kill actions,
+2026-08-15 23:25:00 EDT → Aug-16. Verbatim form:
+
+  Aug 15 23:25:00 lab systemd-oomd[569]: Killed /user.slice/user-1001.slice/session-161.scope due to memory pressure for /user.slice being 90.60% > 80.00% for > 20s with reclaim activity
+  Aug 15 23:43:26 lab systemd-oomd[569]: Killed …/app.slice/agentscribe.service due to memory pressure for /user.slice being 93.82% > 80.00% for > 20s …
+  Aug 16 00:31:34 lab systemd-oomd[569]: Killed …/app.slice/run-p3326759-i208821191.scope due to memory pressure for /user.slice being 91.53% > 80.00% for > 20s …
+
+Targets of the 43: 22 dispatch scopes (run-p*.scope), 5
+agentscribe.service, 4 init.scope, 5 needle-worker@*.service, 7 session
+scopes. Reported /user.slice pressure 90.60–93.82%.
+
+Reading: during the Aug-16 storm BOTH layers fired — the kernel memcg killer
+inside scopes at the 12 GiB cap (§2), and oomd against whole scopes/services
+when the USER slice's aggregate pressure crossed 80%. The host was under real
+pressure in that era; the fatal constraint for individual attempts was still
+the scope budget. Caveat carried from the repo's corpus: an OOM NOTICE WITH NO
+CORRESPONDING KERNEL LINE is a NixOS switch-to-configuration replay artifact,
+not a kill — the oomd lines above are genuine actions (kernel lines exist for
+the same window), but any bare "OOM" notice without a kernel line must not be
+cited as evidence.
+
+Zero pid 1 "memory pressure" warnings exist outside the oomd records; the
+repo's own monitors (.beads/logs/resource-monitor.log and friends) start
+2026-09-01 and are silent for Aug-13.
+
+================================================================================
+§6 SIGNALS SENT TO THE PROCESS
+================================================================================
+
+Mechanism: kernel memory-cgroup OOM killer → **SIGKILL** — uncatchable,
+unrecorded by shell exit conventions, which is why needle's `agent.completed`
+carries `exit_code = -1` (its unrecorded-signal SENTINEL; never a signal
+number, never a name). The kernel's own "Killed process" lines ARE the
+SIGKILL records (§2).
+
+First-hand bf-4k2ws census, re-derived this session from the worker log
+(UTC) — byte-exact against canon README §2:
+
+  62 attempts, 2026-08-13 02:01–07:17Z:
+    exit −1 (SIGKILL)  × 55   ← the storm
+    exit 124 (600 s cap) × 5
+    exit 0 (success)   × 2
+  kill instants: 2026-08-13T02:03:33.620221603Z → 2026-08-13T07:03:53.920907594Z
+  kill durations: min 123,571 ms · median 252,874 ms · max 528,854 ms
+
+For scale, the same worker logged 395 `agent.completed` events that day
+across ALL beads: 344 × −1, 22 × 124, 18 × 0, 11 × 1 — Aug-13 was a
+whole-fleet kill day, of which bf-4k2ws's 55 were the largest single share.
+
+Ruled out, first-hand: SIGHUP/SIGTERM — zero kernel kill text matching
+SIGHUP/SIGTERM anywhere in the readable journal, and zero exit-129 events
+(the code a process reports when it dies of SIGHUP/SIGTERM). This is the
+falsification of the superseded August "SIGHUP-cascade" framing.
+
+Coredumps: none for any agent kill — SIGKILL produces no core.
+`coredumpctl` / /var/lib/systemd/coredump hold only unrelated entries
+(pdftract `memory_guard_tests` SIGABRT Sep-08; `bash` cores from the safe-gc
+suite's negative tests; and ONE git core):
+
+  PID 127955 (git), Signal 7 (BUS), Tue 2026-08-25 17:52:38 EDT,
+  `git rebase --no-autostash --onto 0f5a1be …`
+  → 12 days AFTER the storm, a different failure class entirely (SIGBUS, not
+  OOM); documented here only so it is never conflated with bf-4k2ws.
+
+================================================================================
+§7 WHAT THIS CHANGES
+================================================================================
+Nothing about the resolution state. This extraction CORROBORATES the canon:
+  - the 12 GiB dispatch-scope cap exists and is the enforced ceiling (§4);
+  - the mechanism's kernel proof lives in the sibling era and shows git dying
+    ON the cap, SIGKILL, oom_score_adj 200 (§2);
+  - bf-4k2ws's own window has zero surviving system records for a boot-boundary
+    reason, not an evidentiary gap in the investigation (§1);
+  - CPU was saturated through the storm; no memory telemetry existed to lose
+    (§3);
+  - SIGKILL-only, SIGHUP/SIGTERM falsified (§6).
+
+Verdict stands: INFRASTRUCTURE — repository-bloat-era kill regime; RESOLVED;
+retry neither owed nor permitted. Prevention layers R1–R4 (bound pack memory
+incl. push-side, safe-gc scripts, gitignore, timers) re-verified holding by
+the canon and by the closing battery; open alert-layer items remain owned
+elsewhere (domchk-6951fe0c, domchk-b5448b6a, NEEDLE G-9..G-13, D-1..D-10) with
+the knobs-not-pipeline caveat.
+
+================================================================================
+APPENDIX A — COMMANDS RUN THIS SESSION (all read-only)
+================================================================================
+  bead show domchk-8501ec30
+  git log --all --oneline --grep domchk-8501ec30        # no prior-attempt commits
+  ls -la docs/crash-investigations/bf-4k2ws/
+  journalctl --list-boots
+  journalctl --since "2026-08-13 00:00:00" --until "2026-08-13 23:59:59"
+  journalctl -b -1
+  journalctl [-k] [-o short-iso] … grep 'oom-kill|Killed process|memory pressure'
+  journalctl _COMM=systemd-oomd
+  journalctl --disk-usage; ls -la /var/log/journal/<machine-id>/
+  awk '/btime/{print $2}' /proc/stat; cat /etc/machine-id
+  uptime; free -h; nproc; df -BG /; cat /proc/pressure/memory
+  systemctl is-active systemd-oomd
+  cat /proc/self/cgroup; cat /sys/fs/cgroup/…/memory.max  (live scope read)
+  coredumpctl list; coredumpctl info git
+  python3 (JSON census of ~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl:
+           event-type tally; fleet.cpu_saturated min/avg/max overall + storm window;
+           bf-4k2ws agent.completed exit-code census + kill instants + durations)
+  grep '"sequence":8361|"sequence":8472' <same worker log>   # verbatim anchors
+
+APPENDIX B — SOURCE INVENTORY
+================================================================================
+  ~/.needle/logs/claude-code-glm-4.7-lab-domain-check-2026-08-13.jsonl
+      3,111,314 bytes, mtime Aug 13 19:59 LOCAL — primary Aug-13 witness
+  /var/log/journal/7a972da797484700baa6cb3782546e05/
+      55 files, ~4 GB, current boot only (first entry Aug 15 19:56:33 EDT)
+  /var/lib/systemd/coredump/ + coredumpctl
+      current-boot cores only, none from the storm era
+  docs/crash-investigations/bf-4k2ws/README.md          (canon, tracked)
+  docs/investigations/bf-4k2ws-root-cause-determination-domchk-7f838f36-2026-09-07.md
+  docs/crash-investigations/bf-4k2ws/logs.txt           (agent-log leg, tracked)
+  docs/crash-investigations/bf-4k2ws/bead-metadata.txt  (metadata leg, tracked)
+  docs/crash-artifacts-bf-4k2ws/2026-09-07T0823Z-needle-log-extract-bf-4k2ws-aug13.txt
+  docs/crash-investigations/evidence/bf-4x12ec/kernel-systemd-messages.md
+      (UNTRACKED sibling-owned bundle — cited, not modified, not committed here)
+
+— end of system-diagnostics.txt (domchk-8501ec30) —
