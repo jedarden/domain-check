@@ -1239,3 +1239,73 @@ that re-run changes in the record above.
    `domain-check-*` timers future-scheduled. Verdict stands: **effective**.
 
 *§16.4 appended by the `domchk-34871e96` close-time attempt, 2026-09-07.*
+
+---
+
+## 17. Root-cause identification leg — bead `domchk-29f7f613`, 2026-09-09
+
+Dispatched to "identify the root cause of the bf-4k2ws crash", with acceptance
+criteria covering the crash pattern (exit −1 / "signal −1"), the agent type
+(`claude-code-glm-4.7`), the specific termination trigger, and a documented
+RCA. Appended here per §6 rather than as a new document. **Verdict: the
+determination holds — every §2 figure re-derived byte-exact this session;
+zero deltas in any figure.** The only live changes since 2026-09-07 are
+ledger drift and the two already-owned record corrections, confirmed landed
+(§17.3).
+
+### 17.1 Acceptance criteria against this determination
+
+| Criterion | Result |
+|---|---|
+| Crash pattern (exit −1, "signal −1") | 62 attempts, **55 × exit −1** + 5 × 124 + 2 × 0 (§2). "signal −1" is not a signal: −1 is needle's **unrecorded-signal sentinel** (§8.4) — no signal-level claim is possible for this bead, and the zero exit-129 count excludes SIGHUP (§4) |
+| Agent type (`claude-code-glm-4.7`) behaviour | Agent `claude-code-glm-4.7` on worker `claude-code-glm-4.7-lab-domain-check`, session `8446529e`, ran the whole loop — the agent type is not a causal factor: the kills are cgroup-scoped and agent-agnostic, and zero `max_turns` mentions in the day's 395 completions rule out any turn-budget behaviour of the agent (§3.4) |
+| Specific termination trigger | The **12 GiB dispatch-scope memory budget** exhausted mid-run by git-remote-heavy work (fetch / ls-remote / rev-list) against the then-≈18 GB object store — chain-inferred via the kernel-proven gc/push siblings (MEDIUM-HIGH, §5). The kill-duration distribution (123.6–528.9 s, median 252.9 s, zero cap-adjacent) is the scope-budget signature, inconsistent with any timeout or fixed boundary (§2) |
+| Documented RCA | This determination (§3.6, §14.3) plus the crash report's correction section; no new document created |
+
+### 17.2 §2 census re-derived this session (zero deltas)
+
+Fresh JSON parse of the untouched primary log (3,111,314 bytes, mtime
+2026-08-13 19:59 local): 62 `bf-4k2ws` completions, exit histogram
+{−1: 55, 0: 2, 124: 5}; `outcome.classified` 55 crash / 5 timeout / 2
+success; first completion 02:03:33.620221603Z, last 07:17:41.039398822Z;
+kills 123,571–528,854 ms, median 252,874, buckets [0, 15, 22, 15, 2, 1, 0],
+0 within 70 s of the 600 s cap; timeouts 600,018 / 600,020 / 600,020 /
+600,029 / 600,041 ms; successes 04:48:09.546532879Z (378,983 ms) and
+07:17:41.039398822Z (193,380 ms), each followed by `verification.passed`
++17/+19 ms then `bead.orphaned` +5.74/+6.33 s measured from
+`verification.passed` (+5.76/+6.35 s from `agent.completed` — §9.2's anchor);
+`outcome.handled` crash→alerted ×55 (first 02:03:43.020Z, last
+07:04:03.300Z) / timeout→deferred ×5 / success→none ×2; 0 `max_turn`
+mentions anywhere in the day's 395 completions; 59 `fleet.cpu_saturated`
+samples in-window, load 7.63–18.51 on 9 cores (threshold 0.8), first
+02:03:45.6Z (14.43), last 07:17:49.9Z; day-wide exit distribution −1 ×344 /
+124 ×22 / 0 ×18 / 1 ×11 across 395 completions. **Every figure matches
+§2/§8.2/§9.2/§11.1/§12.3 exactly.**
+
+### 17.3 Deltas (state drift only; no figure changes)
+
+1. **Dispatch-scope cap re-read live from a live scope:** this session's own
+   in-flight dispatch scope (`run-p2874091-i254500031.scope`) reports
+   `memory.max = 12884901888` — 12 GiB, the exact budget §1 names. First
+   confirmation read from inside a running scope rather than from unit
+   config.
+2. **Both open record corrections are resolved:** §11.3's banner delta —
+   `root-cause-analysis-signal-minus1.md` now carries its SUPERSEDED banner
+   (§15.2.1's pass); and §4's erratum — commit `da72cef` (domchk-474e649d,
+   2026-09-08) corrected the crash report's bf-1s6c3 "kernel-verified"
+   wording to chain-inferred; both re-read live this session.
+3. **Alert-ledger drift (§8.2/§11.2 baseline → this session):** still exactly
+   **55** ALERT-titled beads — no refire — but status moved
+   **17 closed / 36 open / 2 in_progress → 21 closed / 32 open / 2
+   in_progress**; the wider pool naming `bf-4k2ws` holds at **189**, now
+   134 closed / 48 open / 7 in_progress (was 124/58/7). Pure sibling-closure
+   drift, no bearing on the determination; the 32 still-open alert beads
+   remain for their owners.
+
+*§17 appended by `domchk-29f7f613`, 2026-09-09 (HEAD `da72cef` =
+`origin/main`, zero unpushed). First-hand this session: the §17.2 census
+re-derived from the primary log by fresh JSON parse; the live scope
+`memory.max` read; the §17.3(2) file/commit re-reads; the storm-window
+commit check (`git log --since 2026-08-13T01:00Z --until 09:00Z` → 0 commits
+on main); and all four deliverable docs confirmed present on `origin/main`
+via `git cat-file -e`.*
