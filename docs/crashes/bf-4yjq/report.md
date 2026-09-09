@@ -298,3 +298,66 @@ Figures cited from canon without re-derivation here (cadence min/median/mean/max
 windows, alert-pairing offsets, per-attempt transcript detail, journal floor) were each
 re-derived first-hand by at least two independent prior dispatches (gather `2b2456b`, classify
 `e4c30d0`, report `ad0018c`, analyze `1ee3a23`) with identical results.
+
+---
+
+## Appendix B — Mitigation verification (implement-and-verify leg, 2026-09-09)
+
+**Dispatch:** `domchk-1a78af71` ("Implement and verify crash mitigation" — this chain's
+implement/verify leg), executed 2026-09-09 at HEAD `edee672`, load 3.7–5.1. Scope: the full
+prevention battery of
+[`docs/crash-prevention-validation.md`](../../crash-prevention-validation.md) — **13 live
+checks + 19 tracked suites**, re-run first-hand, **all green, first pass** (dated row
+appended to that doc's verification record). The §9 table's "Landed" statuses are re-verified
+live below rather than cited; **zero functional changes** were made — nothing new to build,
+per §9's own "new recommendation: none".
+
+**§9's mitigation mapping, re-verified live this leg:**
+
+| §9 priority | Live evidence (2026-09-09, this leg) |
+|---|---|
+| Repository-bloat prevention (gitignore + pre-commit gate) | `git ls-files .beads` → **0**; `.gitignore` still carries `.beads/`, `*.db`, `*.jsonl`; `setup-git-hooks.sh --check` rc 0 ("byte-identical to tracked source") |
+| Bounded pack memory (covers the death operation) | `setup-git-gc-config.sh --verify` rc 0 — effective bound resolves system→global→local with **all three keys supplied repo-locally**: `windowMemory=2g`, `deltaCacheSize=1g`, `threads=1` → worst case **≈3072 MiB** against the 12 GiB scope below |
+| Monitoring and alerting | **8/8** `domain-check-*` timers future-triggered; `service-monitor.sh --once` "PRE-FLIGHT CHECK PASSED"; `resource-monitor.sh --once` pressure 0% / UNSAFE_GC none; `crash-pattern-detection.sh` **STABLE — 0 new crashes in the 24 h horizon** (the 50 on file are pre-horizon history) |
+| Storm gates (the re-dispatch amplifier) | `system-event-mode.sh check` rc 0 (`clear`, PSI 0.00%); `crash-circuit-breaker.sh status` → `{"beads": {}}`; `preflight-health-check.sh` **5/5**, rc 0 |
+| Alert lifecycle (closed-bead + dedup gates) | `test-crash-alert-fixes.sh`, `test-closed-bead-filter.sh` (repo cwd), `test-alert-dedup-check.sh`, `test-alert-dedup-history.sh`, `test-alert-triage-sweep.sh` — all pass |
+
+**Root-cause confirmation (the recurrence drill):**
+
+- **Precondition absent.** `.git` **106 MB** vs the crash-time 18 GB (~170× smaller);
+  `git count-objects -vH`: 127 loose / 840 KiB vs **1 pack** (12,607 objects / 100.70 MiB),
+  0 garbage; `check-repo-health.sh` rc 0; `auto-gc-trigger.sh --dry-run` "GC not needed";
+  unpushed backlog CLEAR (0 < 50).
+- **Death operation now bounded.** `test-gc-memory-bounds.sh` **17/17** re-runs this crash's
+  exact death operation (unbounded `git push` → pack-objects) inside a 768 MiB cgroup:
+  push peak RSS **232,480 KB**, pack-objects peak **320,536 KB** — both under the 700 MiB
+  assertion cap and ~40× under the dispatch scope, **re-read live this leg at
+  `memory.max = 12,884,901,888` B (12 GiB)** from this dispatch's own cgroup.
+  `test-safe-git-gc-limits.sh` **33/33**.
+- **Amplifier gated.** The bf-4yjq shape — re-claim every ~155.5 s into an unchanged
+  environment — now meets the surge detector's threshold and defers at dispatch entry
+  (event-mode exit 75 / breaker exit 4) instead of re-entering the crash 50 times; live
+  state clear with nothing latched.
+
+**Criterion disposition — "close bead bf-4yjq as resolved: mitigated": already satisfied by
+prior state.** `bf-4yjq` is **Closed rev 2** (2026-08-17T00:14:14Z; re-read live this leg via
+`bead show`, close reason re-read from the checkpoint), with a verification-bearing close
+reason, verbatim: *"Git remote configuration successfully fixed and verified. Origin now
+points to Forgejo (git.ardenone.com), GitHub mirror is working via server-side push mirror,
+both repositories are in sync (a245b38), and push mirror last synced successfully at
+2026-08-17T00:11:34Z with no errors."* The bead is terminal-closed — `bead close` is not a
+valid transition from `closed` — so this leg performs **no bead mutation** and re-opening a
+resolved bead solely to re-close it would be churn. The "resolved" state this criterion asks
+for is the one already recorded above; the mitigation evidence backing it is this appendix
+plus the battery row in
+[`docs/crash-prevention-validation.md`](../../crash-prevention-validation.md).
+
+**Quality-gate attribution (docs-only leg):** worktree `go build ./...` / `go test ./...`
+fail only inside a co-tenant's uncommitted `internal/watch/manager.go` edit (`domain.Parse`
+undefined; its importers `internal/server` and `cmd/domain-check` fail on the same file) —
+every other package `ok`. No Go file is touched by this leg.
+
+**Box-state note (not prevention):** free disk read 19–20 GB at battery time (the [CRITICAL]
+threshold); three stale regenerable `~/scratch/*-target` build dirs (≥20 h old, zero open
+handles, no cargo/rustc running) were cleared per the standing procedure → 22 GB. The repo
+and every prevention layer were unaffected.
