@@ -69,3 +69,7 @@ dist/
 *.db
 *.db.backup.*
 *.jsonl
+docs/crash*/**/transcript*.jsonl
+docs/crash*/**/session-transcript*.jsonl
+docs/crash*/**/*crash-sessions*.tar.gz
+docs/crash*/**/*.log
